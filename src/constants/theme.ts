@@ -1,6 +1,5 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Oasis HRMS Theme — extends the existing Expo theme system.
  */
 
 import '@/global.css';
@@ -9,32 +8,53 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#0b1c30', // on-surface
+    background: '#f8f9ff', // background
+    backgroundElement: '#eff4ff', // surface-container-low
+    backgroundSelected: '#e5eeff', // surface-container
+    textSecondary: '#45464d', // on-surface-variant
+    surface: '#ffffff', // surface-container-lowest
+    border: '#dce9ff', // surface-container-high
+    primary: '#006a61', // Teal (secondary in tokens, used for primary action)
+    primaryForeground: '#ffffff', 
+    success: '#006a61', 
+    successLight: '#86f2e4',
+    warning: '#F9AB00',
+    warningLight: '#FEF7E0',
+    danger: '#ba1a1a', // error
+    dangerLight: '#ffdad6', // error-container
+    accent: '#0b1c30',
+    accentLight: '#eaf1ff', // inverse-on-surface
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#0b1c30',
+    background: '#f8f9ff',
+    backgroundElement: '#eff4ff',
+    backgroundSelected: '#e5eeff',
+    textSecondary: '#45464d',
+    surface: '#ffffff',
+    border: '#dce9ff',
+    primary: '#006a61', 
+    primaryForeground: '#ffffff',
+    success: '#006a61',
+    successLight: '#86f2e4',
+    warning: '#F9AB00',
+    warningLight: '#FEF7E0',
+    danger: '#ba1a1a',
+    dangerLight: '#ffdad6',
+    accent: '#0b1c30',
+    accentLight: '#eaf1ff',
   },
-} as const;
+};
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColors = typeof Colors.light;
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {
@@ -61,5 +81,13 @@ export const Spacing = {
   six: 64,
 } as const;
 
+export const BorderRadius = {
+  sm: 4,
+  md: 8,
+  lg: 12,
+  xl: 16,
+  full: 9999,
+} as const;
+
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+export const MaxContentWidth = 1200;
