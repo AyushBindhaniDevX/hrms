@@ -24,15 +24,23 @@ export default function PayrollScreen() {
   const router = useRouter();
   const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newMonth, setNewMonth] = useState<string | null>(null);
   const [newYear, setNewYear] = useState(String(new Date().getFullYear()));
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
-    const data = await getPayrollPeriods();
-    setPeriods(data);
-    setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getPayrollPeriods();
+      setPeriods(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load payroll periods. If you are using an adblocker (like Brave Shields), please disable it for this site.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -65,7 +73,13 @@ export default function PayrollScreen() {
           <Button title="+ New Period" onPress={() => setShowCreate(true)} size="sm" />
         </View>
 
-        <FlatList
+        {error ? (
+          <View style={{ padding: 20, margin: 20, backgroundColor: colors.danger + '1A', borderRadius: 8 }}>
+            <Text style={{ color: colors.danger, textAlign: 'center' }}>{error}</Text>
+            <Button title="Retry" onPress={load} style={{ marginTop: 12, alignSelf: 'center' }} variant="outline" size="sm" />
+          </View>
+        ) : (
+          <FlatList
           data={periods}
           keyExtractor={item => item.id}
           contentContainerStyle={{ padding: 16, gap: 8 }}
@@ -83,6 +97,7 @@ export default function PayrollScreen() {
             </TouchableOpacity>
           )}
         />
+        )}
 
         <Modal visible={showCreate} onClose={() => setShowCreate(false)} title="New Payroll Period">
           <Select

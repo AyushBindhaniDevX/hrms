@@ -34,6 +34,7 @@ export default function PayrollDetailScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [distributing, setDistributing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Form state
   const [selEmpId, setSelEmpId] = useState<string | null>(null);
@@ -46,15 +47,22 @@ export default function PayrollDetailScreen() {
   const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
-    const [periodData, entriesData, emps] = await Promise.all([
-      getDoc(doc(db, 'payroll_periods', id!)).then(res => ({ data: { id: res.id, ...res.data() } })),
-      getPayrollEntries(id!),
-      getAllEmployees(),
-    ]);
-    setPeriod(periodData.data as PayrollPeriod);
-    setEntries(entriesData);
-    setEmployees(emps);
-    setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const [periodData, entriesData, emps] = await Promise.all([
+        getDoc(doc(db, 'payroll_periods', id!)).then(res => ({ data: { id: res.id, ...res.data() } })),
+        getPayrollEntries(id!),
+        getAllEmployees(),
+      ]);
+      setPeriod(periodData.data as PayrollPeriod);
+      setEntries(entriesData);
+      setEmployees(emps);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load payroll details. Please check your network connection or disable your adblocker.');
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -109,7 +117,6 @@ export default function PayrollDetailScreen() {
   };
 
   if (loading) return <LoadingState />;
-  if (!period) return <Text>Not found</Text>;
 
   const totalNet = entries.reduce((sum, e) => sum + e.net_salary, 0);
 
@@ -117,14 +124,20 @@ export default function PayrollDetailScreen() {
     <SidebarLayout items={HR_NAV}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <Button title="← Back" onPress={() => { if (router.canGoBack()) if (router.canGoBack()) { router.back(); } else { router.replace('/'); } else router.replace('/'); }} variant="ghost" size="sm" />
+          <Button title="← Back" onPress={() => router.back()} variant="ghost" size="sm" />
           <Text style={[styles.title, { color: colors.text }]}>
-            {MONTHS[period.month - 1]} {period.year}
+            {period ? `${MONTHS[period.month - 1]} ${period.year} Payroll` : 'Payroll Details'}
           </Text>
-          <Badge label={period.status} variant={period.status === 'closed' ? 'success' : 'warning'} />
+          <View style={{ width: 60 }} />
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        {error ? (
+          <View style={{ padding: 20, margin: 20, backgroundColor: colors.danger + '1A', borderRadius: 8 }}>
+            <Text style={{ color: colors.danger, textAlign: 'center' }}>{error}</Text>
+            <Button title="Retry" onPress={load} style={{ marginTop: 12, alignSelf: 'center' }} variant="outline" size="sm" />
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
           {/* Summary */}
           <Card>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -157,23 +170,24 @@ export default function PayrollDetailScreen() {
           })}
 
           {/* Actions */}
-          {period.status === 'open' && (
+          {period?.status === 'open' && (
             <View style={{ gap: 8 }}>
               <Button title="+ Add Employee Payroll" onPress={() => setShowAdd(true)} variant="outline" />
             </View>
           )}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            {period.status === 'open' && (
+            {period?.status === 'open' && (
               <Button title="Process Payroll" onPress={handleProcess} loading={processing} style={{ flex: 1 }} />
             )}
-            {period.status === 'closed' && (
+            {period?.status === 'closed' && (
               <Button title="Distribute Payslips" onPress={handleDistribute} loading={distributing} style={{ flex: 1 }} />
             )}
           </View>
         </ScrollView>
+        )}
 
         {/* Add Entry Modal */}
-        <Modal visible={showAdd} onClose={() => setShowAdd(false)} title="Add Payroll Entry">
+        <Modal visible={showAdd} onClose={() => setShowAdd(false)} title="Add Custom Payroll Entry">
           <ScrollView style={{ maxHeight: 400 }}>
             <Select
               label="Employee"
