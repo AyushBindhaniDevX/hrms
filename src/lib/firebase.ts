@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 // @ts-ignore
 import { getAuth, initializeAuth, getReactNativePersistence, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, type Firestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -32,6 +32,18 @@ if (Platform.OS === 'web') {
   });
 }
 
-const db: Firestore = getFirestore(app);
+let db: Firestore;
+if (Platform.OS === 'web') {
+  try {
+    db = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
+    });
+  } catch {
+    db = getFirestore(app);
+  }
+} else {
+  db = getFirestore(app);
+}
 
 export { auth, db, app, firebaseConfig };
