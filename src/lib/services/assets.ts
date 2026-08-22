@@ -66,3 +66,42 @@ export async function updateAssetStatus(
     console.error('Error updating asset in Firestore:', error);
   }
 }
+
+export async function verifyAndAuditAsset(
+  assetId: string,
+  auditorName: string
+): Promise<CompanyAsset | null> {
+  try {
+    const assetRef = doc(db, 'assets', assetId);
+    const auditTime = new Date().toISOString();
+    await updateDoc(assetRef, {
+      last_audited_at: auditTime,
+      last_auditor_name: auditorName,
+    });
+    const updated = await getAssets();
+    return updated.find((a) => a.id === assetId) || null;
+  } catch (error) {
+    console.error('Error auditing asset in Firestore:', error);
+    return null;
+  }
+}
+
+export async function disposeAsset(
+  assetId: string,
+  salvageValue: number,
+  reason: string
+): Promise<void> {
+  try {
+    const assetRef = doc(db, 'assets', assetId);
+    await updateDoc(assetRef, {
+      status: 'retired',
+      salvage_value: salvageValue,
+      disposal_reason: reason,
+      disposed_at: new Date().toISOString(),
+      assigned_to_id: null,
+      assigned_employee_name: null,
+    });
+  } catch (error) {
+    console.error('Error disposing asset in Firestore:', error);
+  }
+}

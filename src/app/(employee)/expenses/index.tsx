@@ -78,17 +78,25 @@ export default function EmployeeExpensesScreen() {
   };
 
   const handleSubmit = async () => {
-    const numAmount = parseFloat(amount);
-    if (!title.trim() || isNaN(numAmount) || numAmount <= 0) return;
+    if (!title.trim()) return;
+
+    let finalAmt = parseFloat(amount) || 0;
+    let finalDesc = desc;
+
+    if (isMileage) {
+      const km = parseFloat(kmDistance) || 0;
+      finalAmt = km * 46; // Official mileage rate ₹46/km
+      finalDesc = `Mileage claim: ${km} km @ ₹46/km. ${desc}`;
+    }
 
     await createExpenseClaim({
       organization_id: 'subedge_org',
       employee_id: 'emp_demo',
       title,
       category,
-      amount: numAmount,
+      amount: finalAmt,
       currency: 'INR',
-      description: isMileage ? `${desc} (${kmDistance} km @ ₹46/km)` : desc,
+      description: finalDesc,
       spent_at: new Date().toISOString().split('T')[0],
     });
 
@@ -106,33 +114,32 @@ export default function EmployeeExpensesScreen() {
   const myTotal = expenses.reduce((acc, curr) => acc + curr.amount, 0);
 
   return (
-    <SidebarLayout>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <View>
-            <Text style={[styles.title, { color: colors.text }]}>My Expense Claims</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Submit Reimbursements, Mileage Claims & Track Settlement
-            </Text>
-          </View>
-          <Button
-            title="+ Claim Expense"
-            onPress={() => setShowModal(true)}
-            style={{ backgroundColor: '#0D7377' }}
-          />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <View>
+          <Text style={[styles.title, { color: colors.text }]}>My Expense Claims</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Submit Reimbursements, Mileage Claims & Track Settlement
+          </Text>
         </View>
+        <Button
+          title="+ Claim Expense"
+          onPress={() => setShowModal(true)}
+          style={{ backgroundColor: '#0D7377' }}
+        />
+      </View>
 
-        <ScrollView
-          style={{ flex: 1, padding: 24 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
-        >
-          {/* Banner */}
-          <View style={styles.banner}>
-            <View>
-              <Text style={styles.bannerSub}>Total Submitted Claims</Text>
-              <Text style={styles.bannerAmount}>{formatCurrency(myTotal)}</Text>
-            </View>
-            <View style={styles.badgePill}>
+      <ScrollView
+        style={{ flex: 1, padding: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
+      >
+        {/* Banner */}
+        <View style={styles.banner}>
+          <View>
+            <Text style={styles.bannerSub}>Total Submitted Claims</Text>
+            <Text style={styles.bannerAmount}>{formatCurrency(myTotal)}</Text>
+          </View>
+          <View style={styles.badgePill}>
               <Text style={styles.badgePillText}>Standard Settlement: Monthly Payroll</Text>
             </View>
           </View>
@@ -249,7 +256,6 @@ export default function EmployeeExpensesScreen() {
           </View>
         </Modal>
       </View>
-    </SidebarLayout>
   );
 }
 

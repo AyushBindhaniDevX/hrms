@@ -55,9 +55,8 @@ export default function EmployeeLearningScreen() {
   if (loading) return <LoadingState />;
 
   return (
-    <SidebarLayout>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View>
             <Text style={[styles.title, { color: colors.text }]}>Learning Academy & Upskilling</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -124,7 +123,6 @@ export default function EmployeeLearningScreen() {
           </View>
         </ScrollView>
       </View>
-    </SidebarLayout>
   );
 }
 

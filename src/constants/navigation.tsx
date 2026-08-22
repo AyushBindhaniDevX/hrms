@@ -84,7 +84,6 @@ export const EMPLOYEE_NAV: NavItem[] = [
   { label: 'My Expenses', href: '/(employee)/expenses', icon: Receipt },
   { label: 'Helpdesk Tickets', href: '/(employee)/helpdesk', icon: LifeBuoy },
   { label: 'Learning Academy', href: '/(employee)/learning', icon: GraduationCap },
-  { label: 'Rewards Store', href: '/(employee)/rewards', icon: Gift },
   { label: 'Directory', href: '/(employee)/directory', icon: Users },
 ];
 

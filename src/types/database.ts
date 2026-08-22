@@ -523,6 +523,11 @@ export interface CompanyAsset {
   assigned_employee_name?: string | null;
   status: AssetStatus;
   notes?: string;
+  last_audited_at?: string;
+  last_auditor_name?: string;
+  salvage_value?: number;
+  disposal_reason?: string;
+  disposed_at?: string;
   created_at: string;
   assigned_employee?: Employee;
 }
