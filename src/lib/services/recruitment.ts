@@ -408,6 +408,19 @@ export async function scheduleInterview(data: Omit<InterviewSchedule, 'id'>): Pr
       actor_name: 'HR Coordinator',
       created_at: new Date().toISOString(),
     });
+
+    try {
+      const { sendInterviewInviteEmail } = await import('./resend');
+      await sendInterviewInviteEmail(
+        candidate.email,
+        candidate.full_name,
+        data.round_name,
+        data.scheduled_time,
+        data.meeting_link
+      );
+    } catch (mailErr) {
+      console.warn('Resend interview email warning:', mailErr);
+    }
   }
 
   return newInt;
@@ -440,20 +453,19 @@ export async function generateOffer(data: Omit<OfferLetter, 'id' | 'created_at'>
     });
   }
 
-  // Send Resend notification
-  await sendResendEmail({
-    to: data.candidate_email,
-    subject: `Official Offer of Employment — ${data.designation} at Subedge Technology Pvt Ltd`,
-    htmlContent: `
-      <div style="font-family: sans-serif; padding: 24px; background: #F8FAFC;">
-        <h2>Congratulations, ${data.candidate_name}! 🎉</h2>
-        <p>Subedge Technology Pvt Ltd is pleased to offer you the position of <strong>${data.designation}</strong> in our ${data.department} department.</p>
-        <p><strong>Annual CTC:</strong> ₹${data.annual_ctc.toLocaleString('en-IN')}</p>
-        <p><strong>Target Joining Date:</strong> ${data.joining_date}</p>
-      </div>
-    `,
-    category: 'onboarding',
-  });
+  // Send Resend notification via dedicated template
+  try {
+    const { sendOfferLetterEmail } = await import('./resend');
+    await sendOfferLetterEmail(
+      data.candidate_email,
+      data.candidate_name,
+      data.designation,
+      data.annual_ctc,
+      data.joining_date
+    );
+  } catch (mailErr) {
+    console.warn('Resend offer email warning:', mailErr);
+  }
 
   return newOffer;
 }

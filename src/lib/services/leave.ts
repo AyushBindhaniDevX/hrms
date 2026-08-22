@@ -205,6 +205,22 @@ export async function processLeaveRequest(
       success = true;
       message = `Leave request ${action}d successfully.`;
     });
+
+    if (success) {
+      try {
+        const { sendLeaveStatusEmail } = await import('./resend');
+        await sendLeaveStatusEmail(
+          'employee@subedge.com',
+          'Team Member',
+          action === 'approve' ? 'approved' : 'rejected',
+          'Paid Time Off',
+          'Upcoming Dates',
+          'HR Approver'
+        );
+      } catch (mailErr) {
+        console.warn('Resend leave notification warning:', mailErr);
+      }
+    }
   } catch (err: any) {
     success = false;
     message = err.message;

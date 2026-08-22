@@ -195,6 +195,19 @@ export async function createEmployee(params: {
 
     await signOut(tempAuth);
     await deleteApp(tempApp);
+
+    // Send Resend Welcome Notification
+    try {
+      const { sendWelcomeEmail } = await import('./resend');
+      await sendWelcomeEmail(
+        params.email,
+        params.full_name || 'Team Member',
+        params.employee_code,
+        params.designation || 'Engineer'
+      );
+    } catch (mailErr) {
+      console.warn('Resend welcome notification dispatch warning:', mailErr);
+    }
   } catch (error) {
     try {
       await deleteApp(tempApp);

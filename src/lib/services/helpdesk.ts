@@ -77,6 +77,18 @@ export async function resolveTicket(ticketId: string, resolutionNotes: string): 
       ticketNumber: ticketId,
       resolutionNotes,
     });
+
+    try {
+      const { sendTicketStatusEmail } = await import('./resend');
+      await sendTicketStatusEmail(
+        'employee@subedge.com',
+        ticketId,
+        'Service Ticket',
+        resolutionNotes
+      );
+    } catch (mailErr) {
+      console.warn('Resend ticket email warning:', mailErr);
+    }
   } catch (error) {
     console.error('Error resolving ticket in Firestore:', error);
   }

@@ -4,7 +4,7 @@
  */
 
 import { AutomationRule, AutomationTrigger } from '@/types/database';
-import { sendResendEmail, generateWelcomeEmailHtml, generateLeaveDecisionEmailHtml } from './resend';
+import { sendResendEmail, sendWelcomeEmail, sendLeaveStatusEmail } from './resend';
 
 let AUTOMATION_RULES: AutomationRule[] = [
   {
@@ -77,19 +77,21 @@ export async function triggerAutomationEvent(trigger: AutomationTrigger, payload
 
     if (rule.action_type === 'send_resend_email') {
       if (trigger === 'on_employee_created' && payload.email) {
-        await sendResendEmail({
-          to: payload.email,
-          subject: rule.template_subject,
-          htmlContent: generateWelcomeEmailHtml(payload.name || 'Team Member', payload.designation || 'Specialist'),
-          category: 'onboarding',
-        });
+        await sendWelcomeEmail(
+          payload.email,
+          payload.name || 'Team Member',
+          payload.employeeCode || 'SUB-EMP-001',
+          payload.designation || 'Specialist'
+        );
       } else if (trigger === 'on_leave_approved' && payload.email) {
-        await sendResendEmail({
-          to: payload.email,
-          subject: rule.template_subject,
-          htmlContent: generateLeaveDecisionEmailHtml(payload.name || 'Colleague', 'approved', payload.dates || 'selected period'),
-          category: 'leave',
-        });
+        await sendLeaveStatusEmail(
+          payload.email,
+          payload.name || 'Colleague',
+          'approved',
+          payload.leaveType || 'Paid Leave',
+          payload.dates || 'selected dates',
+          'HR Approver'
+        );
       }
     }
   }

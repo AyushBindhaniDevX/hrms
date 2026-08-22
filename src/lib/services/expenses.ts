@@ -78,6 +78,17 @@ export async function updateExpenseStatus(
       approved_at: new Date().toISOString(),
       ...(comments ? { comments } : {}),
     });
+
+    if (status === 'approved' || status === 'rejected') {
+      const { sendExpenseStatusEmail } = await import('./resend');
+      await sendExpenseStatusEmail(
+        'ayush.bindhani@subedge.com',
+        'Ayush Bindhani',
+        'Expense Reimbursement Claim',
+        3450,
+        status
+      );
+    }
   } catch (error) {
     console.error('Error updating expense status in Firestore:', error);
   }
