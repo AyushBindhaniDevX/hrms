@@ -40,8 +40,11 @@ export async function createChatSession(profile: Profile, employeeContext?: any)
     throw new Error('Gemini API Key is not configured. Please add EXPO_PUBLIC_GEMINI_API_KEY to your .env file.');
   }
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const systemInstruction = buildSystemPrompt(profile, employeeContext);
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-1.5-flash-latest',
+    systemInstruction 
+  });
 
   const chat = model.startChat({
     history: [
