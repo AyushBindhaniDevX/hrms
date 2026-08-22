@@ -1,23 +1,45 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  useWindowDimensions,
+  TouchableOpacity,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { APP_NAME } from '@/constants/config';
-import LottieView from 'lottie-react-native';
+import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
+import {
+  COMPANY_NAME,
+  PRODUCT_NAME,
+  APP_NAME,
+  TAGLINE,
+} from '@/constants/config';
+import {
+  ShieldCheck,
+  MapPin,
+  Award,
+  CreditCard,
+  Lock,
+  ArrowRight,
+} from 'lucide-react-native';
 
 export default function LoginScreen() {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  
+
   const { signIn } = useAuth();
   const router = useRouter();
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -32,7 +54,6 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email, password);
-      // Auth state change listener will handle redirect
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
@@ -42,7 +63,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -51,56 +72,92 @@ export default function LoginScreen() {
           contentContainerStyle={[
             styles.scrollContent,
             isDesktop ? styles.desktopLayout : styles.mobileLayout,
-            { paddingTop: insets.top, paddingBottom: insets.bottom }
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Landing / Hero Section */}
+          {/* Left Hero Section (Subedge Design Aesthetics) */}
           <View style={[styles.heroSection, isDesktop && styles.heroDesktop]}>
+            <View style={styles.heroBrandHeader}>
+              <SubedgeBrand size="lg" subtitle={COMPANY_NAME} />
+            </View>
+
             <View style={styles.heroTextContainer}>
-              <Text style={[styles.heroTitle, { color: colors.primary }]}>
-                Welcome to Oasis Platform
+              <View style={styles.heroPill}>
+                <Text style={styles.heroPillText}>ENTERPRISE HCM SUITE</Text>
+              </View>
+
+              <Text style={styles.heroTitle}>
+                From Healthcare to{'\n'}
+                <Text style={{ color: '#0D7377' }}>Digital Excellence</Text>
               </Text>
-              <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
-                The all-in-one Enterprise HRMS designed to seamlessly scale with your workforce. Automate attendance, payroll, and leave management with intelligent workflows.
+
+              <Text style={styles.heroSubtitle}>
+                {PRODUCT_NAME} — {TAGLINE}. Built for ambitious enterprise teams who value precision, compliance, and speed.
               </Text>
             </View>
-            
-            <View style={[styles.lottieContainer, isDesktop ? { height: 400 } : { height: 250 }]}>
-              {Platform.OS !== 'web' || true ? (
-                <LottieView
-                  source={{ uri: 'https://lottie.host/933a3d24-3ea3-4ed6-be25-177987eef2ea/xH6RjQ1wT5.json' }}
-                  autoPlay
-                  loop
-                  style={{ width: '100%', height: '100%' }}
-                />
-              ) : null}
+
+            {/* Feature Capabilities Grid */}
+            <View style={styles.featureGrid}>
+              <View style={styles.featureCard}>
+                <View style={styles.featureIconBox}>
+                  <ShieldCheck size={20} color="#0D7377" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.featureTitle}>Cybersecurity & Governance</Text>
+                  <Text style={styles.featureSub}>SOC 2 Ready & Strict Role Access</Text>
+                </View>
+              </View>
+
+              <View style={styles.featureCard}>
+                <View style={styles.featureIconBox}>
+                  <MapPin size={20} color="#0D7377" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.featureTitle}>Geofenced Smart Attendance</Text>
+                  <Text style={styles.featureSub}>Precise Radius & Device Verification</Text>
+                </View>
+              </View>
+
+              <View style={styles.featureCard}>
+                <View style={styles.featureIconBox}>
+                  <Award size={20} color="#0D7377" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.featureTitle}>Performance & OKRs</Text>
+                  <Text style={styles.featureSub}>360 Appraisals & Continuous Recognition</Text>
+                </View>
+              </View>
+
+              <View style={styles.featureCard}>
+                <View style={styles.featureIconBox}>
+                  <CreditCard size={20} color="#0D7377" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.featureTitle}>Automated Payroll Engine</Text>
+                  <Text style={styles.featureSub}>Tax, Allowances & Instant Payslips</Text>
+                </View>
+              </View>
             </View>
           </View>
 
-          {/* Form Section */}
+          {/* Right Form Section */}
           <View style={[styles.formSection, isDesktop && styles.formDesktop]}>
             <View style={styles.formWrapper}>
-              <View style={styles.header}>
-                <View style={styles.logoCircle}>
-                  <Text style={styles.logoText}>O</Text>
-                </View>
-                <Text style={[styles.brand, { color: colors.text }]}>{APP_NAME}</Text>
-                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                  Sign in to your account
-                </Text>
+              <View style={styles.formHeader}>
+                <SubedgeBrand size="md" subtitle="Sign in to your workplace account" />
               </View>
 
-              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }]}>
                 {error ? (
-                  <View style={[styles.errorBox, { backgroundColor: colors.dangerLight }]}>
-                    <Text style={{ color: colors.danger, fontSize: 14 }}>{error}</Text>
+                  <View style={[styles.errorBox, { backgroundColor: '#FEE2E2' }]}>
+                    <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '500' }}>{error}</Text>
                   </View>
                 ) : null}
 
                 <Input
-                  label="Email"
-                  placeholder="you@company.com"
+                  label="Work Email"
+                  placeholder="name@subedge.com"
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -110,17 +167,24 @@ export default function LoginScreen() {
 
                 <Input
                   label="Password"
-                  placeholder="Enter password"
+                  placeholder="Enter your password"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
                 />
 
                 <Button
-                  title="Sign In with Email"
+                  title="Sign In with Credentials"
                   onPress={handleLogin}
                   loading={loading}
-                  style={{ marginTop: 8 }}
+                  style={{
+                    marginTop: 8,
+                    backgroundColor: '#0D7377',
+                    shadowColor: '#0D7377',
+                    shadowOpacity: 0.3,
+                    shadowRadius: 5,
+                    elevation: 3,
+                  }}
                 />
 
                 <Button
@@ -131,6 +195,10 @@ export default function LoginScreen() {
                   style={{ marginTop: 12 }}
                 />
               </View>
+
+              <Text style={styles.copyrightText}>
+                © 2026 {COMPANY_NAME}. All rights reserved.
+              </Text>
             </View>
           </View>
         </ScrollView>
@@ -141,99 +209,143 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { 
-    flexGrow: 1, 
+  scrollContent: {
+    flexGrow: 1,
     minHeight: '100%',
   },
-  
+
   // Layout Variations
   desktopLayout: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 32,
+    gap: 48,
   },
   mobileLayout: {
     flexDirection: 'column',
     justifyContent: 'center',
-    padding: 24,
+    padding: 20,
+    gap: 24,
   },
 
   // Hero Section
   heroSection: {
     flex: 1,
+    maxWidth: 600,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
   },
   heroDesktop: {
-    padding: 48,
-    alignItems: 'flex-start',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(0,0,0,0.05)',
+    paddingRight: 24,
+  },
+  heroBrandHeader: {
+    marginBottom: 24,
+  },
+  heroPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F0F7F7',
+    borderWidth: 1,
+    borderColor: '#CCECEC',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  heroPillText: {
+    color: '#0D7377',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   heroTextContainer: {
-    maxWidth: 480,
-    marginBottom: 32,
+    marginBottom: 28,
   },
   heroTitle: {
     fontSize: 36,
     fontWeight: '800',
-    marginBottom: 16,
+    color: '#1A1A2E',
     letterSpacing: -1,
+    lineHeight: 44,
+    marginBottom: 12,
   },
   heroSubtitle: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#64748B',
   },
-  lottieContainer: {
-    width: '100%',
-    maxWidth: 500,
-    alignSelf: 'center',
+
+  featureGrid: {
+    gap: 12,
+  },
+  featureCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  featureIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#F0F7F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A2E',
+  },
+  featureSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
   },
 
   // Form Section
   formSection: {
-    flex: 1,
+    width: '100%',
+    maxWidth: 440,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
   },
   formDesktop: {
-    padding: 48,
+    paddingLeft: 12,
   },
-  formWrapper: { 
-    width: '100%', 
-    maxWidth: 420, 
-    alignSelf: 'center' 
+  formWrapper: {
+    width: '100%',
   },
-  
-  // Existing Form Styles
-  header: { marginBottom: 32, alignItems: 'center' },
-  logoCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#0b1c30',
+  formHeader: {
+    marginBottom: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
   },
-  logoText: {
-    color: '#FFF',
-    fontSize: 24,
-    fontWeight: '700',
+  card: {
+    padding: 28,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 16,
+    shadowColor: '#0D7377',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  brand: { fontSize: 28, fontWeight: '800', marginBottom: 8, letterSpacing: -0.5 },
-  subtitle: { fontSize: 15 },
-  card: { 
-    borderWidth: 1, 
-    borderRadius: 16, 
-    padding: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.05,
-    shadowRadius: 24,
-    elevation: 10,
+  errorBox: {
+    padding: 12,
+    borderRadius: 8,
   },
-  errorBox: { padding: 12, borderRadius: 8, marginBottom: 16 },
+  copyrightText: {
+    textAlign: 'center',
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 24,
+  },
 });

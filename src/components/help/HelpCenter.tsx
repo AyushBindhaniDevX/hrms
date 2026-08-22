@@ -77,11 +77,11 @@ export function HelpCenter() {
       <Card style={styles.contactCard}>
         <View style={styles.contactRow}>
           <Mail color={colors.textSecondary} size={20} />
-          <Text style={[styles.contactText, { color: colors.text }]}>support@oasishr.com</Text>
+          <Text style={[styles.contactText, { color: colors.text }]}>support@subedge.com</Text>
         </View>
         <View style={styles.contactRow}>
           <Phone color={colors.textSecondary} size={20} />
-          <Text style={[styles.contactText, { color: colors.text }]}>+1 (800) 123-4567</Text>
+          <Text style={[styles.contactText, { color: colors.text }]}>Subedge Technology Pvt Ltd · Bengaluru & Bhubaneswar</Text>
         </View>
       </Card>
     </ScrollView>

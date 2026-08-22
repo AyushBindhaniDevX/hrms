@@ -223,7 +223,7 @@ export default function EmployeeDashboard() {
     >
       {/* ── Header Bar ─────────────────────────────────────────────────────── */}
       <Animated.View entering={FadeInDown.duration(350).springify()}>
-        <View style={[styles.heroBar, { backgroundColor: '#0b1c30' }]}>
+        <View style={[styles.heroBar, { backgroundColor: '#1A1A2E' }]}>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroGreeting}>{getGreeting()}</Text>
             <Text style={styles.heroName}>{profile?.full_name?.split(' ')[0] ?? 'Welcome'} 👋</Text>

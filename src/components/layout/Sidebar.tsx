@@ -27,6 +27,7 @@ import {
   Plus,
 } from 'lucide-react-native';
 import { OasisAssistant } from '@/components/ai/OasisAssistant';
+import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
 import { getNavForRole, ADMIN_NAV, HR_NAV, EMPLOYEE_NAV, NavItem } from '@/constants/navigation';
 
 interface SidebarProps {
@@ -152,19 +153,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               <Menu size={22} color={colors.text} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handleDashboardPress}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
-            >
-              <View style={styles.logoCircle}>
-                <Text style={styles.logoText}>O</Text>
-              </View>
-              <View>
-                <Text style={[styles.brandText, { color: '#0b1c30' }]}>{APP_NAME}</Text>
-                <Text style={[styles.brandSubtitle, { color: '#64748b' }]}>
-                  {effectiveRole.toUpperCase()} SUITE
-                </Text>
-              </View>
+            <TouchableOpacity onPress={handleDashboardPress}>
+              <SubedgeBrand size="sm" subtitle={`${effectiveRole.toUpperCase()} SUITE`} />
             </TouchableOpacity>
           </View>
 
@@ -202,17 +192,14 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               ]}
             >
               <View style={styles.drawerHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={styles.logoCircle}>
-                    <Text style={styles.logoText}>O</Text>
-                  </View>
-                  <View>
-                    <Text style={[styles.brandText, { color: colors.text }]}>{APP_NAME}</Text>
-                    <Text style={[styles.brandSubtitle, { color: colors.textSecondary }]}>
-                      {effectiveRole.toUpperCase()} PORTAL
-                    </Text>
-                  </View>
-                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    handleDashboardPress();
+                  }}
+                >
+                  <SubedgeBrand size="md" subtitle={`${effectiveRole.toUpperCase()} PORTAL`} />
+                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => setMobileMenuOpen(false)}
                   style={{ padding: 4 }}
@@ -324,19 +311,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         ]}
       >
         <View style={styles.brandContainer}>
-          <TouchableOpacity
-            onPress={handleDashboardPress}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
-          >
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>O</Text>
-            </View>
-            <View>
-              <Text style={[styles.brandText, { color: colors.text }]}>{APP_NAME}</Text>
-              <Text style={[styles.brandSubtitle, { color: colors.textSecondary }]}>
-                {effectiveRole.toUpperCase()} SUITE
-              </Text>
-            </View>
+          <TouchableOpacity onPress={handleDashboardPress}>
+            <SubedgeBrand size="md" subtitle={`${effectiveRole.toUpperCase()} SUITE`} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -550,13 +526,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     marginTop: 20,
-    shadowColor: '#0052cc',
+    shadowColor: '#0D7377',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   newRequestText: {
     color: '#FFF',
@@ -571,7 +547,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 11,
     paddingHorizontal: 14,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 6,
     overflow: 'hidden',
   },
@@ -609,7 +585,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  mainArea: { flex: 1, backgroundColor: '#f8f9ff' },
+  mainArea: { flex: 1, backgroundColor: '#F8FAFC' },
   topBar: {
     height: 60,
     borderBottomWidth: 1,
@@ -617,11 +593,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
+    backgroundColor: '#FFFFFF',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -630,8 +609,8 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    color: '#0f172a',
+    fontSize: 13,
+    color: '#1A1A2E',
     outlineStyle: 'none',
   } as any,
   topBarActions: {
@@ -646,7 +625,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#ba1a1a',
+    backgroundColor: '#EF4444',
   },
   topBarUser: {
     marginLeft: 8,
@@ -654,7 +633,7 @@ const styles = StyleSheet.create({
 
   mainContentScroll: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F8FAFC',
   },
   fab: {
     position: 'absolute',
@@ -663,10 +642,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#0052cc',
+    backgroundColor: '#0D7377',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#0D7377',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,

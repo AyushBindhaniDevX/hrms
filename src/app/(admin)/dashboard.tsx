@@ -196,12 +196,12 @@ export default function AdminDashboard() {
         >
           {/* Hero Header */}
           <Animated.View entering={FadeInDown.duration(350).springify()}>
-            <View style={[styles.heroBar, { backgroundColor: '#0b1c30' }]}>
+            <View style={[styles.heroBar, { backgroundColor: '#1A1A2E' }]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.heroGreeting}>{getGreeting().toUpperCase()}, {profile?.full_name?.split(' ')[0] || 'ADMIN'}</Text>
-                <Text style={styles.heroTitle}>{organization?.name || 'Oasis HRMS'}</Text>
+                <Text style={styles.heroTitle}>{organization?.name || 'Subedge Technology Pvt Ltd'}</Text>
                 <Text style={styles.heroSub}>
-                  System Administration Console · {formatDate(new Date())}
+                  Oasis Platform: System Administration Console · {formatDate(new Date())}
                 </Text>
               </View>
               <TouchableOpacity
