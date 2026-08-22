@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, KeyboardAv
 import { Bot, X, Send } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
+import Markdown from 'react-native-markdown-display';
 import { Input } from '@/components/ui/Input';
 import { createChatSession } from '@/lib/services/ai';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
@@ -120,9 +121,15 @@ export function OasisAssistant({ visible, onClose }: { visible: boolean; onClose
                     msg.role === 'user' ? [styles.userBubble, { backgroundColor: colors.primary }] : [styles.aiBubble, { backgroundColor: colors.surface }]
                   ]}
                 >
-                  <Text style={[styles.msgText, { color: msg.role === 'user' ? '#FFF' : colors.text }]}>
-                    {msg.text}
-                  </Text>
+                  {msg.role === 'user' ? (
+                    <Text style={[styles.msgText, { color: '#FFF' }]}>
+                      {msg.text}
+                    </Text>
+                  ) : (
+                    <Markdown style={getMarkdownStyles(colors) as any}>
+                      {msg.text}
+                    </Markdown>
+                  )}
                 </View>
               ))
             )}
@@ -201,4 +208,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   }
+});
+
+const getMarkdownStyles = (colors: any) => ({
+  body: { color: colors.text, fontSize: 15, lineHeight: 22 },
+  heading1: { color: colors.text, fontWeight: '700', fontSize: 20, marginVertical: 8 },
+  heading2: { color: colors.text, fontWeight: '700', fontSize: 18, marginVertical: 8 },
+  heading3: { color: colors.text, fontWeight: '600', fontSize: 16, marginVertical: 8 },
+  strong: { color: colors.text, fontWeight: 'bold' },
+  em: { color: colors.text, fontStyle: 'italic' },
+  paragraph: { marginVertical: 4 },
+  list_item: { marginVertical: 4 },
+  code_inline: { backgroundColor: colors.border, padding: 4, borderRadius: 4, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  code_block: { backgroundColor: colors.background, padding: 12, borderRadius: 8, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  fence: { backgroundColor: colors.background, padding: 12, borderRadius: 8 },
 });
