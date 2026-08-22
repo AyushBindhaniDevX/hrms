@@ -12,6 +12,7 @@ import {
   deleteDoc,
   serverTimestamp,
   getCountFromServer,
+  writeBatch
 } from 'firebase/firestore';
 import type { Employee, Profile, Department, Workplace } from '@/types';
 

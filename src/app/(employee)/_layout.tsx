@@ -48,7 +48,7 @@ export default function EmployeeLayout() {
       <View style={{ flex: 1 }}>
         <OnboardingWizard 
           employeeId={employee.id} 
-          profileId={profile.id}
+          profileId={profile?.id || ''}
           onComplete={() => setEmployee({ ...employee, onboarding_completed: true })} 
         />
       </View>
