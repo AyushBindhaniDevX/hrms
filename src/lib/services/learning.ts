@@ -1,109 +1,71 @@
 /**
- * Learning & Development (L&D) Service
+ * Learning & Development (L&D) Service (Dynamic Firestore)
  * Subedge Technology Pvt Ltd — Oasis Platform
  */
 
+import { db } from '@/lib/firebase';
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  query,
+  where,
+} from 'firebase/firestore';
 import { TrainingCourse, CourseEnrollment } from '@/types/database';
-
-let COURSES_STORE: TrainingCourse[] = [
-  {
-    id: 'course_1',
-    organization_id: 'subedge_org',
-    title: 'SOC 2 & HIPAA Security Compliance Essentials (2026)',
-    category: 'Security & Governance',
-    description: 'Mandatory annual training on data handling, PHI protection, clean desk policy, and phishing prevention.',
-    duration_minutes: 45,
-    modules_count: 5,
-    is_mandatory: true,
-    instructor: 'Subedge InfoSec Team',
-    rating: 4.9,
-    enrolled_count: 58,
-    created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
-  },
-  {
-    id: 'course_2',
-    organization_id: 'subedge_org',
-    title: 'Architecting Scalable Microservices with Go & GraphQL',
-    category: 'Engineering',
-    description: 'Deep dive into event-driven design, high-concurrency patterns, and gRPC communication.',
-    duration_minutes: 180,
-    modules_count: 12,
-    is_mandatory: false,
-    instructor: 'Ayush B. (Principal Architect)',
-    rating: 5.0,
-    enrolled_count: 34,
-    created_at: new Date(Date.now() - 15 * 86400000).toISOString(),
-  },
-  {
-    id: 'course_3',
-    organization_id: 'subedge_org',
-    title: 'Modern People Leadership & OKR Goal Setting',
-    category: 'Leadership & Management',
-    description: 'Strategies for effective 1-on-1s, giving constructive feedback, and aligning squad OKRs with business milestones.',
-    duration_minutes: 90,
-    modules_count: 6,
-    is_mandatory: false,
-    instructor: 'HR People Strategy Group',
-    rating: 4.8,
-    enrolled_count: 22,
-    created_at: new Date(Date.now() - 20 * 86400000).toISOString(),
-  },
-];
-
-let ENROLLMENTS_STORE: CourseEnrollment[] = [
-  {
-    id: 'enr_1',
-    course_id: 'course_1',
-    employee_id: 'emp_demo',
-    progress_percent: 100,
-    is_completed: true,
-    completed_at: '2026-02-15',
-    score: 96,
-    certificate_id: 'SUB-CERT-SOC2-2026',
-  },
-  {
-    id: 'enr_2',
-    course_id: 'course_2',
-    employee_id: 'emp_demo',
-    progress_percent: 65,
-    is_completed: false,
-  },
-];
+import { seedDatabaseIfEmpty } from './seed';
 
 export async function getCourses(): Promise<TrainingCourse[]> {
-  return [...COURSES_STORE];
+  await seedDatabaseIfEmpty();
+
+  try {
+    const coursesRef = collection(db, 'courses');
+    const snapshot = await getDocs(coursesRef);
+    const results: TrainingCourse[] = [];
+    snapshot.forEach((d) => {
+      results.push({ id: d.id, ...d.data() } as TrainingCourse);
+    });
+    return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } catch (error) {
+    console.error('Error fetching courses from Firestore:', error);
+    return [];
+  }
 }
 
 export async function getEnrollments(employeeId?: string): Promise<CourseEnrollment[]> {
-  if (employeeId) {
-    return ENROLLMENTS_STORE.filter((e) => e.employee_id === employeeId);
+  await seedDatabaseIfEmpty();
+
+  try {
+    const enrRef = collection(db, 'course_enrollments');
+    let q = query(enrRef);
+    if (employeeId) {
+      q = query(enrRef, where('employee_id', '==', employeeId));
+    }
+    const snapshot = await getDocs(q);
+    const results: CourseEnrollment[] = [];
+    snapshot.forEach((d) => {
+      results.push({ id: d.id, ...d.data() } as CourseEnrollment);
+    });
+    return results;
+  } catch (error) {
+    console.error('Error fetching course enrollments from Firestore:', error);
+    return [];
   }
-  return [...ENROLLMENTS_STORE];
 }
 
-export async function enrollInCourse(courseId: string, employeeId: string): Promise<CourseEnrollment> {
-  const existing = ENROLLMENTS_STORE.find((e) => e.course_id === courseId && e.employee_id === employeeId);
-  if (existing) return existing;
+export async function updateProgress(enrollmentId: string, progress: number): Promise<void> {
+  try {
+    const enrRef = doc(db, 'course_enrollments', enrollmentId);
+    const isCompleted = progress >= 100;
+    const certId = isCompleted ? `SUB-CERT-${Math.random().toString(36).substring(2, 8).toUpperCase()}` : null;
 
-  const newEnrollment: CourseEnrollment = {
-    id: `enr_${Date.now()}`,
-    course_id: courseId,
-    employee_id: employeeId,
-    progress_percent: 0,
-    is_completed: false,
-  };
-  ENROLLMENTS_STORE.push(newEnrollment);
-  return newEnrollment;
-}
-
-export async function updateProgress(enrollmentId: string, progress: number): Promise<CourseEnrollment> {
-  const enrollment = ENROLLMENTS_STORE.find((e) => e.id === enrollmentId);
-  if (!enrollment) throw new Error('Enrollment not found');
-  enrollment.progress_percent = progress;
-  if (progress >= 100) {
-    enrollment.is_completed = true;
-    enrollment.completed_at = new Date().toISOString();
-    enrollment.certificate_id = `SUB-CERT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    await updateDoc(enrRef, {
+      progress_percent: progress,
+      is_completed: isCompleted,
+      ...(isCompleted ? { completed_at: new Date().toISOString(), certificate_id: certId } : {}),
+    });
+  } catch (error) {
+    console.error('Error updating course progress in Firestore:', error);
   }
-  return enrollment;
 }

@@ -16,14 +16,21 @@ import { getExpenses, updateExpenseStatus } from '@/lib/services/expenses';
 import { ExpenseClaim, ExpenseStatus } from '@/types/database';
 import { formatCurrency } from '@/utils/format';
 import {
-  Receipt,
-  CheckCircle2,
+  DollarSign,
+  CheckCircle,
   XCircle,
   Clock,
-  Filter,
-  DollarSign,
-  AlertCircle,
   FileText,
+  Filter,
+  Check,
+  X,
+  CreditCard,
+  Car,
+  Plane,
+  Building,
+  TrendingUp,
+  Receipt,
+  ExternalLink,
 } from 'lucide-react-native';
 
 export default function HRExpensesScreen() {
@@ -34,7 +41,7 @@ export default function HRExpensesScreen() {
   const [expenses, setExpenses] = useState<ExpenseClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filter, setFilter] = useState<ExpenseStatus | 'all'>('all');
 
   const loadData = async () => {
     try {
@@ -52,29 +59,27 @@ export default function HRExpensesScreen() {
     loadData();
   }, []);
 
-  const handleAction = async (id: string, status: ExpenseStatus) => {
-    await updateExpenseStatus(id, status, 'HR Manager');
+  const handleStatusChange = async (id: string, status: ExpenseStatus) => {
+    await updateExpenseStatus(id, status, 'Finance & HR Admin');
     loadData();
   };
 
   if (loading) return <LoadingState />;
 
-  const filtered = expenses.filter((e) => {
-    if (filterStatus === 'all') return true;
-    return e.status === filterStatus;
-  });
-
-  const totalPending = expenses.filter((e) => e.status === 'pending').reduce((sum, e) => sum + e.amount, 0);
-  const totalApproved = expenses.filter((e) => e.status === 'approved' || e.status === 'reimbursed').reduce((sum, e) => sum + e.amount, 0);
+  const filtered = filter === 'all' ? expenses : expenses.filter((e) => e.status === filter);
+  const totalClaimed = expenses.reduce((acc, curr) => acc + curr.amount, 0);
+  const approvedTotal = expenses.filter((e) => e.status === 'approved').reduce((acc, curr) => acc + curr.amount, 0);
+  const pendingTotal = expenses.filter((e) => e.status === 'pending').reduce((acc, curr) => acc + curr.amount, 0);
 
   return (
     <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Top Header */}
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View>
             <Text style={[styles.title, { color: colors.text }]}>Expenses & Reimbursements</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Corporate Expense Claims & Policy Compliance Audit
+              Corporate Claims, Mileage Calculations & Multi-tier Finance Approvals
             </Text>
           </View>
         </View>
@@ -83,102 +88,111 @@ export default function HRExpensesScreen() {
           style={{ flex: 1, padding: 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
         >
-          {/* Summary Row */}
+          {/* Top KPI Metrics Row */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Total Claims Raised</Text>
+              <Text style={styles.statNumber}>{formatCurrency(totalClaimed)}</Text>
+              <Text style={styles.statSub}>{expenses.length} claims in system</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Approved & Settled</Text>
+              <Text style={[styles.statNumber, { color: '#10B981' }]}>{formatCurrency(approvedTotal)}</Text>
+              <Text style={styles.statSub}>Ready for payroll disbursement</Text>
+            </View>
+            <View style={styles.statCard}>
               <Text style={styles.statLabel}>Pending Review</Text>
-              <Text style={[styles.statNumber, { color: '#D97706' }]}>{formatCurrency(totalPending)}</Text>
-              <Text style={styles.statSub}>{expenses.filter((e) => e.status === 'pending').length} requests</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Approved & Processed</Text>
-              <Text style={[styles.statNumber, { color: '#0D7377' }]}>{formatCurrency(totalApproved)}</Text>
-              <Text style={styles.statSub}>{expenses.filter((e) => e.status === 'approved').length} claims</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Reimbursed</Text>
-              <Text style={[styles.statNumber, { color: '#10B981' }]}>
-                {formatCurrency(expenses.filter((e) => e.status === 'reimbursed').reduce((s, e) => s + e.amount, 0))}
-              </Text>
-              <Text style={styles.statSub}>Direct Deposit</Text>
+              <Text style={[styles.statNumber, { color: '#D97706' }]}>{formatCurrency(pendingTotal)}</Text>
+              <Text style={styles.statSub}>Requires manager clearance</Text>
             </View>
           </View>
 
-          {/* Filter Pills */}
+          {/* Filter Bar */}
           <View style={styles.filterRow}>
-            {['all', 'pending', 'approved', 'reimbursed', 'rejected'].map((st) => (
-              <TouchableOpacity
-                key={st}
-                onPress={() => setFilterStatus(st)}
-                style={[
-                  styles.filterPill,
-                  filterStatus === st && { backgroundColor: '#0D7377', borderColor: '#0D7377' },
-                ]}
-              >
-                <Text style={[styles.filterPillText, filterStatus === st && { color: '#FFFFFF', fontWeight: '700' }]}>
-                  {st.toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {(['all', 'pending', 'approved', 'rejected'] as const).map((status) => {
+              const active = filter === status;
+              return (
+                <TouchableOpacity
+                  key={status}
+                  onPress={() => setFilter(status)}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                    {status.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
-          {/* Claims Table / Cards */}
-          <View style={styles.claimsList}>
+          {/* Claims List */}
+          <View style={{ gap: 12 }}>
             {filtered.map((item) => (
-              <View key={item.id} style={styles.claimCard}>
+              <View key={item.id} style={styles.expenseCard}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                   <View style={styles.iconBox}>
-                    <Receipt size={22} color="#0D7377" />
+                    {item.category === 'travel' ? (
+                      <Car size={22} color="#0D7377" />
+                    ) : item.category === 'learning' ? (
+                      <TrendingUp size={22} color="#0D7377" />
+                    ) : (
+                      <Receipt size={22} color="#0D7377" />
+                    )}
                   </View>
+
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.claimTitle}>{item.title}</Text>
-                    <Text style={styles.claimMeta}>
-                      Category: {item.category.toUpperCase()} · Date: {item.spent_at}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={styles.claimTitle}>{item.title}</Text>
+                      <View style={styles.catBadge}>
+                        <Text style={styles.catBadgeText}>{item.category.toUpperCase()}</Text>
+                      </View>
+                    </View>
                     <Text style={styles.claimDesc}>{item.description}</Text>
+                    <Text style={styles.claimMeta}>
+                      Claimed on {item.spent_at} · Employee ID: {item.employee_id}
+                      {item.approved_by ? ` · Reviewed by: ${item.approved_by}` : ''}
+                    </Text>
                   </View>
-                  <View style={{ alignItems: 'flex-end', gap: 6 }}>
+
+                  <View style={{ alignItems: 'flex-end', gap: 8 }}>
                     <Text style={styles.claimAmount}>{formatCurrency(item.amount)}</Text>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        item.status === 'approved' && { backgroundColor: '#D1FAE5' },
-                        item.status === 'pending' && { backgroundColor: '#FEF3C7' },
-                        item.status === 'reimbursed' && { backgroundColor: '#CCECEC' },
-                        item.status === 'rejected' && { backgroundColor: '#FEE2E2' },
-                      ]}
-                    >
-                      <Text
+
+                    {item.status === 'pending' ? (
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <TouchableOpacity
+                          onPress={() => handleStatusChange(item.id, 'approved')}
+                          style={styles.approveBtn}
+                        >
+                          <Check size={14} color="#FFF" />
+                          <Text style={styles.actionBtnText}>Approve</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleStatusChange(item.id, 'rejected')}
+                          style={styles.rejectBtn}
+                        >
+                          <X size={14} color="#FFF" />
+                          <Text style={styles.actionBtnText}>Reject</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View
                         style={[
-                          styles.statusBadgeText,
-                          item.status === 'approved' && { color: '#059669' },
-                          item.status === 'pending' && { color: '#D97706' },
-                          item.status === 'reimbursed' && { color: '#0D7377' },
-                          item.status === 'rejected' && { color: '#DC2626' },
+                          styles.statusBadge,
+                          item.status === 'approved' ? { backgroundColor: '#D1FAE5' } : { backgroundColor: '#FEE2E2' },
                         ]}
                       >
-                        {item.status.toUpperCase()}
-                      </Text>
-                    </View>
+                        <Text
+                          style={[
+                            styles.statusText,
+                            item.status === 'approved' ? { color: '#059669' } : { color: '#DC2626' },
+                          ]}
+                        >
+                          {item.status.toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
-
-                {item.status === 'pending' && (
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      onPress={() => handleAction(item.id, 'approved')}
-                      style={[styles.actionBtn, { backgroundColor: '#0D7377' }]}
-                    >
-                      <Text style={styles.actionBtnText}>Approve Claim</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleAction(item.id, 'rejected')}
-                      style={[styles.actionBtn, { backgroundColor: '#EF4444' }]}
-                    >
-                      <Text style={styles.actionBtnText}>Reject</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
               </View>
             ))}
           </View>
@@ -190,82 +204,30 @@ export default function HRExpensesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topBar: {
-    paddingHorizontal: 24,
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-  },
+  topBar: { paddingHorizontal: 24, paddingVertical: 18, borderBottomWidth: 1 },
   title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 13, marginTop: 2 },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: 18,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
+  statsRow: { flexDirection: 'row', gap: 16, marginBottom: 20 },
+  statCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 18, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
   statLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
-  statNumber: { fontSize: 24, fontWeight: '800', marginVertical: 4 },
+  statNumber: { fontSize: 24, fontWeight: '800', marginVertical: 4, color: '#1A1A2E' },
   statSub: { fontSize: 11, color: '#94A3B8' },
-  filterRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 18,
-  },
-  filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  filterPillText: { fontSize: 12, color: '#64748B', fontWeight: '600' },
-  claimsList: { gap: 12 },
-  claimCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#F0F7F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+  filterChipActive: { backgroundColor: '#0D7377', borderColor: '#0D7377' },
+  filterText: { fontSize: 11, fontWeight: '700', color: '#64748B' },
+  filterTextActive: { color: '#FFFFFF' },
+  expenseCard: { backgroundColor: '#FFFFFF', padding: 18, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
+  iconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
   claimTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  claimMeta: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  claimDesc: { fontSize: 13, color: '#334155', marginTop: 4 },
+  catBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  catBadgeText: { fontSize: 10, fontWeight: '700', color: '#475569' },
+  claimDesc: { fontSize: 12, color: '#475569', marginTop: 3 },
+  claimMeta: { fontSize: 11, color: '#94A3B8', marginTop: 3 },
   claimAmount: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  statusBadgeText: { fontSize: 10, fontWeight: '800' },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    justifyContent: 'flex-end',
-  },
-  actionBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  actionBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  approveBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#10B981', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  rejectBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EF4444', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  actionBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  statusText: { fontSize: 11, fontWeight: '800' },
 });

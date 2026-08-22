@@ -487,7 +487,7 @@ export interface ExpenseClaim {
 // ==========================================
 // 3. ASSET & INVENTORY MANAGEMENT
 // ==========================================
-export type AssetCategory = 'laptop' | 'monitor' | 'phone' | 'security_token' | 'furniture' | 'accessories';
+export type AssetCategory = 'laptop' | 'monitor' | 'phone' | 'tablet' | 'security_token' | 'furniture' | 'accessories' | 'other';
 export type AssetStatus = 'in_use' | 'available' | 'maintenance' | 'retired';
 
 export interface CompanyAsset {
@@ -501,6 +501,7 @@ export interface CompanyAsset {
   purchase_date: string;
   value: number;
   assigned_to_id?: string | null;
+  assigned_employee_name?: string | null;
   status: AssetStatus;
   notes?: string;
   created_at: string;

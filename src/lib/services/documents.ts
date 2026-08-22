@@ -1,76 +1,47 @@
 /**
- * Document Vault & Policy Management Service
+ * Document Vault & Company Policies Service (Dynamic Firestore)
  * Subedge Technology Pvt Ltd — Oasis Platform
  */
 
+import { db } from '@/lib/firebase';
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore';
 import { CompanyDocument } from '@/types/database';
-
-let DOCUMENTS_STORE: CompanyDocument[] = [
-  {
-    id: 'doc_1',
-    organization_id: 'subedge_org',
-    title: 'Subedge Technology Employee Handbook (2026 Edition)',
-    category: 'handbook',
-    file_size_kb: 2450,
-    version: 'v2.4',
-    file_url: 'https://subedge.vercel.app/docs/handbook-2026.pdf',
-    requires_signature: true,
-    signatures_count: 52,
-    uploaded_by: 'HR Policy Team',
-    created_at: new Date(Date.now() - 40 * 86400000).toISOString(),
-  },
-  {
-    id: 'doc_2',
-    organization_id: 'subedge_org',
-    title: 'Information Security & Data Privacy Policy (SOC 2 & HIPAA)',
-    category: 'policy',
-    file_size_kb: 1840,
-    version: 'v3.1',
-    file_url: 'https://subedge.vercel.app/docs/infosec-policy.pdf',
-    requires_signature: true,
-    signatures_count: 58,
-    uploaded_by: 'CISO Office',
-    created_at: new Date(Date.now() - 35 * 86400000).toISOString(),
-  },
-  {
-    id: 'doc_3',
-    organization_id: 'subedge_org',
-    title: 'Remote Work & Hybrid Workplace Equipment Policy',
-    category: 'policy',
-    file_size_kb: 920,
-    version: 'v1.8',
-    file_url: 'https://subedge.vercel.app/docs/remote-work-policy.pdf',
-    requires_signature: false,
-    signatures_count: 0,
-    uploaded_by: 'People Ops',
-    created_at: new Date(Date.now() - 20 * 86400000).toISOString(),
-  },
-  {
-    id: 'doc_4',
-    organization_id: 'subedge_org',
-    title: 'Standard Non-Disclosure & Intellectual Property Agreement',
-    category: 'contract',
-    file_size_kb: 640,
-    version: 'v2.0',
-    file_url: 'https://subedge.vercel.app/docs/nda-template.pdf',
-    requires_signature: true,
-    signatures_count: 60,
-    uploaded_by: 'Legal Department',
-    created_at: new Date(Date.now() - 60 * 86400000).toISOString(),
-  },
-];
+import { seedDatabaseIfEmpty } from './seed';
 
 export async function getDocuments(): Promise<CompanyDocument[]> {
-  return [...DOCUMENTS_STORE];
+  await seedDatabaseIfEmpty();
+
+  try {
+    const docsRef = collection(db, 'documents');
+    const snapshot = await getDocs(docsRef);
+    const results: CompanyDocument[] = [];
+    snapshot.forEach((d) => {
+      results.push({ id: d.id, ...d.data() } as CompanyDocument);
+    });
+    return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } catch (error) {
+    console.error('Error fetching documents from Firestore:', error);
+    return [];
+  }
 }
 
-export async function uploadDocument(doc: Omit<CompanyDocument, 'id' | 'signatures_count' | 'created_at'>): Promise<CompanyDocument> {
-  const newDoc: CompanyDocument = {
-    ...doc,
-    id: `doc_${Date.now()}`,
-    signatures_count: 0,
-    created_at: new Date().toISOString(),
-  };
-  DOCUMENTS_STORE.unshift(newDoc);
-  return newDoc;
+export async function signDocument(documentId: string, employeeId: string): Promise<void> {
+  try {
+    const docRef = doc(db, 'documents', documentId);
+    const snapshot = await getDocs(collection(db, 'documents'));
+    const docData = snapshot.docs.find((d) => d.id === documentId)?.data();
+    const currentCount = docData?.signatures_count || 0;
+
+    await updateDoc(docRef, {
+      signatures_count: currentCount + 1,
+    });
+  } catch (error) {
+    console.error('Error signing document in Firestore:', error);
+  }
 }
