@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, useWindowDimensions, Platform, TextInput, Alert } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
@@ -6,7 +6,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { Avatar } from '@/components/ui/Avatar';
 import { APP_NAME } from '@/constants/config';
-import { LogOut, HelpCircle, Bell, Settings, Search, Menu } from 'lucide-react-native';
+import { LogOut, HelpCircle, Bell, Settings, Search, Menu, Bot } from 'lucide-react-native';
+import { OasisAssistant } from '@/components/ai/OasisAssistant';
 
 interface NavItem {
   label: string;
@@ -25,6 +26,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
+  const [showAssistant, setShowAssistant] = useState(false);
   
   // Mobile layout switch
   const isDesktop = width >= 1024;
@@ -58,7 +60,15 @@ export function SidebarLayout({ items, children }: SidebarProps) {
             )}
           </View>
         </View>
+        
         <View style={styles.mobileContent}>{children}</View>
+        
+        {/* Mobile AI FAB */}
+        <TouchableOpacity style={styles.fab} onPress={() => setShowAssistant(true)}>
+          <Bot color="#FFF" size={24} />
+        </TouchableOpacity>
+        
+        <OasisAssistant visible={showAssistant} onClose={() => setShowAssistant(false)} />
       </SafeAreaView>
     );
   }
@@ -167,7 +177,16 @@ export function SidebarLayout({ items, children }: SidebarProps) {
             )}
           </View>
         </View>
-        <View style={styles.desktopContent}>{children}</View>
+        <View style={styles.mainContentScroll}>
+          {children}
+        </View>
+
+        {/* Desktop AI FAB */}
+        <TouchableOpacity style={styles.fab} onPress={() => setShowAssistant(true)}>
+          <Bot color="#FFF" size={24} />
+        </TouchableOpacity>
+        
+        <OasisAssistant visible={showAssistant} onClose={() => setShowAssistant(false)} />
       </View>
     </SafeAreaView>
   );
@@ -317,5 +336,26 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   
+  mainContentScroll: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#0052cc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 999,
+  },
   desktopContent: { flex: 1, backgroundColor: '#f8f9ff' },
 });
