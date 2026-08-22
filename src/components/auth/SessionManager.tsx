@@ -8,7 +8,7 @@ const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 export function SessionManager({ children }: { children: React.ReactNode }) {
   const { signOut, user } = useAuth();
   const pathname = usePathname();
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<any>(null);
 
   const resetTimer = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -34,10 +34,6 @@ export function SessionManager({ children }: { children: React.ReactNode }) {
         return false;
       },
       onMoveShouldSetPanResponderCapture: () => {
-        resetTimer();
-        return false;
-      },
-      onScrollShouldSetPanResponderCapture: () => {
         resetTimer();
         return false;
       }
