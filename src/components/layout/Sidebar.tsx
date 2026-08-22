@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, useWindowDimensions, Platform, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, useWindowDimensions, Platform, TextInput, Alert } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
@@ -121,7 +121,16 @@ export function SidebarLayout({ items, children }: SidebarProps) {
 
         {/* Footer Actions */}
         <View style={[styles.footerActions, { borderTopColor: colors.border }]}>
-          <TouchableOpacity style={styles.footerBtn}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (Platform.OS === 'web') {
+                window.alert('Help Center\n\nPlease contact support@oasishr.com for assistance.');
+              } else {
+                Alert.alert('Help Center', 'Please contact support@oasishr.com for assistance.');
+              }
+            }} 
+            style={styles.footerBtn}
+          >
             <HelpCircle size={20} color={colors.textSecondary} />
             <Text style={[styles.footerBtnText, { color: colors.textSecondary }]}>Help Center</Text>
           </TouchableOpacity>
