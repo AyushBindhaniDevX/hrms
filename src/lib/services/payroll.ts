@@ -157,14 +157,6 @@ export async function getPayrollEntries(periodId: string): Promise<Payroll[]> {
   return entries as Payroll[];
 }
 
-export async function updatePayrollEntry(id: string, updates: Partial<Payroll>): Promise<void> {
-  const ref = doc(db, 'payroll', id);
-  await updateDoc(ref, {
-    ...updates,
-    updated_at: serverTimestamp()
-  });
-}
-
 export async function createPayrollEntry(entry: {
   payroll_period_id: string;
   employee_id: string;
