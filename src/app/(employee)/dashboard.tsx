@@ -117,7 +117,7 @@ export default function EmployeeDashboard() {
 
   // Background location tracking loop (every 60s)
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     const isClockedIn = todayAttendance && !todayAttendance.clock_out;
     
     if (isClockedIn && employee?.workplace) {
