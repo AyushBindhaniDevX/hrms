@@ -47,6 +47,8 @@ const EMAIL_LOGS_STORE: EmailLog[] = [
   },
 ];
 
+import { Platform } from 'react-native';
+
 /**
  * Universal Resend Dispatcher
  */
@@ -55,32 +57,62 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
   const primaryTo = recipients[0];
 
   const html = wrapInSubedgeTemplate(payload.subject, payload.htmlContent);
+  let resendMessageId = `resend_${Date.now()}`;
+  let status: 'delivered' | 'sent' | 'queued' | 'simulated' = 'delivered';
 
   try {
-    let resendMessageId = `resend_${Date.now()}`;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // In web browser (e.g. Vercel deployment), call serverless function to bypass browser CORS preflight
+      try {
+        const proxyRes = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: DEFAULT_FROM,
+            to: recipients,
+            subject: payload.subject,
+            html,
+          }),
+        });
 
-    // Call Resend API if API Key is present and not default demo placeholder
-    if (RESEND_API_KEY && !RESEND_API_KEY.startsWith('re_demo_key')) {
-      const response = await fetch(RESEND_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: DEFAULT_FROM,
-          to: recipients,
-          subject: payload.subject,
-          html,
-        }),
-      });
-
-      if (response.ok) {
-        const json = await response.json();
-        resendMessageId = json.id || resendMessageId;
-      } else {
-        console.warn('Resend API response status:', response.status);
+        if (proxyRes.ok) {
+          const json = await proxyRes.json();
+          resendMessageId = json.id || resendMessageId;
+        } else {
+          status = 'simulated';
+        }
+      } catch (proxyErr) {
+        // Fallback gracefully without breaking UI
+        status = 'simulated';
       }
+    } else if (RESEND_API_KEY && !RESEND_API_KEY.startsWith('re_demo_key')) {
+      // On React Native iOS/Android (no browser CORS)
+      try {
+        const response = await fetch(RESEND_API_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: DEFAULT_FROM,
+            to: recipients,
+            subject: payload.subject,
+            html,
+          }),
+        });
+
+        if (response.ok) {
+          const json = await response.json();
+          resendMessageId = json.id || resendMessageId;
+        } else {
+          status = 'simulated';
+        }
+      } catch (nativeErr) {
+        status = 'simulated';
+      }
+    } else {
+      status = 'simulated';
     }
 
     // Record delivery log
@@ -89,7 +121,7 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
       to: primaryTo,
       subject: payload.subject,
       category: payload.category || 'general',
-      status: 'delivered',
+      status,
       timestamp: new Date().toISOString(),
       resend_id: resendMessageId,
     };
@@ -97,8 +129,7 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
     EMAIL_LOGS_STORE.unshift(logItem);
     return { success: true, id: resendMessageId };
   } catch (error) {
-    console.error('Error dispatching Resend email:', error);
-    // Still record locally so HR audit trail remains uninterrupted
+    // Ensure email dispatch NEVER crashes employee creation, offer generation, or ticket workflows
     EMAIL_LOGS_STORE.unshift({
       id: `log_${Date.now()}`,
       to: primaryTo,
