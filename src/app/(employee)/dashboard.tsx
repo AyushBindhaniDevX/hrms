@@ -9,7 +9,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { Badge } from '@/components/ui/Badge';
 import { LoadingState } from '@/components/ui/States';
 import { getGreeting, formatDate, formatTime, formatMinutes, formatCurrency } from '@/utils/format';
-import { getTodayAttendance, getAttendanceHistory, clockIn, clockOut } from '@/lib/services/attendance';
+import { getTodayAttendance, getAttendanceHistory, clockIn, clockOut, startBreak, endBreak } from '@/lib/services/attendance';
 import { getLeaveBalances } from '@/lib/services/leave';
 import { getPayslips } from '@/lib/services/payroll';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
@@ -83,6 +83,7 @@ export default function EmployeeDashboard() {
   const [clockLoading, setClockLoading] = useState(false);
   const [clockError, setClockError] = useState('');
   const [distance, setDistance] = useState<number | null>(null);
+  const [outOfBounds, setOutOfBounds] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!profile) return;
@@ -113,6 +114,39 @@ export default function EmployeeDashboard() {
   }, [profile]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Background location tracking loop (every 60s)
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    const isClockedIn = todayAttendance && !todayAttendance.clock_out;
+    
+    if (isClockedIn && employee?.workplace) {
+      interval = setInterval(async () => {
+        try {
+          const loc = await getCurrentLocation();
+          const dist = calculateDistance(
+            loc.latitude, loc.longitude, 
+            employee.workplace!.latitude, employee.workplace!.longitude
+          );
+          setDistance(Math.round(dist));
+          
+          if (dist > employee.workplace!.radius_meters) {
+            setOutOfBounds(true);
+            await startBreak(todayAttendance.id, 'Auto-paused: Left office radius');
+          } else {
+            if (outOfBounds) {
+              setOutOfBounds(false);
+              await endBreak(todayAttendance.id);
+            }
+          }
+        } catch (e) {
+          console.warn('Geofence check failed', e);
+        }
+      }, 60000);
+    }
+    
+    return () => { if (interval) clearInterval(interval); };
+  }, [todayAttendance, employee, outOfBounds]);
 
   const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
 
@@ -217,6 +251,17 @@ export default function EmployeeDashboard() {
       </Animated.View>
 
       {/* ── Main 2-column or 1-column ──────────────────────────────────────── */}
+      {outOfBounds && (
+        <Animated.View entering={FadeInDown.duration(350).springify()}>
+          <View style={{ marginHorizontal: 16, marginBottom: 16, padding: 16, backgroundColor: '#fff1f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecdd3', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <AlertCircle color="#e11d48" size={24} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontWeight: '700', color: '#be123c', fontSize: 15 }}>Out of Bounds</Text>
+              <Text style={{ color: '#e11d48', fontSize: 13, marginTop: 2 }}>You are outside the office radius. Your active clock-in has been automatically paused. Please return to resume.</Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
       <View style={isDesktop ? styles.gridDesktop : styles.gridMobile}>
 
         {/* LEFT — Clock In + Quick Links */}

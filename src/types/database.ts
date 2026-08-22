@@ -87,6 +87,7 @@ export interface Attendance {
   clock_out_verified: boolean;
   working_minutes: number;
   status: AttendanceStatus;
+  breaks?: { start: string; end: string | null; reason: string }[];
   created_at: string;
   updated_at: string;
   // Joined

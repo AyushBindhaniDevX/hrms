@@ -118,7 +118,24 @@ export async function clockOut(latitude: number, longitude: number): Promise<Geo
 
   const clockInTime = new Date(attDoc.data().clock_in);
   const clockOutTime = new Date(now);
-  const workingMinutes = Math.max(0, Math.floor((clockOutTime.getTime() - clockInTime.getTime()) / 60000));
+  let totalMinutes = Math.floor((clockOutTime.getTime() - clockInTime.getTime()) / 60000);
+  
+  const breaks: { start: string; end: string | null; reason: string }[] = attDoc.data().breaks || [];
+  let breakMinutes = 0;
+  
+  // Auto-close any open break
+  let updatedBreaks = [...breaks];
+  if (updatedBreaks.length > 0 && !updatedBreaks[updatedBreaks.length - 1].end) {
+    updatedBreaks[updatedBreaks.length - 1].end = now;
+  }
+  
+  for (const b of updatedBreaks) {
+    if (b.start && b.end) {
+      breakMinutes += Math.floor((new Date(b.end).getTime() - new Date(b.start).getTime()) / 60000);
+    }
+  }
+
+  const workingMinutes = Math.max(0, totalMinutes - breakMinutes);
 
   // Optional: geofence check for clock out if workplace exists
   let distance_meters: number | undefined;
@@ -142,10 +159,41 @@ export async function clockOut(latitude: number, longitude: number): Promise<Geo
     clock_out_longitude: longitude,
     clock_out_verified: !!emp.workplace_id,
     working_minutes: workingMinutes,
+    breaks: updatedBreaks,
     updated_at: now,
   });
 
   return { success: true, message: 'Clocked out successfully', distance_meters, clock_out: now, working_minutes: workingMinutes };
+}
+
+export async function startBreak(attendanceId: string, reason: string): Promise<boolean> {
+  const docRef = doc(db, 'attendance', attendanceId);
+  const attDoc = await getDoc(docRef);
+  if (!attDoc.exists()) return false;
+  
+  const breaks = attDoc.data().breaks || [];
+  if (breaks.length > 0 && !breaks[breaks.length - 1].end) {
+    return false; // Already on break
+  }
+  
+  breaks.push({ start: new Date().toISOString(), end: null, reason });
+  await updateDoc(docRef, { breaks, updated_at: new Date().toISOString() });
+  return true;
+}
+
+export async function endBreak(attendanceId: string): Promise<boolean> {
+  const docRef = doc(db, 'attendance', attendanceId);
+  const attDoc = await getDoc(docRef);
+  if (!attDoc.exists()) return false;
+  
+  const breaks = attDoc.data().breaks || [];
+  if (breaks.length === 0 || breaks[breaks.length - 1].end) {
+    return false; // Not on break
+  }
+  
+  breaks[breaks.length - 1].end = new Date().toISOString();
+  await updateDoc(docRef, { breaks, updated_at: new Date().toISOString() });
+  return true;
 }
 
 export async function getTodayAttendance(employeeId: string): Promise<Attendance | null> {

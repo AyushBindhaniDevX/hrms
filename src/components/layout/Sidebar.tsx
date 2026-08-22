@@ -79,7 +79,10 @@ export function SidebarLayout({ items, children }: SidebarProps) {
             </View>
           </View>
           
-          <TouchableOpacity style={[styles.newRequestBtn, { backgroundColor: colors.primary }]}>
+          <TouchableOpacity 
+            onPress={() => router.push('/(employee)/leave/apply')}
+            style={[styles.newRequestBtn, { backgroundColor: colors.primary }]}
+          >
             <Text style={{ color: '#FFF', fontWeight: '600', fontSize: 20, marginRight: 8, marginTop: -2 }}>+</Text>
             <Text style={styles.newRequestText}>New Request</Text>
           </TouchableOpacity>

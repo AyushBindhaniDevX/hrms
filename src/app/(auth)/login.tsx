@@ -110,9 +110,7 @@ export default function LoginScreen() {
             />
           </View>
 
-          <Text style={[styles.hint, { color: colors.textSecondary }]}>
-            Demo: employee@oasis.local / Employee@12345
-          </Text>
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
