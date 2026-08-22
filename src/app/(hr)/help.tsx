@@ -5,7 +5,7 @@ import { HR_NAV } from '@/constants/navigation';
 
 export default function HRHelpScreen() {
   return (
-    <SidebarLayout items={HR_NAV}>
+    <SidebarLayout>
       <HelpCenter />
     </SidebarLayout>
   );

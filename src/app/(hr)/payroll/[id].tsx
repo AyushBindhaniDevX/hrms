@@ -163,7 +163,7 @@ export default function PayrollDetailScreen() {
   const totalNet = entries.reduce((sum, e) => sum + e.net_salary, 0);
 
   return (
-    <SidebarLayout items={HR_NAV}>
+    <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <Button title="← Back" onPress={() => router.back()} variant="ghost" size="sm" />

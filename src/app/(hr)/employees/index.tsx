@@ -41,7 +41,7 @@ export default function EmployeesScreen() {
   if (loading) return <LoadingState />;
 
   return (
-    <SidebarLayout items={HR_NAV}>
+    <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.topBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
           <Text style={[styles.title, { color: colors.text }]}>Employees</Text>

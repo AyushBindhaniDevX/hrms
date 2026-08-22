@@ -108,6 +108,16 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     }
   };
 
+  const handleDashboardPress = () => {
+    if (effectiveRole === 'admin') {
+      router.push('/(admin)/dashboard' as never);
+    } else if (effectiveRole === 'hr') {
+      router.push('/(hr)/dashboard' as never);
+    } else {
+      router.push('/(employee)/dashboard' as never);
+    }
+  };
+
   const handleHelpPress = () => {
     if (effectiveRole === 'admin') {
       router.push('/(admin)/help' as never);
@@ -142,15 +152,20 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               <Menu size={22} color={colors.text} />
             </TouchableOpacity>
 
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>O</Text>
-            </View>
-            <View>
-              <Text style={[styles.brandText, { color: '#0b1c30' }]}>{APP_NAME}</Text>
-              <Text style={[styles.brandSubtitle, { color: '#64748b' }]}>
-                {effectiveRole.toUpperCase()} SUITE
-              </Text>
-            </View>
+            <TouchableOpacity
+              onPress={handleDashboardPress}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+            >
+              <View style={styles.logoCircle}>
+                <Text style={styles.logoText}>O</Text>
+              </View>
+              <View>
+                <Text style={[styles.brandText, { color: '#0b1c30' }]}>{APP_NAME}</Text>
+                <Text style={[styles.brandSubtitle, { color: '#64748b' }]}>
+                  {effectiveRole.toUpperCase()} SUITE
+                </Text>
+              </View>
+            </TouchableOpacity>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -309,7 +324,10 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         ]}
       >
         <View style={styles.brandContainer}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity
+            onPress={handleDashboardPress}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+          >
             <View style={styles.logoCircle}>
               <Text style={styles.logoText}>O</Text>
             </View>
@@ -319,7 +337,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                 {effectiveRole.toUpperCase()} SUITE
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
           <TouchableOpacity
             onPress={handleNewAction}

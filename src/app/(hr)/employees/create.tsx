@@ -72,7 +72,7 @@ export default function CreateEmployeeScreen() {
   };
 
   return (
-    <SidebarLayout items={HR_NAV}>
+    <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <Button title="← Cancel" onPress={() => { if (router.canGoBack()) if (router.canGoBack()) { router.back(); } else { router.replace('/'); } else router.replace('/'); }} variant="ghost" size="sm" />

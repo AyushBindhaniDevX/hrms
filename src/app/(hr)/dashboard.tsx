@@ -1,7 +1,7 @@
-import { HR_NAV } from '@/constants/navigation';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
+import { HR_NAV } from '@/constants/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
@@ -16,14 +16,17 @@ import { getPendingLeaveRequests, processLeaveRequest } from '@/lib/services/lea
 import { formatDate } from '@/utils/format';
 import type { LeaveRequest } from '@/types';
 
-
-
 export default function HRDashboard() {
   const colors = useTheme();
-  const { profile } = useAuth();
+  const { profile, role } = useAuth();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+
+  // If Admin is logged in, redirect to Admin Dashboard
+  if (role === 'admin' || profile?.role === 'admin') {
+    return <Redirect href="/(admin)/dashboard" />;
+  }
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

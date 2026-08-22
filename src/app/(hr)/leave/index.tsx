@@ -172,7 +172,7 @@ export default function HRLeaveWorkflowScreen() {
   if (loading) return <LoadingState />;
 
   return (
-    <SidebarLayout items={HR_NAV}>
+    <SidebarLayout>
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}

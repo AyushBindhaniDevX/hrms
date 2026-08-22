@@ -64,7 +64,7 @@ export default function LocationsScreen() {
   if (loading) return <LoadingState />;
 
   return (
-    <SidebarLayout items={HR_NAV}>
+    <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.text }]}>Workplaces</Text>
