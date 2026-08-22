@@ -60,9 +60,9 @@ export async function getPayrollPeriods(): Promise<PayrollPeriod[]> {
 }
 
 export async function createPayrollPeriod(month: number, year: number, orgId: string): Promise<PayrollPeriod> {
-  const newRef = doc(collection(db, 'payroll_periods'));
-  const data = {
-    id: newRef.id,
+  const newPeriodRef = doc(collection(db, 'payroll_periods'));
+  const periodData = {
+    id: newPeriodRef.id,
     month,
     year,
     organization_id: orgId,
@@ -70,8 +70,45 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
     created_at: serverTimestamp(),
     updated_at: serverTimestamp(),
   };
-  await setDoc(newRef, data);
-  return data as unknown as PayrollPeriod;
+
+  const batch = writeBatch(db);
+  batch.set(newPeriodRef, periodData);
+
+  // Auto-generate payroll entries for all active employees
+  const empSnap = await getDocs(query(collection(db, 'employees'), where('employment_status', '==', 'active')));
+  
+  empSnap.docs.forEach(empDoc => {
+    const empData = empDoc.data();
+    const basicSalary = empData.basic_salary || 0;
+    
+    // Default assumption: 0 LOP for this automation pass
+    const lopDays = 0;
+    const lopAmount = 0;
+    const allowances = {};
+    const deductions = {};
+    const grossSalary = basicSalary;
+    const netSalary = grossSalary;
+
+    const newPayrollRef = doc(collection(db, 'payroll'));
+    batch.set(newPayrollRef, {
+      id: newPayrollRef.id,
+      payroll_period_id: newPeriodRef.id,
+      employee_id: empDoc.id,
+      basic_salary: basicSalary,
+      allowances,
+      deductions,
+      lop_days: lopDays,
+      lop_amount: lopAmount,
+      gross_salary: grossSalary,
+      net_salary: netSalary,
+      status: 'draft',
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
+  return periodData as unknown as PayrollPeriod;
 }
 
 export async function getPayrollEntries(periodId: string): Promise<Payroll[]> {
@@ -159,6 +196,39 @@ export async function processPayrollPeriod(periodId: string): Promise<void> {
     updated_at: serverTimestamp()
   });
   
+  await batch.commit();
+}
+
+export async function distributePayroll(periodId: string, month: number, year: number): Promise<void> {
+  const q = query(collection(db, 'payroll'), where('payroll_period_id', '==', periodId), where('status', '==', 'processed'));
+  const snap = await getDocs(q);
+  
+  if (snap.empty) return;
+
+  const batch = writeBatch(db);
+  
+  snap.docs.forEach(d => {
+    // Mark as paid
+    batch.update(d.ref, {
+      status: 'paid',
+      updated_at: serverTimestamp()
+    });
+
+    // Generate Payslip
+    const payslipNumber = `PS-${year}${String(month).padStart(2, '0')}-${d.id.substring(0, 5).toUpperCase()}`;
+    const newPayslipRef = doc(collection(db, 'payslips'));
+    
+    batch.set(newPayslipRef, {
+      id: newPayslipRef.id,
+      payroll_id: d.id,
+      employee_id: d.data().employee_id,
+      payslip_number: payslipNumber,
+      period_month: month,
+      period_year: year,
+      created_at: serverTimestamp(),
+    });
+  });
+
   await batch.commit();
 }
 

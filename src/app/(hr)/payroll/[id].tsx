@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import {
-  getPayrollEntries, createPayrollEntry, processPayrollPeriod, generatePayslip,
+  getPayrollEntries, createPayrollEntry, processPayrollPeriod, generatePayslip, distributePayroll
 } from '@/lib/services/payroll';
 import { getAllEmployees } from '@/lib/services/employee';
 import { db } from '@/lib/firebase';
@@ -33,6 +33,7 @@ export default function PayrollDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [distributing, setDistributing] = useState(false);
 
   // Form state
   const [selEmpId, setSelEmpId] = useState<string | null>(null);
@@ -93,13 +94,18 @@ export default function PayrollDetailScreen() {
     setProcessing(true);
     try {
       await processPayrollPeriod(id!);
-      // Generate payslips for all entries
-      for (const entry of entries) {
-        await generatePayslip(entry.id, entry.employee_id, period!.month, period!.year);
-      }
       await load();
     } catch {}
     setProcessing(false);
+  };
+
+  const handleDistribute = async () => {
+    setDistributing(true);
+    try {
+      await distributePayroll(id!, period!.month, period!.year);
+      await load();
+    } catch {}
+    setDistributing(false);
   };
 
   if (loading) return <LoadingState />;
@@ -154,11 +160,16 @@ export default function PayrollDetailScreen() {
           {period.status === 'open' && (
             <View style={{ gap: 8 }}>
               <Button title="+ Add Employee Payroll" onPress={() => setShowAdd(true)} variant="outline" />
-              {entries.length > 0 && (
-                <Button title="Process & Generate Payslips" onPress={handleProcess} loading={processing} />
-              )}
             </View>
           )}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {period.status === 'open' && (
+              <Button title="Process Payroll" onPress={handleProcess} loading={processing} style={{ flex: 1 }} />
+            )}
+            {period.status === 'closed' && (
+              <Button title="Distribute Payslips" onPress={handleDistribute} loading={distributing} style={{ flex: 1 }} />
+            )}
+          </View>
         </ScrollView>
 
         {/* Add Entry Modal */}
