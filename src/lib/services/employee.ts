@@ -144,11 +144,7 @@ export async function createEmployee(params: {
   organization_id: string;
   employee_code: string;
   department_id?: string;
-  designation?: string;
-  joining_date?: string;
-  workplace_id?: string;
   manager_id?: string;
-  basic_salary?: number;
 }): Promise<void> {
   const { initializeApp, deleteApp } = await import('firebase/app');
   const { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } = await import('firebase/auth');
@@ -185,12 +181,9 @@ export async function createEmployee(params: {
       profile_id: user.uid,
       employee_code: params.employee_code,
       department_id: params.department_id || null,
-      designation: params.designation || null,
-      joining_date: params.joining_date || null,
-      workplace_id: params.workplace_id || null,
       manager_id: params.manager_id || null,
-      basic_salary: params.basic_salary || 0,
       employment_status: 'active',
+      onboarding_completed: false,
       created_at: serverTimestamp(),
       updated_at: serverTimestamp(),
     });
@@ -218,8 +211,26 @@ export async function updateEmployee(
 // ── Department Management ──────────────────────────────────────────────────
 
 export async function getDepartments(): Promise<Department[]> {
-  const snap = await getDocs(query(collection(db, 'departments'), orderBy('name')));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Department));
+  const snap = await getDocs(collection(db, 'departments'));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Department);
+}
+
+export async function completeOnboarding(
+  employeeId: string, 
+  data: { 
+    designation: string;
+    basic_salary: number;
+    home_address: string;
+    bank_details: { bank_name: string; account_number: string; routing_number: string };
+    emergency_contact: { name: string; phone: string; relationship: string };
+  }
+) {
+  const docRef = doc(db, 'employees', employeeId);
+  await updateDoc(docRef, {
+    ...data,
+    onboarding_completed: true,
+    updated_at: serverTimestamp()
+  });
 }
 
 export async function getDepartmentsWithStats(): Promise<Department[]> {

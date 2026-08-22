@@ -50,6 +50,18 @@ export interface Employee {
   manager_id?: string | null;
   basic_salary: number;
   employment_status: EmploymentStatus;
+  onboarding_completed: boolean;
+  home_address?: string | null;
+  bank_details?: {
+    bank_name: string;
+    account_number: string;
+    routing_number: string;
+  } | null;
+  emergency_contact?: {
+    name: string;
+    phone: string;
+    relationship?: string;
+  } | null;
   created_at: string;
   updated_at: string;
   // Joined fields

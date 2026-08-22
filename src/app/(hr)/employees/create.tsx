@@ -9,8 +9,8 @@ import { Select } from '@/components/ui/Select';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Button } from '@/components/ui/Button';
 import { SidebarLayout } from '@/components/layout/Sidebar';
-import { getDepartments, getWorkplaces, createEmployee } from '@/lib/services/employee';
-import type { Department, Workplace } from '@/types';
+import { getDepartments, createEmployee, getAllEmployees } from '@/lib/services/employee';
+import type { Department, Employee } from '@/types';
 
 
 
@@ -19,7 +19,7 @@ export default function CreateEmployeeScreen() {
   const { profile } = useAuth();
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
+  const [managers, setManagers] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,17 +28,15 @@ export default function CreateEmployeeScreen() {
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [empCode, setEmpCode] = useState('');
-  const [designation, setDesignation] = useState('');
   const [deptId, setDeptId] = useState<string | null>(null);
-  const [workplaceId, setWorkplaceId] = useState<string | null>(null);
-  const [salary, setSalary] = useState('');
-  const [joinDate, setJoinDate] = useState<Date | null>(null);
+  const [managerId, setManagerId] = useState<string | null>(null);
+  const [role, setRole] = useState<string>('employee');
 
   useEffect(() => {
     (async () => {
-      const [d, w] = await Promise.all([getDepartments(), getWorkplaces()]);
+      const [d, m] = await Promise.all([getDepartments(), getAllEmployees()]);
       setDepartments(d);
-      setWorkplaces(w);
+      setManagers(m);
     })();
   }, []);
 
@@ -57,11 +55,9 @@ export default function CreateEmployeeScreen() {
         phone: phone || undefined,
         organization_id: profile?.organization_id || '',
         employee_code: empCode,
-        designation: designation || undefined,
         department_id: deptId || undefined,
-        workplace_id: workplaceId || undefined,
-        basic_salary: salary ? parseFloat(salary) : undefined,
-        joining_date: joinDate ? joinDate.toISOString().split('T')[0] : undefined,
+        manager_id: managerId || undefined,
+        role: role,
       });
       if (router.canGoBack()) { router.back(); } else { router.replace('/'); }
     } catch (err: unknown) {
@@ -92,7 +88,6 @@ export default function CreateEmployeeScreen() {
           <Input label="Password *" value={password} onChangeText={setPassword} secureTextEntry />
           <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
           <Input label="Employee Code *" value={empCode} onChangeText={setEmpCode} />
-          <Input label="Designation" value={designation} onChangeText={setDesignation} />
 
           <Select
             label="Department"
@@ -102,14 +97,22 @@ export default function CreateEmployeeScreen() {
           />
 
           <Select
-            label="Workplace"
-            options={workplaces.map(w => ({ label: w.name, value: w.id }))}
-            value={workplaceId}
-            onValueChange={setWorkplaceId}
+            label="Reporting To (Manager)"
+            options={managers.map(m => ({ label: m.profile?.full_name || m.employee_code || 'Unknown', value: m.id }))}
+            value={managerId}
+            onValueChange={setManagerId}
           />
 
-          <Input label="Basic Salary" value={salary} onChangeText={setSalary} keyboardType="numeric" />
-          <DatePicker label="Joining Date" value={joinDate} onChange={setJoinDate} />
+          <Select
+            label="System Role"
+            options={[
+              { label: 'Employee', value: 'employee' },
+              { label: 'HR Manager', value: 'hr' },
+              { label: 'Administrator', value: 'admin' },
+            ]}
+            value={role}
+            onValueChange={setRole}
+          />
 
           <Button title="Create Employee" onPress={handleCreate} loading={loading} />
         </ScrollView>
