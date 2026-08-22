@@ -560,6 +560,36 @@ export interface SupportTicket {
 // ==========================================
 // 5. LEARNING & DEVELOPMENT (L&D) MODULE
 // ==========================================
+export type LessonType = 'video' | 'article' | 'document' | 'quiz' | 'external_link';
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correct_index: number;
+  explanation?: string;
+}
+
+export interface CourseLesson {
+  id: string;
+  title: string;
+  type: LessonType;
+  duration_minutes: number;
+  video_url?: string;
+  content_markdown?: string;
+  attachment_url?: string;
+  attachment_name?: string;
+  quiz_questions?: QuizQuestion[];
+  order: number;
+}
+
+export interface CourseModule {
+  id: string;
+  title: string;
+  description?: string;
+  lessons: CourseLesson[];
+}
+
 export interface TrainingCourse {
   id: string;
   organization_id: string;
@@ -573,6 +603,9 @@ export interface TrainingCourse {
   rating: number;
   thumbnail_url?: string;
   enrolled_count: number;
+  certificate_title?: string;
+  pass_percentage?: number;
+  curriculum?: CourseModule[];
   created_at: string;
 }
 
@@ -582,9 +615,10 @@ export interface CourseEnrollment {
   employee_id: string;
   progress_percent: number;
   is_completed: boolean;
+  completed_lesson_ids?: string[];
+  quiz_scores?: Record<string, number>;
   completed_at?: string | null;
-  score?: number;
-  certificate_id?: string;
+  certificate_url?: string | null;
   course?: TrainingCourse;
 }
 
