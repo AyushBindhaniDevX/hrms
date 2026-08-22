@@ -133,10 +133,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         <View style={[styles.footerActions, { borderTopColor: colors.border }]}>
           <TouchableOpacity 
             onPress={() => {
-              if (Platform.OS === 'web') {
-                window.alert('Help Center\n\nPlease contact support@oasishr.com for assistance.');
-              } else {
-                Alert.alert('Help Center', 'Please contact support@oasishr.com for assistance.');
+              if (profile?.role) {
+                router.push(`/${profile.role === 'admin' ? '(admin)' : profile.role === 'hr' ? '(hr)' : '(employee)'}/help` as never);
               }
             }} 
             style={styles.footerBtn}
