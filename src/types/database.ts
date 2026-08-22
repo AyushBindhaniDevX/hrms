@@ -327,7 +327,18 @@ export interface Kudos {
 // ==========================================
 export type JobStatus = 'draft' | 'published' | 'closed';
 export type JobEmploymentType = 'full-time' | 'part-time' | 'contract' | 'remote';
-export type CandidateStage = 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected';
+export type JobPriority = 'urgent' | 'high' | 'normal' | 'low';
+export type CandidateStage =
+  | 'applied'
+  | 'screening'
+  | 'shortlisted'
+  | 'assessment'
+  | 'interview'
+  | 'hr_round'
+  | 'offer'
+  | 'pre_joining'
+  | 'hired'
+  | 'rejected';
 
 export interface JobOpening {
   id: string;
@@ -339,11 +350,46 @@ export interface JobOpening {
   experience_level: string;
   salary_range: string;
   positions_count: number;
+  priority?: JobPriority;
+  target_joining_date?: string;
+  hiring_manager?: string;
   description: string;
   requirements: string[];
+  skills?: string[];
   status: JobStatus;
   applicants_count: number;
   created_at: string;
+}
+
+export interface CandidateTimelineEvent {
+  id: string;
+  type: 'applied' | 'stage_change' | 'interview_scheduled' | 'scorecard_added' | 'offer_sent' | 'note';
+  title: string;
+  description: string;
+  created_at: string;
+  actor_name: string;
+}
+
+export interface CandidateEvaluation {
+  technical_score: number; // 1-5
+  problem_solving_score: number; // 1-5
+  communication_score: number; // 1-5
+  culture_fit_score: number; // 1-5
+  recommendation: 'strong_hire' | 'hire' | 'hold' | 'reject';
+  interviewer_notes: string;
+  evaluated_at?: string;
+  evaluator_name?: string;
+}
+
+export interface CandidateAIMatch {
+  overall: number; // 0-100%
+  skills: number; // 0-100%
+  experience: number; // 0-100%
+  education: number; // 0-100%
+  location: number; // 0-100%
+  salary: number; // 0-100%
+  strengths: string[];
+  gaps: string[];
 }
 
 export interface Candidate {
@@ -358,9 +404,59 @@ export interface Candidate {
   experience_years: number;
   current_company: string;
   expected_salary: string;
+  notice_period_days?: number;
+  location?: string;
+  education?: string;
+  skills?: string[];
+  source?: string;
+  resume_url?: string;
   scorecard_notes?: string;
+  ai_match?: CandidateAIMatch;
+  evaluation?: CandidateEvaluation;
+  timeline?: CandidateTimelineEvent[];
   applied_at: string;
   job?: JobOpening;
+}
+
+export interface InterviewSchedule {
+  id: string;
+  candidate_id: string;
+  candidate_name: string;
+  job_id: string;
+  job_title: string;
+  round_name: string;
+  interviewer_name: string;
+  scheduled_time: string;
+  duration_minutes: number;
+  meeting_link: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  notes?: string;
+}
+
+export interface OfferLetter {
+  id: string;
+  candidate_id: string;
+  candidate_name: string;
+  candidate_email: string;
+  job_id: string;
+  designation: string;
+  department: string;
+  annual_ctc: number;
+  joining_date: string;
+  probation_months: number;
+  status: 'draft' | 'sent' | 'accepted' | 'rejected';
+  created_at: string;
+}
+
+export interface ManpowerPlan {
+  id: string;
+  department: string;
+  approved_headcount: number;
+  current_headcount: number;
+  requested_positions: number;
+  annual_budget: number;
+  budget_spent: number;
+  status: 'approved' | 'pending' | 'review';
 }
 
 // ==========================================
