@@ -8,6 +8,7 @@ import {
   ScrollView,
   useWindowDimensions,
   Image,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -204,6 +205,15 @@ export default function LoginScreen() {
                   style={{ marginTop: 12 }}
                 />
               </View>
+
+              <TouchableOpacity
+                onPress={() => router.push('/careers' as any)}
+                style={{ marginTop: 16, alignItems: 'center' }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>
+                  Looking for opportunities? Explore Careers →
+                </Text>
+              </TouchableOpacity>
 
               <Text style={styles.copyrightText}>
                 © 2026 {COMPANY_NAME}. All rights reserved.

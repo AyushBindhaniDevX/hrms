@@ -37,6 +37,7 @@ export default function RootLayout() {
                   <SessionManager>
                     <Stack screenOptions={{ headerShown: false }}>
                       <Stack.Screen name="index" />
+                      <Stack.Screen name="careers" />
                       <Stack.Screen name="(auth)" />
                       <Stack.Screen name="(employee)" />
                       <Stack.Screen name="(hr)" />

@@ -340,6 +340,23 @@ export type CandidateStage =
   | 'hired'
   | 'rejected';
 
+export interface PipelineStageConfig {
+  id: string;
+  name: string;
+  key: string;
+  color: string;
+  requires_scorecard: boolean;
+  sla_days: number;
+}
+
+export interface CustomPipeline {
+  id: string;
+  name: string;
+  department: string;
+  is_default: boolean;
+  stages: PipelineStageConfig[];
+}
+
 export interface JobOpening {
   id: string;
   organization_id: string;
@@ -358,6 +375,8 @@ export interface JobOpening {
   skills?: string[];
   status: JobStatus;
   applicants_count: number;
+  published_portals?: ('careers_page' | 'linkedin' | 'indeed' | 'naukri')[];
+  pipeline_id?: string;
   created_at: string;
 }
 

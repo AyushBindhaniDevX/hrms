@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   Image,
 } from 'react-native';
+import { router } from 'expo-router';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { LoadingState } from '@/components/ui/States';
@@ -27,6 +28,8 @@ import {
   generateOffer,
   getManpowerPlans,
   convertCandidateToEmployee,
+  getCustomPipelines,
+  bulkAdvanceCandidates,
 } from '@/lib/services/recruitment';
 import {
   JobOpening,
@@ -35,7 +38,7 @@ import {
   InterviewSchedule,
   OfferLetter,
   ManpowerPlan,
-  CandidateEvaluation,
+  CustomPipeline,
 } from '@/types/database';
 import { formatCurrency } from '@/utils/format';
 import {
@@ -65,6 +68,11 @@ import {
   ShieldCheck,
   AlertCircle,
   Video,
+  Globe,
+  Sliders,
+  CheckSquare,
+  Square,
+  Share2,
 } from 'lucide-react-native';
 
 const STAGES: { key: CandidateStage; label: string; color: string }[] = [
@@ -81,14 +89,18 @@ export default function RecruitmentWorkspaceScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
-  const [activeTab, setActiveTab] = useState<'command' | 'kanban' | 'jobs' | 'interviews' | 'offers' | 'manpower'>('command');
+  const [activeTab, setActiveTab] = useState<'command' | 'kanban' | 'jobs' | 'interviews' | 'offers' | 'pipelines' | 'manpower'>('command');
   const [jobs, setJobs] = useState<JobOpening[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
   const [offers, setOffers] = useState<OfferLetter[]>([]);
+  const [pipelines, setPipelines] = useState<CustomPipeline[]>([]);
   const [manpower, setManpower] = useState<ManpowerPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Bulk Selection
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
 
   // Filters & Selected Candidate 360
   const [selectedJobFilter, setSelectedJobFilter] = useState<string | null>(null);
@@ -130,17 +142,19 @@ export default function RecruitmentWorkspaceScreen() {
 
   const loadAllData = async () => {
     try {
-      const [j, c, i, o, m] = await Promise.all([
+      const [j, c, i, o, p, m] = await Promise.all([
         getJobs(),
         getCandidates(),
         getInterviews(),
         getOffers(),
+        getCustomPipelines(),
         getManpowerPlans(),
       ]);
       setJobs(j);
       setCandidates(c);
       setInterviews(i);
       setOffers(o);
+      setPipelines(p);
       setManpower(m);
     } catch (e) {
       console.error('Error loading recruitment workspace:', e);
@@ -164,6 +178,19 @@ export default function RecruitmentWorkspaceScreen() {
     }
   };
 
+  const toggleSelectCandidate = (candId: string) => {
+    setSelectedCandidateIds((prev) =>
+      prev.includes(candId) ? prev.filter((id) => id !== candId) : [...prev, candId]
+    );
+  };
+
+  const handleBulkAdvance = async (stage: CandidateStage) => {
+    if (selectedCandidateIds.length === 0) return;
+    await bulkAdvanceCandidates(selectedCandidateIds, stage);
+    setSelectedCandidateIds([]);
+    loadAllData();
+  };
+
   const handlePostJob = async () => {
     if (!newJobTitle.trim()) return;
     await createJob({
@@ -178,6 +205,7 @@ export default function RecruitmentWorkspaceScreen() {
       positions_count: 2,
       description: newJobDesc || 'Drive core architectural and functional deliverables.',
       requirements: ['TypeScript', 'Cloud Systems', 'Strong Communication'],
+      published_portals: ['careers_page', 'linkedin', 'indeed'],
       status: 'published',
     });
     setNewJobTitle('');
@@ -232,7 +260,7 @@ export default function RecruitmentWorkspaceScreen() {
       communication_score: evalComm,
       culture_fit_score: evalCulture,
       recommendation: evalRec,
-      interviewer_notes: evalNotes || 'Candidate performed exceptionally well.',
+      interviewer_notes: evalNotes || 'Candidate demonstrated exceptional technical prowess.',
       evaluator_name: 'Ayush B. (Principal Architect)',
       evaluated_at: new Date().toISOString().split('T')[0],
     });
@@ -243,7 +271,7 @@ export default function RecruitmentWorkspaceScreen() {
   const handleConvertToEmployee = async (candidateId: string) => {
     const res = await convertCandidateToEmployee(candidateId);
     if (res.success) {
-      alert('🎉 Handoff Complete! Candidate has been converted into an active employee record in the Oasis HCM directory.');
+      alert('🎉 Handoff Complete! Candidate converted into an active employee record in the Oasis HCM directory.');
       setSelectedCandidate360(null);
       loadAllData();
     }
@@ -267,18 +295,26 @@ export default function RecruitmentWorkspaceScreen() {
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={[styles.title, { color: colors.text }]}>Recruitment & ATS</Text>
+              <Text style={[styles.title, { color: colors.text }]}>Recruitment & ATS Workspace</Text>
               <View style={styles.proBadge}>
                 <Sparkles size={11} color="#0D7377" />
-                <Text style={styles.proBadgeText}>COMMAND CENTRE</Text>
+                <Text style={styles.proBadgeText}>ADMIN CONTROL</Text>
               </View>
             </View>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Subedge Talent Sourcing, Candidate 360°, AI Matching & Offer Generation
+              Subedge Talent Sourcing, Custom Pipelines, Multi-Portal Publishing & Candidate 360°
             </Text>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <TouchableOpacity
+              onPress={() => router.push('/careers' as any)}
+              style={styles.careerPageBtn}
+            >
+              <Globe size={14} color="#0D7377" />
+              <Text style={styles.careerPageBtnText}>Public Career Portal ↗</Text>
+            </TouchableOpacity>
+
             <Button
               title="📅 Schedule Interview"
               onPress={() => {
@@ -304,6 +340,7 @@ export default function RecruitmentWorkspaceScreen() {
               { key: 'command', label: 'Command Centre' },
               { key: 'kanban', label: `Kanban ATS (${candidates.length})` },
               { key: 'jobs', label: `Requisitions (${jobs.length})` },
+              { key: 'pipelines', label: `Custom Pipelines (${pipelines.length})` },
               { key: 'interviews', label: `Interviews (${interviews.length})` },
               { key: 'offers', label: `Offers & Joining (${offers.length})` },
               { key: 'manpower', label: 'Manpower Planning' },
@@ -341,27 +378,27 @@ export default function RecruitmentWorkspaceScreen() {
                 <View style={styles.kpiCard}>
                   <Text style={styles.kpiLabel}>Open Positions</Text>
                   <Text style={styles.kpiVal}>{jobs.length}</Text>
-                  <Text style={styles.kpiSub}>Across 3 Departments</Text>
+                  <Text style={styles.kpiSub}>Published on Career Portal</Text>
                 </View>
                 <View style={styles.kpiCard}>
                   <Text style={styles.kpiLabel}>Active Candidates</Text>
                   <Text style={[styles.kpiVal, { color: '#0D7377' }]}>{candidates.length}</Text>
-                  <Text style={styles.kpiSub}>In Pipeline</Text>
+                  <Text style={styles.kpiSub}>Across all tracks</Text>
                 </View>
                 <View style={styles.kpiCard}>
                   <Text style={styles.kpiLabel}>Interviews Today</Text>
                   <Text style={[styles.kpiVal, { color: '#6366F1' }]}>{interviews.length}</Text>
-                  <Text style={styles.kpiSub}>Google Meet / Zoom</Text>
+                  <Text style={styles.kpiSub}>Google Meet links active</Text>
                 </View>
                 <View style={styles.kpiCard}>
                   <Text style={styles.kpiLabel}>Offers Pending</Text>
                   <Text style={[styles.kpiVal, { color: '#D97706' }]}>{offers.length}</Text>
-                  <Text style={styles.kpiSub}>Awaiting Acceptance</Text>
+                  <Text style={styles.kpiSub}>Dispatched via Resend</Text>
                 </View>
                 <View style={styles.kpiCard}>
                   <Text style={styles.kpiLabel}>Joining Soon</Text>
                   <Text style={[styles.kpiVal, { color: '#10B981' }]}>1</Text>
-                  <Text style={styles.kpiSub}>Pre-joining cleared</Text>
+                  <Text style={styles.kpiSub}>BGV Cleared</Text>
                 </View>
               </View>
 
@@ -369,7 +406,7 @@ export default function RecruitmentWorkspaceScreen() {
               <View style={styles.sectionCard}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                   <Text style={styles.cardHeaderTitle}>End-to-End Hiring Conversion Funnel</Text>
-                  <Text style={{ fontSize: 12, color: '#64748B' }}>Real-time Recruitment Velocity</Text>
+                  <Text style={{ fontSize: 12, color: '#64748B' }}>Recruitment SLA Velocity</Text>
                 </View>
 
                 <View style={{ gap: 10 }}>
@@ -393,43 +430,6 @@ export default function RecruitmentWorkspaceScreen() {
                   ))}
                 </View>
               </View>
-
-              {/* Urgent Action Center */}
-              <View style={styles.sectionCard}>
-                <Text style={styles.cardHeaderTitle}>Urgent Action Center</Text>
-                <View style={{ gap: 10, marginTop: 12 }}>
-                  <View style={styles.alertCard}>
-                    <AlertCircle size={18} color="#D97706" />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.alertTitle}>2 Interview Scorecards Pending Submission</Text>
-                      <Text style={styles.alertSub}>Ayush B. has 1 pending review for Priya Sundaram.</Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        const c = candidates.find((cand) => cand.id === 'cand_1');
-                        if (c) setSelectedCandidate360(c);
-                      }}
-                      style={styles.alertBtn}
-                    >
-                      <Text style={styles.alertBtnText}>Review Scorecard</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.alertCard}>
-                    <ShieldCheck size={18} color="#10B981" />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.alertTitle}>Pre-joining BGV Clearance Completed</Text>
-                      <Text style={styles.alertSub}>Ananya Verma has accepted offer for Lead Security Auditor.</Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => handleConvertToEmployee('cand_3')}
-                      style={[styles.alertBtn, { backgroundColor: '#10B981' }]}
-                    >
-                      <Text style={styles.alertBtnText}>1-Click Convert to Employee</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
             </View>
           )}
 
@@ -438,17 +438,32 @@ export default function RecruitmentWorkspaceScreen() {
           {/* ======================================================== */}
           {activeTab === 'kanban' && (
             <View style={{ gap: 16 }}>
-              {/* Job Selector Pills & Search */}
+              {/* Search Bar & Bulk Actions */}
               <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center', marginBottom: 6 }}>
                 <View style={styles.searchBar}>
                   <Search size={16} color="#64748B" />
                   <TextInput
                     style={styles.searchInput}
-                    placeholder="Search candidate by name, skill, or company..."
+                    placeholder="Search candidates by name, skills, or experience..."
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                   />
                 </View>
+
+                {selectedCandidateIds.length > 0 && (
+                  <View style={styles.bulkBar}>
+                    <Text style={styles.bulkText}>{selectedCandidateIds.length} Selected</Text>
+                    <TouchableOpacity onPress={() => handleBulkAdvance('screening')} style={styles.bulkBtn}>
+                      <Text style={styles.bulkBtnText}>→ Screening</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleBulkAdvance('assessment')} style={styles.bulkBtn}>
+                      <Text style={styles.bulkBtnText}>→ Assessment</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleBulkAdvance('interview')} style={styles.bulkBtn}>
+                      <Text style={styles.bulkBtnText}>→ Interview</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               {/* Horizontal Kanban Columns */}
@@ -468,58 +483,78 @@ export default function RecruitmentWorkspaceScreen() {
                       </View>
 
                       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-                        {stageCandidates.map((c) => (
-                          <TouchableOpacity
-                            key={c.id}
-                            onPress={() => setSelectedCandidate360(c)}
-                            style={styles.candCard}
-                            activeOpacity={0.85}
-                          >
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <Text style={styles.candName}>{c.full_name}</Text>
-                              {c.ai_match && (
-                                <View style={styles.aiPill}>
-                                  <Sparkles size={10} color="#0D7377" />
-                                  <Text style={styles.aiPillText}>{c.ai_match.overall}% Match</Text>
-                                </View>
-                              )}
-                            </View>
-
-                            <Text style={styles.candCompany}>{c.current_company}</Text>
-                            <Text style={styles.candMeta}>Exp: {c.experience_years}y · {c.expected_salary}</Text>
-
-                            {/* Skills Cloud */}
-                            {c.skills && (
-                              <View style={styles.skillsRow}>
-                                {c.skills.slice(0, 3).map((s, idx) => (
-                                  <View key={idx} style={styles.skillTag}>
-                                    <Text style={styles.skillTagText}>{s}</Text>
-                                  </View>
-                                ))}
-                              </View>
-                            )}
-
-                            {/* Card Footer Actions */}
-                            <View style={styles.candFooter}>
-                              <View style={styles.ratingBadge}>
-                                <Star size={11} color="#D97706" fill="#D97706" />
-                                <Text style={styles.ratingText}>{c.rating}.0</Text>
-                              </View>
-
-                              {stage.key !== 'hired' && (
+                        {stageCandidates.map((c) => {
+                          const isSelected = selectedCandidateIds.includes(c.id);
+                          return (
+                            <TouchableOpacity
+                              key={c.id}
+                              onPress={() => setSelectedCandidate360(c)}
+                              style={[styles.candCard, isSelected && { borderColor: '#0D7377', borderWidth: 2 }]}
+                              activeOpacity={0.85}
+                            >
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <TouchableOpacity
                                   onPress={(e) => {
                                     e.stopPropagation();
-                                    handleAdvanceCandidate(c.id, c.stage);
+                                    toggleSelectCandidate(c.id);
                                   }}
-                                  style={styles.advancePill}
+                                  style={{ padding: 2, marginRight: 6 }}
                                 >
-                                  <Text style={styles.advancePillText}>Next Stage →</Text>
+                                  {isSelected ? (
+                                    <CheckSquare size={16} color="#0D7377" />
+                                  ) : (
+                                    <Square size={16} color="#CBD5E1" />
+                                  )}
                                 </TouchableOpacity>
+
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.candName}>{c.full_name}</Text>
+                                  <Text style={styles.candCompany}>{c.current_company}</Text>
+                                </View>
+
+                                {c.ai_match && (
+                                  <View style={styles.aiPill}>
+                                    <Sparkles size={10} color="#0D7377" />
+                                    <Text style={styles.aiPillText}>{c.ai_match.overall}% Match</Text>
+                                  </View>
+                                )}
+                              </View>
+
+                              <Text style={styles.candMeta}>Exp: {c.experience_years}y · {c.expected_salary}</Text>
+
+                              {/* Skills Cloud */}
+                              {c.skills && (
+                                <View style={styles.skillsRow}>
+                                  {c.skills.slice(0, 3).map((s, idx) => (
+                                    <View key={idx} style={styles.skillTag}>
+                                      <Text style={styles.skillTagText}>{s}</Text>
+                                    </View>
+                                  ))}
+                                </View>
                               )}
-                            </View>
-                          </TouchableOpacity>
-                        ))}
+
+                              {/* Card Footer */}
+                              <View style={styles.candFooter}>
+                                <View style={styles.ratingBadge}>
+                                  <Star size={11} color="#D97706" fill="#D97706" />
+                                  <Text style={styles.ratingText}>{c.rating}.0</Text>
+                                </View>
+
+                                {stage.key !== 'hired' && (
+                                  <TouchableOpacity
+                                    onPress={(e) => {
+                                      e.stopPropagation();
+                                      handleAdvanceCandidate(c.id, c.stage);
+                                    }}
+                                    style={styles.advancePill}
+                                  >
+                                    <Text style={styles.advancePillText}>Next Stage →</Text>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
                       </ScrollView>
                     </View>
                   );
@@ -529,7 +564,56 @@ export default function RecruitmentWorkspaceScreen() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 3: JOB REQUISITIONS */}
+          {/* TAB 3: CUSTOM PIPELINE BUILDER */}
+          {/* ======================================================== */}
+          {activeTab === 'pipelines' && (
+            <View style={{ gap: 16 }}>
+              <View style={styles.sectionCard}>
+                <Text style={styles.cardHeaderTitle}>Department-Specific Hiring Pipelines</Text>
+                <Text style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
+                  Configure custom hiring stages, mandatory scorecards, and SLA day limits for each department track.
+                </Text>
+              </View>
+
+              <View style={{ gap: 16 }}>
+                {pipelines.map((pipe) => (
+                  <View key={pipe.id} style={styles.pipeCard}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Sliders size={20} color="#0D7377" />
+                        <Text style={styles.pipeTitle}>{pipe.name}</Text>
+                        {pipe.is_default && (
+                          <View style={styles.defaultBadge}>
+                            <Text style={styles.defaultBadgeText}>DEFAULT TRACK</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '700' }}>Dept: {pipe.department}</Text>
+                    </View>
+
+                    {/* Pipeline Stage Steps */}
+                    <View style={styles.stagesTrack}>
+                      {pipe.stages.map((st, idx) => (
+                        <View key={st.id} style={styles.stageStepBox}>
+                          <View style={[styles.stepDot, { backgroundColor: st.color }]} />
+                          <Text style={styles.stepName}>{st.name}</Text>
+                          <Text style={styles.stepSla}>SLA: {st.sla_days} Days</Text>
+                          {st.requires_scorecard && (
+                            <View style={styles.scorecardReqBadge}>
+                              <Text style={styles.scorecardReqText}>Scorecard Req.</Text>
+                            </View>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 4: JOB REQUISITIONS & MULTI-PORTAL PUBLISHING */}
           {/* ======================================================== */}
           {activeTab === 'jobs' && (
             <View style={{ gap: 16 }}>
@@ -566,6 +650,23 @@ export default function RecruitmentWorkspaceScreen() {
                     <Text style={styles.jobSalary}>Budget: {j.salary_range}</Text>
                     <Text style={styles.jobDesc} numberOfLines={2}>{j.description}</Text>
 
+                    {/* Published Portals */}
+                    <View style={styles.portalsRow}>
+                      <Text style={styles.portalsLabel}>Published To:</Text>
+                      <View style={styles.portalTag}>
+                        <Globe size={11} color="#0D7377" />
+                        <Text style={styles.portalTagText}>Career Portal</Text>
+                      </View>
+                      <View style={styles.portalTag}>
+                        <Share2 size={11} color="#0D7377" />
+                        <Text style={styles.portalTagText}>LinkedIn</Text>
+                      </View>
+                      <View style={styles.portalTag}>
+                        <CheckCircle2 size={11} color="#0D7377" />
+                        <Text style={styles.portalTagText}>Indeed</Text>
+                      </View>
+                    </View>
+
                     <View style={styles.jobFooter}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Users size={14} color="#64748B" />
@@ -589,7 +690,7 @@ export default function RecruitmentWorkspaceScreen() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 4: INTERVIEWS */}
+          {/* TAB 5: INTERVIEWS */}
           {/* ======================================================== */}
           {activeTab === 'interviews' && (
             <View style={{ gap: 14 }}>
@@ -629,7 +730,7 @@ export default function RecruitmentWorkspaceScreen() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 5: OFFERS & PRE-JOINING */}
+          {/* TAB 6: OFFERS & PRE-JOINING */}
           {/* ======================================================== */}
           {activeTab === 'offers' && (
             <View style={{ gap: 14 }}>
@@ -664,7 +765,7 @@ export default function RecruitmentWorkspaceScreen() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 6: MANPOWER PLANNING */}
+          {/* TAB 7: MANPOWER PLANNING */}
           {/* ======================================================== */}
           {activeTab === 'manpower' && (
             <View style={{ gap: 16 }}>
@@ -697,14 +798,11 @@ export default function RecruitmentWorkspaceScreen() {
           )}
         </ScrollView>
 
-        {/* ======================================================== */}
-        {/* MODAL 1: CANDIDATE 360° PROFILE DRAWER */}
-        {/* ======================================================== */}
+        {/* Candidate 360 Modal */}
         {selectedCandidate360 && (
           <Modal visible={!!selectedCandidate360} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
               <View style={styles.candidate360Modal}>
-                {/* Header */}
                 <View style={styles.c360Header}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                     <View style={styles.c360Avatar}>
@@ -718,7 +816,7 @@ export default function RecruitmentWorkspaceScreen() {
                         </View>
                       </View>
                       <Text style={styles.c360Sub}>
-                        {selectedCandidate360.current_company} · {selectedCandidate360.experience_years} Years Experience
+                        {selectedCandidate360.current_company} · {selectedCandidate360.experience_years} Years Exp · Source: {selectedCandidate360.source || 'Direct'}
                       </Text>
                     </View>
                   </View>
@@ -729,7 +827,6 @@ export default function RecruitmentWorkspaceScreen() {
                 </View>
 
                 <ScrollView style={{ padding: 24 }}>
-                  {/* AI Match Score Widget */}
                   {selectedCandidate360.ai_match && (
                     <View style={styles.aiCard}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -740,7 +837,6 @@ export default function RecruitmentWorkspaceScreen() {
                         <Text style={styles.aiBigScore}>{selectedCandidate360.ai_match.overall}% Match</Text>
                       </View>
 
-                      {/* Criteria Grid */}
                       <View style={styles.aiCriteriaGrid}>
                         <View style={styles.aiCritBox}>
                           <Text style={styles.aiCritLabel}>Skills</Text>
@@ -763,14 +859,6 @@ export default function RecruitmentWorkspaceScreen() {
                           <Text style={styles.aiCritVal}>{selectedCandidate360.ai_match.salary}%</Text>
                         </View>
                       </View>
-
-                      {/* Strengths */}
-                      <View style={{ marginTop: 12 }}>
-                        <Text style={styles.aiSectionSub}>Top Strengths:</Text>
-                        {selectedCandidate360.ai_match.strengths.map((st, i) => (
-                          <Text key={i} style={styles.strengthText}>✓ {st}</Text>
-                        ))}
-                      </View>
                     </View>
                   )}
 
@@ -780,21 +868,6 @@ export default function RecruitmentWorkspaceScreen() {
                     {selectedCandidate360.skills?.map((sk, i) => (
                       <View key={i} style={styles.bigSkillTag}>
                         <Text style={styles.bigSkillText}>{sk}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* Recruitment Timeline */}
-                  <Text style={[styles.detailsHeading, { marginTop: 24 }]}>Recruitment Timeline & Activity</Text>
-                  <View style={styles.timelineList}>
-                    {selectedCandidate360.timeline?.map((t) => (
-                      <View key={t.id} style={styles.timelineItem}>
-                        <View style={styles.timelineDot} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.timelineTitle}>{t.title}</Text>
-                          <Text style={styles.timelineDesc}>{t.description}</Text>
-                          <Text style={styles.timelineMeta}>{t.actor_name} · {t.created_at}</Text>
-                        </View>
                       </View>
                     ))}
                   </View>
@@ -827,9 +900,7 @@ export default function RecruitmentWorkspaceScreen() {
           </Modal>
         )}
 
-        {/* ======================================================== */}
-        {/* MODAL 2: INTERVIEW SCORECARD FORM */}
-        {/* ======================================================== */}
+        {/* Scorecard Modal */}
         <Modal visible={showScorecardModal} animationType="slide" transparent>
           <View style={styles.modalOverlay}>
             <View style={styles.scorecardModal}>
@@ -850,20 +921,11 @@ export default function RecruitmentWorkspaceScreen() {
                   ))}
                 </View>
 
-                <Text style={styles.label}>Problem Solving & System Architecture (1-5)</Text>
+                <Text style={styles.label}>Problem Solving (1-5)</Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   {[1, 2, 3, 4, 5].map((n) => (
                     <TouchableOpacity key={n} onPress={() => setEvalProblem(n)} style={[styles.ratingBtn, evalProblem === n && styles.ratingBtnActive]}>
                       <Text style={[styles.ratingBtnText, evalProblem === n && { color: '#FFF' }]}>{n}★</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={styles.label}>Communication & Articulation (1-5)</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <TouchableOpacity key={n} onPress={() => setEvalComm(n)} style={[styles.ratingBtn, evalComm === n && styles.ratingBtnActive]}>
-                      <Text style={[styles.ratingBtnText, evalComm === n && { color: '#FFF' }]}>{n}★</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -877,14 +939,8 @@ export default function RecruitmentWorkspaceScreen() {
                   ))}
                 </View>
 
-                <Text style={styles.label}>Detailed Notes & Justification *</Text>
-                <TextInput
-                  style={[styles.input, { height: 90 }]}
-                  multiline
-                  placeholder="Candidate demonstrated exceptional depth in..."
-                  value={evalNotes}
-                  onChangeText={setEvalNotes}
-                />
+                <Text style={styles.label}>Detailed Justification *</Text>
+                <TextInput style={[styles.input, { height: 80 }]} multiline value={evalNotes} onChangeText={setEvalNotes} />
 
                 <Button title="Submit Scorecard" onPress={handleSubmitScorecard} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
               </ScrollView>
@@ -892,9 +948,7 @@ export default function RecruitmentWorkspaceScreen() {
           </View>
         </Modal>
 
-        {/* ======================================================== */}
-        {/* MODAL 3: GENERATE DIGITAL OFFER LETTER */}
-        {/* ======================================================== */}
+        {/* Generate Offer Modal */}
         <Modal visible={showOfferModal} animationType="slide" transparent>
           <View style={styles.modalOverlay}>
             <View style={styles.scorecardModal}>
@@ -921,9 +975,7 @@ export default function RecruitmentWorkspaceScreen() {
           </View>
         </Modal>
 
-        {/* ======================================================== */}
-        {/* MODAL 4: SCHEDULE INTERVIEW */}
-        {/* ======================================================== */}
+        {/* Schedule Interview Modal */}
         <Modal visible={showInterviewModal} animationType="slide" transparent>
           <View style={styles.modalOverlay}>
             <View style={styles.scorecardModal}>
@@ -941,18 +993,16 @@ export default function RecruitmentWorkspaceScreen() {
                 <Text style={styles.label}>Interviewer Name *</Text>
                 <TextInput style={styles.input} value={intInterviewer} onChangeText={setIntInterviewer} />
 
-                <Text style={styles.label}>Date & Time (ISO format) *</Text>
+                <Text style={styles.label}>Date & Time (ISO) *</Text>
                 <TextInput style={styles.input} value={intTime} onChangeText={setIntTime} />
 
-                <Button title="Schedule & Send Calendar Invite" onPress={handleScheduleInterviewSubmit} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
+                <Button title="Schedule & Send Resend Invite" onPress={handleScheduleInterviewSubmit} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
               </ScrollView>
             </View>
           </View>
         </Modal>
 
-        {/* ======================================================== */}
-        {/* MODAL 5: POST NEW REQUISITION */}
-        {/* ======================================================== */}
+        {/* Post Job Modal */}
         <Modal visible={showJobModal} animationType="slide" transparent>
           <View style={styles.modalOverlay}>
             <View style={styles.scorecardModal}>
@@ -979,7 +1029,7 @@ export default function RecruitmentWorkspaceScreen() {
                 <Text style={styles.label}>Role Description</Text>
                 <TextInput style={[styles.input, { height: 80 }]} multiline value={newJobDesc} onChangeText={setNewJobDesc} />
 
-                <Button title="Publish Requisition" onPress={handlePostJob} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
+                <Button title="Publish to Career Portal & Job Boards" onPress={handlePostJob} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
               </ScrollView>
             </View>
           </View>
@@ -1001,70 +1051,28 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 13, marginTop: 2 },
-  proBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F0F7F7',
-    borderWidth: 1,
-    borderColor: '#CCECEC',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
+  proBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0F7F7', borderWidth: 1, borderColor: '#CCECEC', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   proBadgeText: { color: '#0D7377', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  careerPageBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0F7F7', borderWidth: 1, borderColor: '#CCECEC', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  careerPageBtnText: { color: '#0D7377', fontSize: 12, fontWeight: '700' },
   navTabsBar: { paddingHorizontal: 24, borderBottomWidth: 1 },
   tabItem: { paddingVertical: 14, paddingHorizontal: 12, marginRight: 8 },
   tabItemText: { fontSize: 13, color: '#64748B', fontWeight: '600' },
   kpiRow: { flexDirection: 'row', gap: 14 },
-  kpiCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
+  kpiCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
   kpiLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
   kpiVal: { fontSize: 26, fontWeight: '800', marginVertical: 4, color: '#1A1A2E' },
   kpiSub: { fontSize: 11, color: '#94A3B8' },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 22,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
+  sectionCard: { backgroundColor: '#FFFFFF', padding: 22, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
   cardHeaderTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
   funnelBarBg: { height: 10, backgroundColor: '#F1F5F9', borderRadius: 5, overflow: 'hidden' },
   funnelBarFill: { height: '100%', borderRadius: 5 },
-  alertCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  alertTitle: { fontSize: 13, fontWeight: '700', color: '#1A1A2E' },
-  alertSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  alertBtn: { backgroundColor: '#0D7377', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  alertBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 8,
-    flex: 1,
-  },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, gap: 8, flex: 1 },
   searchInput: { flex: 1, fontSize: 13, color: '#1A1A2E' },
+  bulkBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F0F7F7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  bulkText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
+  bulkBtn: { backgroundColor: '#0D7377', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  bulkBtnText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
   kanbanTrack: { flexDirection: 'row', gap: 14, paddingBottom: 24 },
   kanbanCol: { width: 280, backgroundColor: '#F1F5F9', borderRadius: 14, padding: 14, maxHeight: 680 },
   colHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -1072,18 +1080,11 @@ const styles = StyleSheet.create({
   colTitle: { fontSize: 13, fontWeight: '800', color: '#1A1A2E' },
   badgeCount: { backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   badgeCountText: { fontSize: 11, fontWeight: '700', color: '#64748B' },
-  candCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 10,
-  },
+  candCard: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 10 },
   candName: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
   aiPill: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#F0F7F7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   aiPillText: { fontSize: 10, fontWeight: '800', color: '#0D7377' },
-  candCompany: { fontSize: 12, color: '#0D7377', fontWeight: '600', marginTop: 3 },
+  candCompany: { fontSize: 12, color: '#0D7377', fontWeight: '600', marginTop: 1 },
   candMeta: { fontSize: 11, color: '#64748B', marginTop: 2 },
   skillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
   skillTag: { backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
@@ -1093,6 +1094,17 @@ const styles = StyleSheet.create({
   ratingText: { fontSize: 11, fontWeight: '700', color: '#D97706' },
   advancePill: { backgroundColor: '#F0F7F7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   advancePillText: { fontSize: 10, fontWeight: '700', color: '#0D7377' },
+  pipeCard: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
+  pipeTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
+  defaultBadge: { backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  defaultBadgeText: { fontSize: 10, fontWeight: '800', color: '#059669' },
+  stagesTrack: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
+  stageStepBox: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', minWidth: 150 },
+  stepDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 6 },
+  stepName: { fontSize: 13, fontWeight: '700', color: '#1A1A2E' },
+  stepSla: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  scorecardReqBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 6, alignSelf: 'flex-start' },
+  scorecardReqText: { fontSize: 9, fontWeight: '800', color: '#D97706' },
   jobsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   jobCard: { width: '48%', minWidth: 320, backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
   jobIconCircle: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
@@ -1102,6 +1114,10 @@ const styles = StyleSheet.create({
   jobDept: { fontSize: 12, color: '#64748B', marginTop: 2 },
   jobSalary: { fontSize: 13, fontWeight: '700', color: '#0D7377', marginTop: 4 },
   jobDesc: { fontSize: 12, color: '#475569', marginTop: 4, lineHeight: 18 },
+  portalsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  portalsLabel: { fontSize: 11, fontWeight: '700', color: '#64748B' },
+  portalTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0F7F7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  portalTagText: { fontSize: 10, fontWeight: '700', color: '#0D7377' },
   jobFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
   viewPipeBtn: { backgroundColor: '#F0F7F7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   viewPipeText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
@@ -1147,18 +1163,10 @@ const styles = StyleSheet.create({
   aiCritBox: { flex: 1, backgroundColor: '#FFFFFF', padding: 10, borderRadius: 8, alignItems: 'center' },
   aiCritLabel: { fontSize: 10, color: '#64748B', fontWeight: '600' },
   aiCritVal: { fontSize: 14, fontWeight: '800', color: '#1A1A2E', marginTop: 2 },
-  aiSectionSub: { fontSize: 11, fontWeight: '700', color: '#0D7377', marginBottom: 4 },
-  strengthText: { fontSize: 12, color: '#334155', marginTop: 2 },
   detailsHeading: { fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 },
   skillsTagCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   bigSkillTag: { backgroundColor: '#F1F5F9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   bigSkillText: { fontSize: 12, fontWeight: '600', color: '#1A1A2E' },
-  timelineList: { gap: 12, borderLeftWidth: 2, borderLeftColor: '#E2E8F0', paddingLeft: 16, marginLeft: 6 },
-  timelineItem: { position: 'relative', marginBottom: 12 },
-  timelineDot: { position: 'absolute', left: -22, top: 4, width: 10, height: 10, borderRadius: 5, backgroundColor: '#0D7377' },
-  timelineTitle: { fontSize: 13, fontWeight: '700', color: '#1A1A2E' },
-  timelineDesc: { fontSize: 12, color: '#475569', marginTop: 2 },
-  timelineMeta: { fontSize: 10, color: '#94A3B8', marginTop: 2 },
   c360Actions: { flexDirection: 'row', gap: 10, marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
   scorecardModal: { width: '100%', maxWidth: 500, backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },

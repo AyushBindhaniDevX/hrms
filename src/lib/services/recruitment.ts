@@ -11,6 +11,7 @@ import {
   InterviewSchedule,
   OfferLetter,
   ManpowerPlan,
+  CustomPipeline,
 } from '@/types/database';
 import { createEmployee } from './employee';
 import { sendResendEmail } from './resend';
@@ -472,6 +473,136 @@ export async function generateOffer(data: Omit<OfferLetter, 'id' | 'created_at'>
 
 export async function getManpowerPlans(): Promise<ManpowerPlan[]> {
   return [...MANPOWER_STORE];
+}
+
+// ----------------------------------------------------
+// CUSTOM PIPELINE CONFIGURATION
+// ----------------------------------------------------
+let CUSTOM_PIPELINES_STORE: CustomPipeline[] = [
+  {
+    id: 'pipe_it',
+    name: 'IT & Cloud Engineering Track',
+    department: 'Engineering',
+    is_default: true,
+    stages: [
+      { id: 's1', name: 'Applied', key: 'applied', color: '#64748B', requires_scorecard: false, sla_days: 2 },
+      { id: 's2', name: 'HR Recruiter Screening', key: 'screening', color: '#D97706', requires_scorecard: false, sla_days: 3 },
+      { id: 's3', name: 'Technical Coding Challenge', key: 'assessment', color: '#8B5CF6', requires_scorecard: true, sla_days: 4 },
+      { id: 's4', name: 'System Architecture Interview', key: 'interview', color: '#0D7377', requires_scorecard: true, sla_days: 5 },
+      { id: 's5', name: 'Final Offer Sent', key: 'offer', color: '#2563EB', requires_scorecard: false, sla_days: 3 },
+      { id: 's6', name: 'Hired & Onboarded', key: 'hired', color: '#10B981', requires_scorecard: false, sla_days: 1 },
+    ],
+  },
+  {
+    id: 'pipe_sec',
+    name: 'Cybersecurity & Compliance Track',
+    department: 'Security & Governance',
+    is_default: false,
+    stages: [
+      { id: 'sec1', name: 'Application Vetting', key: 'applied', color: '#64748B', requires_scorecard: false, sla_days: 2 },
+      { id: 'sec2', name: 'SOC 2 & Audit Screening', key: 'screening', color: '#D97706', requires_scorecard: true, sla_days: 3 },
+      { id: 'sec3', name: 'Vulnerability Assessment Test', key: 'assessment', color: '#8B5CF6', requires_scorecard: true, sla_days: 4 },
+      { id: 'sec4', name: 'CISO Panel Interview', key: 'interview', color: '#0D7377', requires_scorecard: true, sla_days: 5 },
+      { id: 'sec5', name: 'Offer Letter', key: 'offer', color: '#2563EB', requires_scorecard: false, sla_days: 3 },
+      { id: 'sec6', name: 'Hired & Cleared', key: 'hired', color: '#10B981', requires_scorecard: false, sla_days: 1 },
+    ],
+  },
+];
+
+export async function getCustomPipelines(): Promise<CustomPipeline[]> {
+  return [...CUSTOM_PIPELINES_STORE];
+}
+
+export async function createCustomPipeline(pipeline: Omit<CustomPipeline, 'id'>): Promise<CustomPipeline> {
+  const newPipe: CustomPipeline = {
+    ...pipeline,
+    id: `pipe_${Date.now()}`,
+  };
+  CUSTOM_PIPELINES_STORE.push(newPipe);
+  return newPipe;
+}
+
+/**
+ * Public Career Portal Application Submission
+ */
+export async function submitJobApplication(
+  data: Omit<Candidate, 'id' | 'stage' | 'rating' | 'applied_at'>
+): Promise<Candidate> {
+  const newCandId = `cand_${Date.now()}`;
+  const newCand: Candidate = {
+    ...data,
+    id: newCandId,
+    stage: 'applied',
+    rating: 4.5,
+    applied_at: new Date().toISOString(),
+    source: 'Subedge Career Portal',
+    timeline: [
+      {
+        id: `t_${Date.now()}`,
+        type: 'applied',
+        title: 'Application Received via Career Portal',
+        description: `Direct application submitted for Job ID: ${data.job_id}`,
+        actor_name: 'Candidate Portal',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    ai_match: {
+      overall: 88,
+      skills: 90,
+      experience: 85,
+      education: 90,
+      location: 100,
+      salary: 85,
+      strengths: ['Direct application via Career Portal', 'Matches required tech stack'],
+      gaps: ['To be validated in initial HR screening'],
+    },
+  };
+
+  CANDIDATES_STORE.unshift(newCand);
+
+  // Increment applicants count on job
+  const job = JOBS_STORE.find((j) => j.id === data.job_id);
+  if (job) job.applicants_count += 1;
+
+  // Send Resend confirmation email
+  try {
+    const { sendResendEmail } = await import('./resend');
+    await sendResendEmail({
+      to: data.email,
+      subject: `Application Received: ${job?.title || 'Position'} — Subedge Technology`,
+      category: 'onboarding',
+      htmlContent: `
+        <h2>Thank you for applying, ${data.full_name}! 🎉</h2>
+        <p>We have successfully received your application for <strong>${job?.title || 'Open Role'}</strong> at Subedge Technology Pvt Ltd.</p>
+        <p>Our recruitment team is reviewing your profile and will get back to you regarding the next screening round.</p>
+      `,
+    });
+  } catch (mailErr) {
+    console.warn('Resend application email dispatch warning:', mailErr);
+  }
+
+  return newCand;
+}
+
+/**
+ * Bulk Candidate Actions
+ */
+export async function bulkAdvanceCandidates(candidateIds: string[], targetStage: CandidateStage): Promise<void> {
+  for (const id of candidateIds) {
+    const c = CANDIDATES_STORE.find((cand) => cand.id === id);
+    if (c) {
+      c.stage = targetStage;
+      if (!c.timeline) c.timeline = [];
+      c.timeline.unshift({
+        id: `t_${Date.now()}`,
+        type: 'stage_change',
+        title: `Bulk Stage Update: ${targetStage.toUpperCase()}`,
+        description: `Moved via Recruiter Bulk Action tool`,
+        actor_name: 'Recruiter Admin',
+        created_at: new Date().toISOString(),
+      });
+    }
+  }
 }
 
 /**
