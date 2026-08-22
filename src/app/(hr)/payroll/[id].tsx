@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import {
-  getPayrollEntries, createPayrollEntry, processPayrollPeriod, generatePayslip, distributePayroll
+  getPayrollEntries, createPayrollEntry, processPayrollPeriod, generatePayslip, distributePayroll, updatePayrollEntry
 } from '@/lib/services/payroll';
 import { getAllEmployees } from '@/lib/services/employee';
 import { db } from '@/lib/firebase';
@@ -45,6 +45,48 @@ export default function PayrollDetailScreen() {
   const [tax, setTax] = useState('0');
   const [lopDays, setLopDays] = useState('0');
   const [adding, setAdding] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Payroll | null>(null);
+
+  const openEdit = (entry: Payroll) => {
+    setEditingEntry(entry);
+    setBasicSalary(String(entry.basic_salary));
+    setHra(String(entry.allowances?.hra || 0));
+    setTa(String(entry.allowances?.ta || 0));
+    setPf(String(entry.deductions?.pf || 0));
+    setTax(String(entry.deductions?.tax || 0));
+    setLopDays(String(entry.lop_days || 0));
+  };
+
+  const handleUpdate = async () => {
+    if (!editingEntry) return;
+    setAdding(true);
+    try {
+      const basic = parseFloat(basicSalary) || 0;
+      const lopd = parseFloat(lopDays) || 0;
+      const lopa = Math.round((basic / 30) * lopd);
+      
+      const aHra = parseFloat(hra) || 0;
+      const aTa = parseFloat(ta) || 0;
+      const dPf = parseFloat(pf) || 0;
+      const dTax = parseFloat(tax) || 0;
+      
+      const gross = basic + aHra + aTa - lopa;
+      const net = gross - dPf - dTax;
+
+      await updatePayrollEntry(editingEntry.id, {
+        basic_salary: basic,
+        allowances: { hra: aHra, ta: aTa },
+        deductions: { pf: dPf, tax: dTax },
+        lop_days: lopd,
+        lop_amount: lopa,
+        gross_salary: gross,
+        net_salary: net,
+      });
+      setEditingEntry(null);
+      await load();
+    } catch {}
+    setAdding(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -161,9 +203,14 @@ export default function PayrollDetailScreen() {
                       Basic: {formatCurrency(entry.basic_salary)} · Gross: {formatCurrency(entry.gross_salary)}
                     </Text>
                   </View>
-                  <Text style={[{ color: colors.success, fontWeight: '700', fontSize: 16 }]}>
-                    {formatCurrency(entry.net_salary)}
-                  </Text>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    <Text style={[{ color: colors.success, fontWeight: '700', fontSize: 16 }]}>
+                      {formatCurrency(entry.net_salary)}
+                    </Text>
+                    {period?.status === 'open' && (
+                      <Button title="Edit" onPress={() => openEdit(entry)} variant="ghost" size="sm" />
+                    )}
+                  </View>
                 </View>
               </Card>
             );
@@ -206,6 +253,19 @@ export default function PayrollDetailScreen() {
             <Input label="Tax Deduction" value={tax} onChangeText={setTax} keyboardType="numeric" />
             <Input label="LOP Days" value={lopDays} onChangeText={setLopDays} keyboardType="numeric" />
             <Button title="Add Entry" onPress={handleAddEntry} loading={adding} />
+          </ScrollView>
+        </Modal>
+
+        {/* Edit Entry Modal */}
+        <Modal visible={!!editingEntry} onClose={() => setEditingEntry(null)} title="Edit Payroll Entry">
+          <ScrollView style={{ maxHeight: 400 }}>
+            <Input label="Basic Salary" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" />
+            <Input label="HRA" value={hra} onChangeText={setHra} keyboardType="numeric" />
+            <Input label="Travel Allowance" value={ta} onChangeText={setTa} keyboardType="numeric" />
+            <Input label="PF Deduction" value={pf} onChangeText={setPf} keyboardType="numeric" />
+            <Input label="Tax Deduction" value={tax} onChangeText={setTax} keyboardType="numeric" />
+            <Input label="LOP Days (Loss of Pay)" value={lopDays} onChangeText={setLopDays} keyboardType="numeric" />
+            <Button title="Save Changes" onPress={handleUpdate} loading={adding} style={{ marginTop: 12 }} />
           </ScrollView>
         </Modal>
       </View>

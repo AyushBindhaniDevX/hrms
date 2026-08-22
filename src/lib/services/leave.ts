@@ -17,7 +17,10 @@ export async function getLeaveTypes(): Promise<LeaveType[]> {
   const snap = await getDocs(q);
 
   if (!snap.empty) {
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveType));
+    const types = snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveType));
+    // Deduplicate by name
+    const unique = Array.from(new Map(types.map(item => [item.name, item])).values());
+    return unique;
   }
 
   // Auto-seed default leave types for new organisations

@@ -77,16 +77,33 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
   // Auto-generate payroll entries for all active employees
   const empSnap = await getDocs(query(collection(db, 'employees'), where('employment_status', '==', 'active')));
   
+  // Fetch approved leaves to calculate LOP
+  const lvSnap = await getDocs(query(collection(db, 'leave_requests'), where('status', '==', 'approved')));
+  const unpaidLeavesByEmp: Record<string, number> = {};
+  
+  lvSnap.docs.forEach(lvDoc => {
+    const lv = lvDoc.data();
+    // Check if leave falls in this month and year (simple parsing)
+    const startDate = new Date(lv.start_date);
+    if (startDate.getMonth() + 1 === month && startDate.getFullYear() === year) {
+      if (!lv.is_paid) {
+        unpaidLeavesByEmp[lv.employee_id] = (unpaidLeavesByEmp[lv.employee_id] || 0) + (lv.total_days || 0);
+      }
+    }
+  });
+  
   empSnap.docs.forEach(empDoc => {
     const empData = empDoc.data();
     const basicSalary = empData.basic_salary || 0;
     
-    // Default assumption: 0 LOP for this automation pass
-    const lopDays = 0;
-    const lopAmount = 0;
+    // Auto-calculate LOP based on unpaid leaves
+    const lopDays = unpaidLeavesByEmp[empDoc.id] || 0;
+    const lopAmount = Math.round((basicSalary / 30) * lopDays);
     const allowances = {};
     const deductions = {};
-    const grossSalary = basicSalary;
+    
+    // basic - lop
+    const grossSalary = basicSalary - lopAmount;
     const netSalary = grossSalary;
 
     const newPayrollRef = doc(collection(db, 'payroll'));
@@ -138,6 +155,14 @@ export async function getPayrollEntries(periodId: string): Promise<Payroll[]> {
   }
   
   return entries as Payroll[];
+}
+
+export async function updatePayrollEntry(id: string, updates: Partial<Payroll>): Promise<void> {
+  const ref = doc(db, 'payroll', id);
+  await updateDoc(ref, {
+    ...updates,
+    updated_at: serverTimestamp()
+  });
 }
 
 export async function createPayrollEntry(entry: {
