@@ -14,6 +14,16 @@ import {
   CalendarClock,
   CalendarDays,
   Banknote,
+  Briefcase,
+  Receipt,
+  Laptop,
+  LifeBuoy,
+  GraduationCap,
+  FileText,
+  Clock,
+  BarChart3,
+  Gift,
+  Workflow,
 } from 'lucide-react-native';
 import type { UserRole } from '@/types';
 
@@ -26,26 +36,43 @@ export interface NavItem {
 export const HR_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
   { label: 'Employees', href: '/(hr)/employees', icon: Users },
+  { label: 'Recruitment (ATS)', href: '/(hr)/recruitment', icon: Briefcase },
   { label: 'Departments', href: '/(hr)/departments', icon: Network },
   { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
   { label: 'Performance', href: '/(hr)/performance', icon: Award },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
-  { label: 'Locations', href: '/(hr)/locations', icon: MapPin },
+  { label: 'Expenses & Claims', href: '/(hr)/expenses', icon: Receipt },
+  { label: 'IT Assets', href: '/(hr)/assets', icon: Laptop },
+  { label: 'Helpdesk Tickets', href: '/(hr)/helpdesk', icon: LifeBuoy },
+  { label: 'Learning & L&D', href: '/(hr)/learning', icon: GraduationCap },
+  { label: 'Document Vault', href: '/(hr)/documents', icon: FileText },
+  { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock },
+  { label: 'Pulse Surveys', href: '/(hr)/surveys', icon: BarChart3 },
+  { label: 'Office Locations', href: '/(hr)/locations', icon: MapPin },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
   { label: 'Employees', href: '/(hr)/employees', icon: Users },
+  { label: 'Recruitment (ATS)', href: '/(hr)/recruitment', icon: Briefcase },
   { label: 'Departments', href: '/(hr)/departments', icon: Network },
   { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
   { label: 'Performance', href: '/(hr)/performance', icon: Award },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
+  { label: 'Expenses & Claims', href: '/(hr)/expenses', icon: Receipt },
+  { label: 'IT Assets', href: '/(hr)/assets', icon: Laptop },
+  { label: 'Helpdesk Tickets', href: '/(hr)/helpdesk', icon: LifeBuoy },
+  { label: 'Learning & L&D', href: '/(hr)/learning', icon: GraduationCap },
+  { label: 'Document Vault', href: '/(hr)/documents', icon: FileText },
+  { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock },
+  { label: 'Pulse Surveys', href: '/(hr)/surveys', icon: BarChart3 },
+  { label: 'Automations & Resend', href: '/(admin)/automations', icon: Workflow },
+  { label: 'Users & Roles', href: '/(admin)/users', icon: Key },
   { label: 'Locations', href: '/(hr)/locations', icon: MapPin },
-  { label: 'Users', href: '/(admin)/users', icon: Key },
-  { label: 'Settings', href: '/(admin)/settings', icon: Settings },
   { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield },
+  { label: 'Settings', href: '/(admin)/settings', icon: Settings },
 ];
 
 export const EMPLOYEE_NAV: NavItem[] = [
@@ -53,7 +80,11 @@ export const EMPLOYEE_NAV: NavItem[] = [
   { label: 'Attendance', href: '/(employee)/attendance', icon: CalendarClock },
   { label: 'Leave', href: '/(employee)/leave', icon: CalendarDays },
   { label: 'Performance', href: '/(employee)/performance', icon: Award },
-  { label: 'Salary', href: '/(employee)/payslips', icon: Banknote },
+  { label: 'Salary & Payslips', href: '/(employee)/payslips', icon: Banknote },
+  { label: 'My Expenses', href: '/(employee)/expenses', icon: Receipt },
+  { label: 'Helpdesk Tickets', href: '/(employee)/helpdesk', icon: LifeBuoy },
+  { label: 'Learning Academy', href: '/(employee)/learning', icon: GraduationCap },
+  { label: 'Rewards Store', href: '/(employee)/rewards', icon: Gift },
   { label: 'Directory', href: '/(employee)/directory', icon: Users },
 ];
 

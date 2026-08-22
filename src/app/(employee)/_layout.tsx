@@ -56,11 +56,11 @@ export default function EmployeeLayout() {
   }
 
   return (
-    <SidebarLayout items={NAV_ITEMS}>
+    <SidebarLayout>
       <Stack screenOptions={{ 
         headerShown: false,
         animation: Platform.OS === 'web' ? 'none' : 'default',
-        contentStyle: { backgroundColor: '#f8f9ff' }
+        contentStyle: { backgroundColor: '#F8FAFC' }
       }}>
         <Stack.Screen name="dashboard" />
         <Stack.Screen name="attendance/index" />
@@ -71,6 +71,10 @@ export default function EmployeeLayout() {
         <Stack.Screen name="performance/index" />
         <Stack.Screen name="payslips/index" />
         <Stack.Screen name="payslips/[id]" />
+        <Stack.Screen name="expenses/index" />
+        <Stack.Screen name="helpdesk/index" />
+        <Stack.Screen name="learning/index" />
+        <Stack.Screen name="rewards/index" />
         <Stack.Screen name="directory/index" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="settings" />
