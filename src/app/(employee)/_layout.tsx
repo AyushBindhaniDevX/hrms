@@ -43,14 +43,20 @@ export default function EmployeeLayout() {
 
   const needsOnboarding = employee && !employee.onboarding_completed;
 
-  return (
-    <SidebarLayout items={NAV_ITEMS}>
-      {needsOnboarding && (
+  if (needsOnboarding) {
+    return (
+      <View style={{ flex: 1 }}>
         <OnboardingWizard 
           employeeId={employee.id} 
+          profileId={profile.id}
           onComplete={() => setEmployee({ ...employee, onboarding_completed: true })} 
         />
-      )}
+      </View>
+    );
+  }
+
+  return (
+    <SidebarLayout items={NAV_ITEMS}>
       <Stack screenOptions={{ 
         headerShown: false,
         animation: Platform.OS === 'web' ? 'none' : 'default',

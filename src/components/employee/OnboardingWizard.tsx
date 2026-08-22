@@ -4,18 +4,17 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useTheme } from '@/hooks/use-theme';
 import { completeOnboarding } from '@/lib/services/employee';
+import { Avatar } from '@/components/ui/Avatar';
 
-export function OnboardingWizard({ employeeId, onComplete }: { employeeId: string, onComplete: () => void }) {
+export function OnboardingWizard({ employeeId, profileId, onComplete }: { employeeId: string, profileId: string, onComplete: () => void }) {
   const colors = useTheme();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Employment Details
-  const [designation, setDesignation] = useState('');
-  const [salary, setSalary] = useState('');
 
   // Personal
   const [homeAddress, setHomeAddress] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   // Bank
   const [bankName, setBankName] = useState('');
@@ -28,7 +27,7 @@ export function OnboardingWizard({ employeeId, onComplete }: { employeeId: strin
   const [emergencyRelation, setEmergencyRelation] = useState('');
 
   const handleSubmit = async () => {
-    if (!designation || !bankName || !accountNumber || !emergencyName || !emergencyPhone) {
+    if (!bankName || !accountNumber || !emergencyName || !emergencyPhone) {
       setError('Please fill out all required fields.');
       return;
     }
@@ -37,9 +36,7 @@ export function OnboardingWizard({ employeeId, onComplete }: { employeeId: strin
     setError('');
     
     try {
-      await completeOnboarding(employeeId, {
-        designation,
-        basic_salary: parseFloat(salary) || 0,
+      await completeOnboarding(employeeId, profileId, {
         home_address: homeAddress,
         bank_details: {
           bank_name: bankName,
@@ -51,7 +48,7 @@ export function OnboardingWizard({ employeeId, onComplete }: { employeeId: strin
           phone: emergencyPhone,
           relationship: emergencyRelation,
         },
-      });
+      }, avatarUrl);
       onComplete();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred during onboarding.');
@@ -82,25 +79,31 @@ export function OnboardingWizard({ employeeId, onComplete }: { employeeId: strin
             ) : null}
 
             <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.primary }]}>1. Employment Details</Text>
-              <Input label="Job Title / Designation *" value={designation} onChangeText={setDesignation} />
-              <Input label="Expected Basic Salary (Optional)" value={salary} onChangeText={setSalary} keyboardType="numeric" />
-            </View>
+              <Text style={[styles.sectionTitle, { color: colors.primary }]}>1. Personal Information</Text>
+              
+              <View style={{ alignItems: 'center', marginVertical: 16 }}>
+                <Avatar url={avatarUrl} name="User" size={80} />
+                <Button 
+                  title="Generate Random Avatar" 
+                  variant="outline" 
+                  size="sm" 
+                  style={{ marginTop: 12 }} 
+                  onPress={() => setAvatarUrl(`https://i.pravatar.cc/150?u=${profileId}`)} 
+                />
+              </View>
 
-            <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.primary }]}>2. Personal Information</Text>
               <Input label="Home Address" value={homeAddress} onChangeText={setHomeAddress} />
             </View>
 
             <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.primary }]}>3. Bank Details (For Payroll)</Text>
+              <Text style={[styles.sectionTitle, { color: colors.primary }]}>2. Bank Details (For Payroll)</Text>
               <Input label="Bank Name *" value={bankName} onChangeText={setBankName} />
               <Input label="Account Number *" value={accountNumber} onChangeText={setAccountNumber} />
               <Input label="Routing / IFSC Code *" value={routingNumber} onChangeText={setRoutingNumber} />
             </View>
 
             <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.primary }]}>4. Emergency Contact</Text>
+              <Text style={[styles.sectionTitle, { color: colors.primary }]}>3. Emergency Contact</Text>
               <Input label="Contact Name *" value={emergencyName} onChangeText={setEmergencyName} />
               <Input label="Contact Phone *" value={emergencyPhone} onChangeText={setEmergencyPhone} keyboardType="phone-pad" />
               <Input label="Relationship" value={emergencyRelation} onChangeText={setEmergencyRelation} />

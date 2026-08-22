@@ -145,6 +145,8 @@ export async function createEmployee(params: {
   employee_code: string;
   department_id?: string;
   manager_id?: string;
+  designation?: string;
+  basic_salary?: number;
 }): Promise<void> {
   const { initializeApp, deleteApp } = await import('firebase/app');
   const { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } = await import('firebase/auth');
@@ -183,6 +185,8 @@ export async function createEmployee(params: {
       department_id: params.department_id || null,
       manager_id: params.manager_id || null,
       employment_status: 'active',
+      designation: params.designation || null,
+      basic_salary: params.basic_salary || 0,
       onboarding_completed: false,
       created_at: serverTimestamp(),
       updated_at: serverTimestamp(),
@@ -217,20 +221,32 @@ export async function getDepartments(): Promise<Department[]> {
 
 export async function completeOnboarding(
   employeeId: string, 
+  profileId: string,
   data: { 
-    designation: string;
-    basic_salary: number;
     home_address: string;
     bank_details: { bank_name: string; account_number: string; routing_number: string };
     emergency_contact: { name: string; phone: string; relationship: string };
-  }
+  },
+  avatarUrl?: string
 ) {
-  const docRef = doc(db, 'employees', employeeId);
-  await updateDoc(docRef, {
+  const batch = writeBatch(db);
+  
+  const empRef = doc(db, 'employees', employeeId);
+  batch.update(empRef, {
     ...data,
     onboarding_completed: true,
     updated_at: serverTimestamp()
   });
+
+  if (avatarUrl) {
+    const profRef = doc(db, 'profiles', profileId);
+    batch.update(profRef, {
+      avatar_url: avatarUrl,
+      updated_at: serverTimestamp()
+    });
+  }
+
+  await batch.commit();
 }
 
 export async function getDepartmentsWithStats(): Promise<Department[]> {

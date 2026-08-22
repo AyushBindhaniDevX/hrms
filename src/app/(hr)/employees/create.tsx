@@ -31,6 +31,8 @@ export default function CreateEmployeeScreen() {
   const [deptId, setDeptId] = useState<string | null>(null);
   const [managerId, setManagerId] = useState<string | null>(null);
   const [role, setRole] = useState<string>('employee');
+  const [designation, setDesignation] = useState('');
+  const [basicSalary, setBasicSalary] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -58,6 +60,8 @@ export default function CreateEmployeeScreen() {
         department_id: deptId || undefined,
         manager_id: managerId || undefined,
         role: role,
+        designation: designation || undefined,
+        basic_salary: parseFloat(basicSalary) || 0,
       });
       if (router.canGoBack()) { router.back(); } else { router.replace('/'); }
     } catch (err: unknown) {
@@ -88,6 +92,8 @@ export default function CreateEmployeeScreen() {
           <Input label="Password *" value={password} onChangeText={setPassword} secureTextEntry />
           <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
           <Input label="Employee Code *" value={empCode} onChangeText={setEmpCode} />
+          <Input label="Designation (Job Title)" value={designation} onChangeText={setDesignation} />
+          <Input label="Base Salary" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" />
 
           <Select
             label="Department"
