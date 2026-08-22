@@ -7,7 +7,7 @@ import {
   Platform,
   ScrollView,
   useWindowDimensions,
-  TouchableOpacity,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,9 +27,10 @@ import {
   MapPin,
   Award,
   CreditCard,
-  Lock,
-  ArrowRight,
+  Zap,
 } from 'lucide-react-native';
+
+const SUBEDGE_LOGO = require('../../../assets/images/subedge-logo.png');
 
 export default function LoginScreen() {
   const colors = useTheme();
@@ -76,24 +77,32 @@ export default function LoginScreen() {
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Left Hero Section (Subedge Design Aesthetics) */}
+          {/* Left Hero Section */}
           <View style={[styles.heroSection, isDesktop && styles.heroDesktop]}>
             <View style={styles.heroBrandHeader}>
-              <SubedgeBrand size="lg" subtitle={COMPANY_NAME} />
+              <Image
+                source={SUBEDGE_LOGO}
+                style={styles.heroLogoImage}
+                resizeMode="contain"
+              />
+              <View style={styles.platformBadge}>
+                <Text style={styles.platformBadgeText}>OASIS PLATFORM</Text>
+              </View>
             </View>
 
             <View style={styles.heroTextContainer}>
               <View style={styles.heroPill}>
-                <Text style={styles.heroPillText}>ENTERPRISE HCM SUITE</Text>
+                <Zap size={13} color="#0D7377" />
+                <Text style={styles.heroPillText}>ENTERPRISE WORKFORCE INTELLIGENCE</Text>
               </View>
 
               <Text style={styles.heroTitle}>
-                From Healthcare to{'\n'}
-                <Text style={{ color: '#0D7377' }}>Digital Excellence</Text>
+                Next-Generation{'\n'}
+                <Text style={{ color: '#0D7377' }}>Workforce & HRMS</Text>
               </Text>
 
               <Text style={styles.heroSubtitle}>
-                {PRODUCT_NAME} — {TAGLINE}. Built for ambitious enterprise teams who value precision, compliance, and speed.
+                {PRODUCT_NAME} by {COMPANY_NAME}. An all-in-one Human Capital Management platform built for speed, compliance, and scale.
               </Text>
             </View>
 
@@ -105,7 +114,7 @@ export default function LoginScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.featureTitle}>Cybersecurity & Governance</Text>
-                  <Text style={styles.featureSub}>SOC 2 Ready & Strict Role Access</Text>
+                  <Text style={styles.featureSub}>SOC 2 Ready & Strict Role Access Controls</Text>
                 </View>
               </View>
 
@@ -115,7 +124,7 @@ export default function LoginScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.featureTitle}>Geofenced Smart Attendance</Text>
-                  <Text style={styles.featureSub}>Precise Radius & Device Verification</Text>
+                  <Text style={styles.featureSub}>Precise Radius & Hardware-Verified Clocking</Text>
                 </View>
               </View>
 
@@ -124,8 +133,8 @@ export default function LoginScreen() {
                   <Award size={20} color="#0D7377" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.featureTitle}>Performance & OKRs</Text>
-                  <Text style={styles.featureSub}>360 Appraisals & Continuous Recognition</Text>
+                  <Text style={styles.featureTitle}>Performance & OKR Reviews</Text>
+                  <Text style={styles.featureSub}>Continuous 360 Appraisals & Peer Kudos</Text>
                 </View>
               </View>
 
@@ -135,7 +144,7 @@ export default function LoginScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.featureTitle}>Automated Payroll Engine</Text>
-                  <Text style={styles.featureSub}>Tax, Allowances & Instant Payslips</Text>
+                  <Text style={styles.featureSub}>Taxes, Allowances & Instant Payslip Generation</Text>
                 </View>
               </View>
             </View>
@@ -219,14 +228,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    gap: 48,
+    padding: 36,
+    gap: 52,
   },
   mobileLayout: {
     flexDirection: 'column',
     justifyContent: 'center',
     padding: 20,
-    gap: 24,
+    gap: 28,
   },
 
   // Hero Section
@@ -239,17 +248,41 @@ const styles = StyleSheet.create({
     paddingRight: 24,
   },
   heroBrandHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     marginBottom: 24,
   },
+  heroLogoImage: {
+    width: 180,
+    height: 38,
+  },
+  platformBadge: {
+    backgroundColor: '#F0F7F7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CCECEC',
+  },
+  platformBadgeText: {
+    color: '#0D7377',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   heroPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     alignSelf: 'flex-start',
     backgroundColor: '#F0F7F7',
     borderWidth: 1,
     borderColor: '#CCECEC',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 20,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   heroPillText: {
     color: '#0D7377',
@@ -261,16 +294,16 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   heroTitle: {
-    fontSize: 36,
+    fontSize: 38,
     fontWeight: '800',
     color: '#1A1A2E',
     letterSpacing: -1,
-    lineHeight: 44,
-    marginBottom: 12,
+    lineHeight: 46,
+    marginBottom: 14,
   },
   heroSubtitle: {
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 23,
     color: '#64748B',
   },
 
