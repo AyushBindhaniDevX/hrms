@@ -37,6 +37,7 @@ import {
   CreditCard,
   Umbrella,
   Server,
+  Award,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -156,6 +157,14 @@ export default function AdminDashboard() {
       sub: 'Geofences & office radius',
       href: '/(hr)/locations',
       icon: MapPin,
+      color: colors.primary,
+      bg: colors.background,
+    },
+    {
+      label: 'Performance & OKRs',
+      sub: 'Goals & 360 Appraisals',
+      href: '/(hr)/performance',
+      icon: Award,
       color: colors.primary,
       bg: colors.background,
     },

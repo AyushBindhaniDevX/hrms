@@ -155,7 +155,7 @@ export default function HRDashboard() {
                     onPress={() => router.push(item.href as never)}
                     style={[styles.appBtn, { backgroundColor: colors.backgroundElement }]}
                   >
-                    <Icon size={24} color={colors.primary} />
+                    {Icon && <Icon size={24} color={colors.primary} />}
                     <Text style={[styles.appBtnText, { color: colors.text }]}>{item.label}</Text>
                   </TouchableOpacity>
                 );

@@ -236,3 +236,89 @@ export interface LeaveProcessResponse {
   error?: string;
   status?: LeaveRequestStatus;
 }
+
+// Performance & OKRs Management Types
+export type GoalCategory = 'company' | 'department' | 'individual';
+export type GoalPriority = 'low' | 'medium' | 'high';
+export type GoalStatus = 'not_started' | 'in_progress' | 'on_track' | 'at_risk' | 'completed';
+
+export interface KeyResult {
+  id: string;
+  title: string;
+  target_value: number;
+  current_value: number;
+  unit: string;
+  completed?: boolean;
+}
+
+export interface Goal {
+  id: string;
+  organization_id: string;
+  employee_id?: string | null;
+  department_id?: string | null;
+  title: string;
+  description: string | null;
+  category: GoalCategory;
+  priority: GoalPriority;
+  status: GoalStatus;
+  progress: number; // 0 - 100
+  start_date: string;
+  target_date: string;
+  key_results: KeyResult[];
+  created_at: string;
+  updated_at: string;
+  // Joined
+  employee?: Employee;
+  department?: Department;
+}
+
+export type AppraisalStatus = 'self_review' | 'manager_review' | 'completed';
+export type AppraisalRecommendation = 'promotion' | 'salary_increment' | 'maintain' | 'pip';
+
+export interface PerformanceRatingBreakdown {
+  technical_skills: number; // 1-5
+  productivity: number; // 1-5
+  communication: number; // 1-5
+  leadership: number; // 1-5
+  teamwork: number; // 1-5
+}
+
+export interface AppraisalReview {
+  id: string;
+  organization_id: string;
+  employee_id: string;
+  reviewer_id?: string | null;
+  cycle_name: string;
+  period: string; // e.g. "Q1 2026", "Annual 2026"
+  status: AppraisalStatus;
+  self_rating: number; // 1-5
+  self_comments?: string | null;
+  self_submitted_at?: string | null;
+  manager_rating?: number | null; // 1-5
+  manager_comments?: string | null;
+  manager_submitted_at?: string | null;
+  ratings_breakdown?: PerformanceRatingBreakdown | null;
+  overall_score?: number | null; // out of 100 or 5.0
+  recommendation?: AppraisalRecommendation | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  employee?: Employee;
+  reviewer?: Profile;
+}
+
+export type KudosBadge = 'star' | 'team_player' | 'innovator' | 'leadership' | 'rockstar' | 'problem_solver';
+
+export interface Kudos {
+  id: string;
+  organization_id: string;
+  sender_id: string;
+  receiver_id: string;
+  badge: KudosBadge;
+  message: string;
+  created_at: string;
+  // Joined
+  sender?: Profile;
+  receiver?: Profile;
+}
+

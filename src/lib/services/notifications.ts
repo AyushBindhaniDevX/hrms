@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy, updateDoc, doc, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, updateDoc, doc, setDoc, limit } from 'firebase/firestore';
 import type { Notification } from '@/types';
 
 export async function getUserNotifications(profileId: string): Promise<Notification[]> {
@@ -15,6 +15,30 @@ export async function getUserNotifications(profileId: string): Promise<Notificat
   } catch (error) {
     console.error('Error fetching notifications:', error);
     return [];
+  }
+}
+
+export async function createNotification(data: {
+  profile_id: string;
+  title: string;
+  message: string;
+  type: string;
+  action_url?: string | null;
+}): Promise<void> {
+  try {
+    const newRef = doc(collection(db, 'notifications'));
+    await setDoc(newRef, {
+      id: newRef.id,
+      profile_id: data.profile_id,
+      title: data.title,
+      message: data.message,
+      type: data.type,
+      is_read: false,
+      action_url: data.action_url || null,
+      created_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error creating notification:', error);
   }
 }
 

@@ -68,6 +68,7 @@ export default function EmployeeLayout() {
         <Stack.Screen name="leave/index" />
         <Stack.Screen name="leave/apply" />
         <Stack.Screen name="leave/[id]" />
+        <Stack.Screen name="performance/index" />
         <Stack.Screen name="payslips/index" />
         <Stack.Screen name="payslips/[id]" />
         <Stack.Screen name="directory/index" />
