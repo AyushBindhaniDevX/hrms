@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signInWithCredential } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import * as AuthSession from 'expo-auth-session';
 import { auth, db } from '@/lib/firebase';
 import type { Profile, UserRole } from '@/types';
@@ -133,6 +133,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (currentUser) {
         await fetchProfile(currentUser.uid);
+        
+        // Track IP and Session
+        try {
+          const res = await fetch('https://api.ipify.org?format=json');
+          const data = await res.json();
+          const ip = data.ip;
+          const sessionId = 'sess_' + Math.random().toString(36).substring(2, 15);
+          
+          await updateDoc(doc(db, 'profiles', currentUser.uid), {
+            last_login_ip: ip,
+            session_id: sessionId,
+            last_active: serverTimestamp(),
+          });
+        } catch (e) {
+          console.error('Failed to track session:', e);
+        }
       } else {
         setProfile(null);
       }

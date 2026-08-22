@@ -117,8 +117,18 @@ export default function SettingsScreen() {
               <View style={[styles.sessionCard, { backgroundColor: '#f4f6fa', borderColor: '#e2e8f0' }]}>
                 <Monitor size={20} color={colors.primary} style={{ marginTop: 2 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.sessionTitle, { color: colors.text }]}>Current Browser</Text>
-                  <Text style={[styles.sessionDesc, { color: colors.textSecondary }]}>{profile?.email} · Current Session</Text>
+                  <Text style={[styles.sessionTitle, { color: colors.text }]}>Current Device</Text>
+                  <Text style={[styles.sessionDesc, { color: colors.textSecondary }]}>{profile?.email}</Text>
+                  {profile?.last_login_ip && (
+                    <Text style={[styles.sessionDesc, { color: colors.textSecondary, fontSize: 12, marginTop: 2 }]}>
+                      IP: {profile.last_login_ip}
+                    </Text>
+                  )}
+                  {profile?.session_id && (
+                    <Text style={[styles.sessionDesc, { color: colors.textSecondary, fontSize: 11, marginTop: 2 }]}>
+                      ID: {profile.session_id}
+                    </Text>
+                  )}
                 </View>
                 <Badge label="Active" variant="successLight" />
               </View>

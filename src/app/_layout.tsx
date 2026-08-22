@@ -7,6 +7,7 @@ import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { SessionManager } from '@/components/auth/SessionManager';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,13 +34,15 @@ export default function RootLayout() {
             <BottomSheetModalProvider>
               <AuthProvider>
                 <AuthLayoutWrapper>
-                  <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="index" />
-                    <Stack.Screen name="(auth)" />
-                    <Stack.Screen name="(employee)" />
-                    <Stack.Screen name="(hr)" />
-                    <Stack.Screen name="(admin)" />
-                  </Stack>
+                  <SessionManager>
+                    <Stack screenOptions={{ headerShown: false }}>
+                      <Stack.Screen name="index" />
+                      <Stack.Screen name="(auth)" />
+                      <Stack.Screen name="(employee)" />
+                      <Stack.Screen name="(hr)" />
+                      <Stack.Screen name="(admin)" />
+                    </Stack>
+                  </SessionManager>
                 </AuthLayoutWrapper>
               </AuthProvider>
             </BottomSheetModalProvider>

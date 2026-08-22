@@ -23,6 +23,9 @@ export interface Profile {
   avatar_url: string | null;
   role: UserRole;
   is_active: boolean;
+  session_id?: string;
+  last_login_ip?: string;
+  last_active?: string;
   created_at: string;
   updated_at: string;
 }
