@@ -42,7 +42,7 @@ export async function createChatSession(profile: Profile, employeeContext?: any)
 
   const systemInstruction = buildSystemPrompt(profile, employeeContext);
   const model = genAI.getGenerativeModel({ 
-    model: 'gemini-1.5-flash-latest',
+    model: 'gemini-3.7-flash',
     systemInstruction 
   });
 
