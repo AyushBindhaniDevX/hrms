@@ -15,7 +15,7 @@ export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn } = useAuth();
   const router = useRouter();
   
   const [email, setEmail] = useState('');
@@ -121,21 +121,6 @@ export default function LoginScreen() {
                   onPress={handleLogin}
                   loading={loading}
                   style={{ marginTop: 8 }}
-                />
-
-                <Button
-                  title="Sign In with Google"
-                  onPress={async () => {
-                    setLoading(true);
-                    try {
-                      await signInWithGoogle();
-                    } catch (e: any) {
-                      setError(e.message || 'Google login failed');
-                      setLoading(false);
-                    }
-                  }}
-                  variant="outline"
-                  style={{ marginTop: 12 }}
                 />
 
                 <Button
