@@ -392,6 +392,12 @@ export interface JobOpening {
   description: string;
   requirements: string[];
   skills?: string[];
+  responsibilities?: string[];
+  perks_and_benefits?: string[];
+  about_team?: string;
+  hiring_process?: string[];
+  remote_policy?: string;
+  equity_or_bonus?: string;
   status: JobStatus;
   applicants_count: number;
   published_portals?: ('careers_page' | 'linkedin' | 'indeed' | 'naukri')[];
