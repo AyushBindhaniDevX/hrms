@@ -10,7 +10,6 @@ import {
   Image,
   useWindowDimensions,
   ActivityIndicator,
-  Share,
   Platform,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -21,7 +20,6 @@ import {
   MapPin,
   Clock,
   Search,
-  Sparkles,
   CheckCircle2,
   X,
   ArrowRight,
@@ -29,123 +27,175 @@ import {
   Send,
   Building,
   DollarSign,
-  Globe,
-  Award,
-  ChevronRight,
-  Cpu,
-  HeartHandshake,
-  BookOpen,
-  Zap,
-  Check,
-  AlertCircle,
-  FileText,
-  ExternalLink,
+  HeartPulse,
   Laptop,
-  Users,
-  Share2,
-  Compass,
-  Calendar,
-  Layers,
-  Code2,
-  ShieldAlert,
+  BookOpen,
   Coffee,
-  Smile,
-  GraduationCap,
-  TrendingUp,
+  ChevronDown,
+  ArrowUpRight,
+  Menu,
+  Phone,
+  Mail,
+  FileText,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react-native';
 
-const TECH_STACK_TAGS = [
-  'React Native & Expo SDK 54',
-  'TypeScript & React 19',
-  'Node.js & Go Microservices',
-  'AWS & GCP Cloud Native',
-  'Distributed Event Queues',
-  'SOC 2 & HIPAA Security',
-  'PostgreSQL & Redis',
-  'LLM AI Agents & Vector DB',
-  'Figma Design Systems',
+interface LiveSeedJob {
+  id: string;
+  title: string;
+  department: string;
+  deptColor: { bg: string; border: string; text: string; iconBg: string };
+  iconType: 'laptop' | 'briefcase' | 'design' | 'support';
+  location: string;
+  type: string;
+  description: string;
+  experience_level: string;
+  salary_range: string;
+  responsibilities: string[];
+  requirements: string[];
+  skills: string[];
+}
+
+const LIVE_REQUISITIONS: LiveSeedJob[] = [
+  {
+    id: 'job_fe',
+    title: 'Senior Frontend Engineer',
+    department: 'Engineering',
+    deptColor: { bg: '#EFF6FF', border: '#DBEAFE', text: '#1D4ED8', iconBg: '#EFF6FF' },
+    iconType: 'laptop',
+    location: 'Bengaluru',
+    type: 'Full-time',
+    description: 'Lead the development of our core web applications using React, Next.js, and TypeScript. Mentor junior engineers and drive architectural decisions.',
+    experience_level: '4 - 7 Years',
+    salary_range: '₹22,00,000 - ₹32,00,000',
+    responsibilities: [
+      'Architect and build high-performance web applications using React, Next.js, and TypeScript.',
+      'Collaborate with product designers to implement responsive, pixel-perfect, accessible UI components.',
+      'Optimize web application performance, core web vitals, bundle size, and rendering speed.',
+      'Mentor junior and mid-level engineers through structured code reviews and architectural discussions.',
+    ],
+    requirements: [
+      '4+ years of professional front-end experience with modern React, TypeScript, and state management.',
+      'Strong expertise with Next.js (App Router, Server Components, SSR/SSG) and Tailwind CSS / modern CSS.',
+      'Deep understanding of browser APIs, DOM performance optimization, and cross-browser quirks.',
+      'Experience writing robust automated tests (Jest, React Testing Library, Playwright/Cypress).',
+    ],
+    skills: ['React', 'Next.js', 'TypeScript', 'Tailwind CSS', 'Redux / Zustand', 'Testing'],
+  },
+  {
+    id: 'job_devops',
+    title: 'Cloud DevOps Specialist',
+    department: 'Infrastructure',
+    deptColor: { bg: '#F0FDFA', border: '#CCFBF1', text: '#0F766E', iconBg: '#F0FDFA' },
+    iconType: 'briefcase',
+    location: 'Pune',
+    type: 'Full-time',
+    description: 'Design and maintain scalable AWS infrastructure. Implement CI/CD pipelines, Kubernetes orchestration, and ensure 99.99% uptime.',
+    experience_level: '4 - 8 Years',
+    salary_range: '₹24,00,000 - ₹34,00,000',
+    responsibilities: [
+      'Design, provision, and maintain production AWS/GCP cloud workloads using Terraform / OpenTofu.',
+      'Manage Kubernetes clusters (EKS), container orchestration, service mesh, and auto-scaling policies.',
+      'Build zero-downtime CI/CD automation pipelines using GitHub Actions, Docker, and ArgoCD.',
+      'Monitor distributed cloud infrastructure using Prometheus, Grafana, and OpenTelemetry with 99.99% SLA targets.',
+    ],
+    requirements: [
+      '4+ years of DevOps / SRE experience managing enterprise cloud infrastructure on AWS or GCP.',
+      'Deep proficiency with Kubernetes, Docker, Helm, and microservices networking.',
+      'Strong scripting skills in Python, Bash, or Go for infrastructure automation.',
+      'Experience with security compliance (SOC 2, ISO 27001), IAM hardening, and backup/DR plans.',
+    ],
+    skills: ['AWS', 'Kubernetes', 'Docker', 'Terraform', 'CI/CD', 'Prometheus', 'Security'],
+  },
+  {
+    id: 'job_design',
+    title: 'Product Designer',
+    department: 'Design',
+    deptColor: { bg: '#FFFBEB', border: '#FEF3C7', text: '#B45309', iconBg: '#FFFBEB' },
+    iconType: 'design',
+    location: 'Remote (India)',
+    type: 'Full-time',
+    description: 'Create beautiful, intuitive user experiences. Work closely with product managers and engineers to take features from concept to launch.',
+    experience_level: '3 - 6 Years',
+    salary_range: '₹16,00,000 - ₹24,00,000',
+    responsibilities: [
+      'Design intuitive, end-to-end workflows for complex SaaS applications and mobile native products.',
+      'Maintain and expand the company Figma Design System with tokens, component variants, and accessibility specs.',
+      'Conduct generative and evaluative user research sessions with enterprise customers and stakeholders.',
+      'Create high-fidelity interactive prototypes and partner closely with engineers during UI implementation.',
+    ],
+    requirements: [
+      '3+ years of experience designing SaaS and digital products with a stellar public portfolio.',
+      'Mastery of Figma, auto-layout, interactive component prototyping, and design systems.',
+      'Strong eye for typography, spatial harmony, micro-interactions, and visual storytelling.',
+      'Ability to articulate design reasoning and trade-offs clearly to cross-functional teams.',
+    ],
+    skills: ['Figma', 'UI/UX Design', 'Design Systems', 'Prototyping', 'User Research', 'Interaction Design'],
+  },
+  {
+    id: 'job_tam',
+    title: 'Technical Account Manager',
+    department: 'Customer Success',
+    deptColor: { bg: '#F8FAFC', border: '#F1F5F9', text: '#475569', iconBg: '#F8FAFC' },
+    iconType: 'support',
+    location: 'Gurugram',
+    type: 'Full-time',
+    description: 'Serve as the primary technical contact for our enterprise clients. Help them maximize value from our solutions and resolve complex issues.',
+    experience_level: '3 - 6 Years',
+    salary_range: '₹15,00,000 - ₹22,00,000',
+    responsibilities: [
+      'Act as the trusted technical advisor for enterprise clients across software implementation and operations.',
+      'Coordinate with engineering and support squads to troubleshoot technical escalations and ensure rapid resolution.',
+      'Conduct quarterly technical reviews, usage audits, and product roadmap walkthroughs with customer executives.',
+      'Identify expansion opportunities and drive product adoption and customer satisfaction (CSAT / NPS).',
+    ],
+    requirements: [
+      '3+ years of experience in Technical Account Management, Solutions Architecture, or Technical Customer Success.',
+      'Solid technical foundation in APIs, web technologies, cloud architectures, and SaaS integrations.',
+      'Exceptional stakeholder management, communication, and executive presentation capabilities.',
+      'Proven ability to prioritize competing client demands and navigate complex technical problems.',
+    ],
+    skills: ['Enterprise Account Management', 'API Integrations', 'Client Success', 'Troubleshooting', 'SaaS'],
+  },
 ];
 
-const CULTURE_PILLARS = [
+const PERKS = [
   {
-    icon: Zap,
-    title: 'High Velocity & Architectural Ownership',
-    desc: 'We ship code directly to production daily with zero bureaucratic red tape. You own your services from RFC design to telemetry.',
+    icon: HeartPulse,
+    colorClass: 'blue',
+    iconColor: '#2563EB',
+    iconBg: '#EFF6FF',
+    iconBorder: '#DBEAFE',
+    title: 'Comprehensive Mediclaim',
+    desc: 'Top-tier health insurance covering you, your dependents, and parents (up to ₹10L).',
   },
-  {
-    icon: Cpu,
-    title: 'Cutting-Edge Cloud & AI Stack',
-    desc: 'Build on Expo SDK 54, React 19, Go microservices, Redis caching, and LangChain/Gemini AI assistants without legacy technical debt.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Enterprise Security DNA',
-    desc: 'Our infrastructure is fortified to meet SOC 2 Type II, HIPAA, and ISO 27001 standards, safeguarding mission-critical biometric data.',
-  },
-  {
-    icon: HeartHandshake,
-    title: 'People-First Total Rewards',
-    desc: 'Comprehensive ₹10L family health coverage, ₹50k annual L&D allowance, MacBook Pro M3 Max gear, and flexible hybrid/remote options.',
-  },
-];
-
-const PERKS_BENEFITS = [
   {
     icon: Laptop,
-    title: 'Top-Tier Apple Hardware',
-    desc: 'Every engineer receives an Apple MacBook Pro 16" (M3 Max / 36GB RAM) plus external 4K monitors and ergonomic accessories.',
+    colorClass: 'teal',
+    iconColor: '#0D9488',
+    iconBg: '#F0FDFA',
+    iconBorder: '#CCFBF1',
+    title: 'Hybrid Setup',
+    desc: 'Work from our beautiful hubs or home. Includes a ₹50,000 WFH setup allowance.',
   },
   {
     icon: BookOpen,
-    title: '₹50,000 Annual L&D Stipend',
-    desc: 'Dedicated budget for AWS/GCP/CISSP certifications, global tech conference passes, and professional masterclasses.',
-  },
-  {
-    icon: HeartHandshake,
-    title: '₹10 Lakh Family Health Shield',
-    desc: '100% company-sponsored medical insurance covering you, spouse, children, and parents with zero waiting period.',
+    colorClass: 'amber',
+    iconColor: '#D97706',
+    iconBg: '#FFFBEB',
+    iconBorder: '#FEF3C7',
+    title: 'L&D Allowance',
+    desc: '₹25,000 annual budget for certifications, Udemy courses, and technical conferences.',
   },
   {
     icon: Coffee,
-    title: 'Remote & Hybrid Flexibility',
-    desc: 'Work from our modern Bengaluru or Bhubaneswar innovation hubs, or 100% remote across India with home-office allowances.',
-  },
-  {
-    icon: Calendar,
-    title: '24 Paid Days Off + Wellness Breaks',
-    desc: 'Generous paid time off, mental health recharge days, parental leave, and flexible holiday swap options.',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Competitive Pay & ESOP Grants',
-    desc: 'Top 10% market cash compensation, annual performance bonuses, and meaningful Subedge equity participation.',
-  },
-];
-
-const HIRING_STEPS = [
-  {
-    step: '01',
-    title: 'Application & Portfolio Review',
-    time: 'Within 48 Hours',
-    desc: 'Our engineering leadership directly evaluates your background, GitHub repos, and design portfolios with zero automated rejections.',
-  },
-  {
-    step: '02',
-    title: 'System Architecture Deep Dive',
-    time: '60 Minutes (Video)',
-    desc: 'Collaborative discussion on real-world engineering challenges, distributed state, offline mobile caching, or cloud security.',
-  },
-  {
-    step: '03',
-    title: 'Practical Problem Solving',
-    time: '60 Minutes (Pairing)',
-    desc: 'Hands-on coding or product critique session focusing on clean architecture, readability, and pragmatic problem solving.',
-  },
-  {
-    step: '04',
-    title: 'Leadership Alignment & Offer',
-    time: 'Within 3 Business Days',
-    desc: 'Executive chat to align on career aspirations, role expectations, and present a comprehensive total rewards offer package.',
+    colorClass: 'slate',
+    iconColor: '#334155',
+    iconBg: '#F8FAFC',
+    iconBorder: '#F1F5F9',
+    title: 'Flexible Leaves',
+    desc: 'Generous earned leaves, mandatory wellness days, and comprehensive maternity/paternity support.',
   },
 ];
 
@@ -155,18 +205,11 @@ export default function PublicCareersPage() {
   const isTablet = width >= 768 && width < 1024;
   const isMobile = width < 768;
 
-  const [jobs, setJobs] = useState<JobOpening[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDept, setSelectedDept] = useState<string>('All');
-  const [selectedType, setSelectedType] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [jobs, setJobs] = useState<LiveSeedJob[]>(LIVE_REQUISITIONS);
+  const [selectedJob, setSelectedJob] = useState<LiveSeedJob | null>(null);
+  const [viewDetailsJob, setViewDetailsJob] = useState<LiveSeedJob | null>(null);
 
-  // Detailed Job Specs Modal
-  const [detailJob, setDetailJob] = useState<JobOpening | null>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
-
-  // Application Modal States
-  const [selectedJob, setSelectedJob] = useState<JobOpening | null>(null);
+  // Application form states
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -179,43 +222,58 @@ export default function PublicCareersPage() {
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
 
-  // Knockout & Screening Questions
+  // Knockout questions
   const [workAuth, setWorkAuth] = useState<'yes' | 'no' | null>('yes');
   const [canJoin60Days, setCanJoin60Days] = useState<'yes' | 'no' | null>('yes');
-  const [skillsMatchSelf, setSkillsMatchSelf] = useState<'yes' | 'no' | null>('yes');
 
   const [submitting, setSubmitting] = useState(false);
   const [appliedSuccess, setAppliedSuccess] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Sync with Firestore published jobs if any exist
   useEffect(() => {
     getJobs().then((data) => {
-      setJobs(data.filter((j) => j.status === 'published'));
-      setLoading(false);
+      const published = data.filter((j) => j.status === 'published');
+      if (published.length > 0) {
+        const mapped: LiveSeedJob[] = published.map((j) => {
+          let deptColor = { bg: '#EFF6FF', border: '#DBEAFE', text: '#1D4ED8', iconBg: '#EFF6FF' };
+          let iconType: 'laptop' | 'briefcase' | 'design' | 'support' = 'laptop';
+
+          if (j.department.toLowerCase().includes('infra') || j.department.toLowerCase().includes('security')) {
+            deptColor = { bg: '#F0FDFA', border: '#CCFBF1', text: '#0F766E', iconBg: '#F0FDFA' };
+            iconType = 'briefcase';
+          } else if (j.department.toLowerCase().includes('design') || j.department.toLowerCase().includes('product')) {
+            deptColor = { bg: '#FFFBEB', border: '#FEF3C7', text: '#B45309', iconBg: '#FFFBEB' };
+            iconType = 'design';
+          } else if (j.department.toLowerCase().includes('success') || j.department.toLowerCase().includes('sales')) {
+            deptColor = { bg: '#F8FAFC', border: '#F1F5F9', text: '#475569', iconBg: '#F8FAFC' };
+            iconType = 'support';
+          }
+
+          return {
+            id: j.id,
+            title: j.title,
+            department: j.department,
+            deptColor,
+            iconType,
+            location: j.location,
+            type: j.type === 'full-time' ? 'Full-time' : j.type === 'remote' ? 'Remote' : 'Hybrid',
+            description: j.description,
+            experience_level: j.experience_level || '3+ Years',
+            salary_range: j.salary_range || 'Market Standard',
+            responsibilities: j.responsibilities || [j.description],
+            requirements: j.requirements || ['Relevant experience in domain.'],
+            skills: j.skills || ['TypeScript', 'Cloud'],
+          };
+        });
+        setJobs(mapped);
+      }
     });
   }, []);
 
-  const departments = ['All', 'Engineering', 'Security & Governance', 'Product & Design', 'Sales & Marketing'];
-  const employmentTypes = ['All', 'full-time', 'remote', 'hybrid'];
-
-  const filteredJobs = jobs.filter((j) => {
-    const matchesDept = selectedDept === 'All' || j.department.toLowerCase() === selectedDept.toLowerCase();
-    const matchesType =
-      selectedType === 'All' || (j.type && j.type.toLowerCase() === selectedType.toLowerCase());
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      j.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      j.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (j.skills && j.skills.some((s) => s.toLowerCase().includes(searchQuery.toLowerCase()))) ||
-      (j.requirements && j.requirements.some((r) => r.toLowerCase().includes(searchQuery.toLowerCase())));
-    return matchesDept && matchesType && matchesSearch;
-  });
-
-  const isKnockoutFailed = workAuth === 'no' || canJoin60Days === 'no';
-
   const handleApplySubmit = async () => {
     if (!fullName.trim() || !email.trim() || !phone.trim() || !selectedJob) {
-      setFormError('Please complete all mandatory fields marked with an asterisk (*).');
+      setFormError('Please complete all required fields marked with an asterisk (*).');
       return;
     }
 
@@ -229,21 +287,20 @@ export default function PublicCareersPage() {
         full_name: fullName.trim(),
         email: email.trim(),
         phone: phone.trim(),
-        current_location: currentLocation.trim() || 'India',
+        current_location: currentLocation.trim() || selectedJob.location,
         experience_years: parseFloat(experienceYears) || 4,
         current_company: currentCompany.trim() || 'Independent Specialist',
-        expected_salary: expectedSalary.trim() || 'Market Competitive',
+        expected_salary: expectedSalary.trim() || selectedJob.salary_range,
         notice_period_days: parseInt(noticePeriod) || 30,
-        skills: selectedJob.skills || ['TypeScript', 'Cloud'],
+        skills: selectedJob.skills,
         resume_url: resumeUrl.trim() || 'https://subedge.vercel.app/resumes/candidate_cv.pdf',
         linkedin_url: linkedinUrl.trim() || undefined,
         portfolio_url: portfolioUrl.trim() || undefined,
         screening_answers: {
           work_authorization: workAuth || 'yes',
           can_join_60_days: canJoin60Days || 'yes',
-          skills_match_self: skillsMatchSelf || 'yes',
         },
-        knockout_passed: !isKnockoutFailed,
+        knockout_passed: workAuth !== 'no' && canJoin60Days !== 'no',
       });
 
       setAppliedSuccess(true);
@@ -253,13 +310,6 @@ export default function PublicCareersPage() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const openApplyForJob = (job: JobOpening) => {
-    setDetailJob(null);
-    setSelectedJob(job);
-    setAppliedSuccess(false);
-    setFormError(null);
   };
 
   const closeApplyModal = () => {
@@ -279,52 +329,64 @@ export default function PublicCareersPage() {
     setResumeUrl('');
     setWorkAuth('yes');
     setCanJoin60Days('yes');
-    setSkillsMatchSelf('yes');
   };
 
-  const handleShareRole = async (job: JobOpening) => {
-    try {
-      const shareUrl = `https://subedge.vercel.app/careers#${job.id}`;
-      if (Platform.OS === 'web') {
-        if (navigator.clipboard) {
-          await navigator.clipboard.writeText(shareUrl);
-          setCopiedLink(true);
-          setTimeout(() => setCopiedLink(false), 3000);
-        } else {
-          alert(`Role link: ${shareUrl}`);
-        }
-      } else {
-        await Share.share({
-          message: `Join Subedge Technology as ${job.title}! Learn more and apply: ${shareUrl}`,
-          url: shareUrl,
-          title: `Career Opening: ${job.title} at Subedge Technology`,
-        });
-      }
-    } catch (e) {
-      console.error('Share error:', e);
+  const renderJobIcon = (type: string, color: string) => {
+    switch (type) {
+      case 'laptop':
+        return <Laptop size={20} color={color} />;
+      case 'briefcase':
+        return <Briefcase size={20} color={color} />;
+      case 'design':
+        return <Laptop size={20} color={color} />;
+      default:
+        return <Briefcase size={20} color={color} />;
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Top Public Header */}
-      <View style={styles.header}>
-        <View style={styles.headerInner}>
-          <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.logoRow}>
+      {/* ======================================================== */}
+      {/* TOP NAVIGATION BAR (Exact replica of subedge.vercel.app) */}
+      {/* ======================================================== */}
+      <View style={styles.navBar}>
+        <View style={styles.navBarInner}>
+          <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.logoContainer}>
             <Image
               source={require('@/../assets/images/subedge-logo.png')}
-              style={styles.logoImage}
+              style={styles.navLogo}
               resizeMode="contain"
             />
-            <View>
-              <Text style={styles.logoTitle}>SUBEDGE</Text>
-              <Text style={styles.logoSub}>TECHNOLOGY PVT LTD</Text>
-            </View>
           </TouchableOpacity>
 
-          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-            <TouchableOpacity onPress={() => router.push('/(auth)/login')} style={styles.portalLoginBtn}>
-              <Text style={styles.portalLoginText}>Employee / HR Portal →</Text>
+          {isDesktop && (
+            <View style={styles.navLinksRow}>
+              <TouchableOpacity onPress={() => {}} style={styles.navLinkItem}>
+                <Text style={styles.navLinkText}>Services</Text>
+                <ChevronDown size={14} color="#6B7280" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => {}} style={styles.navLinkItem}>
+                <Text style={styles.navLinkText}>Resources</Text>
+                <ChevronDown size={14} color="#6B7280" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => {}} style={styles.navLinkItem}>
+                <Text style={styles.navLinkText}>Company</Text>
+                <ChevronDown size={14} color="#6B7280" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => {}} style={styles.navLinkItem}>
+                <Text style={styles.navLinkText}>Legal</Text>
+                <ChevronDown size={14} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity
+              onPress={() => router.push('/(auth)/login')}
+              style={styles.navQuoteBtn}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.navQuoteBtnText}>Employee Portal →</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -332,513 +394,331 @@ export default function PublicCareersPage() {
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         {/* ======================================================== */}
-        {/* HERO SECTION & CULTURE ETHOS */}
+        {/* HERO SECTION */}
         {/* ======================================================== */}
         <View style={styles.heroSection}>
           <View style={styles.heroInner}>
-            <View style={styles.badge}>
-              <Sparkles size={14} color="#0D7377" />
-              <Text style={styles.badgeText}>SUBEDGE TALENT & ENGINEERING HUB</Text>
+            <View style={styles.hiringBadge}>
+              <View style={styles.hiringBadgeDot} />
+              <Text style={styles.hiringBadgeText}>We're Hiring!</Text>
             </View>
 
-            <Text style={styles.heroHeading}>Build the Future of Enterprise HCM & Intelligent Automation.</Text>
-            <Text style={styles.heroSubheading}>
-              Join Subedge Technology to pioneer high-concurrency cloud systems, geofenced workforce orchestration, real-time payroll engines, and SOC 2 / HIPAA compliance for global enterprises.
+            <Text style={styles.heroCategory}>COMPANY</Text>
+            <Text style={styles.heroTitle}>Careers at Subedge</Text>
+            <Text style={styles.heroSubtitle}>
+              Join a team of passionate technologists building the future of digital solutions. Do the best work of your career with us.
             </Text>
-
-            {/* Core Tech Stack Cloud */}
-            <View style={styles.techStackContainer}>
-              <Text style={styles.techStackTitle}>OUR PRODUCTION TECH STACK</Text>
-              <View style={styles.techStackRow}>
-                {TECH_STACK_TAGS.map((tech, idx) => (
-                  <View key={idx} style={styles.techTag}>
-                    <Code2 size={12} color="#0D7377" />
-                    <Text style={styles.techTagText}>{tech}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
           </View>
         </View>
 
         {/* ======================================================== */}
-        {/* FOUR PILLARS OF OUR CULTURE */}
+        {/* STATS STRIP & CONTENT BODY */}
         {/* ======================================================== */}
-        <View style={styles.cultureSection}>
-          <View style={styles.sectionInner}>
-            <View style={{ alignItems: 'center', marginBottom: 28 }}>
-              <Text style={styles.sectionBadgeText}>WHY BUILD WITH SUBEDGE</Text>
-              <Text style={styles.mainSectionTitle}>Engineering Excellence & Human Autonomy</Text>
-              <Text style={styles.mainSectionSub}>
-                We combine deep technical rigor with high trust, transparent compensation, and zero micromanagement.
+        <View style={styles.mainContentContainer}>
+          {/* 4 Stats Metrics */}
+          <View style={styles.statsStrip}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{jobs.length}</Text>
+              <Text style={styles.statLabel}>Open roles</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>4</Text>
+              <Text style={styles.statLabel}>Departments hiring</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>4</Text>
+              <Text style={styles.statLabel}>City hubs</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>Hybrid</Text>
+              <Text style={styles.statLabel}>& remote-friendly</Text>
+            </View>
+          </View>
+
+          {/* ======================================================== */}
+          {/* WHY BUILD WITH US SECTION */}
+          {/* ======================================================== */}
+          <View style={styles.whyBuildSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Why build with us?</Text>
+              <Text style={styles.sectionSub}>
+                We invest heavily in environments where exceptional talent can design, build, and deploy fluidly.
               </Text>
             </View>
 
-            <View style={styles.pillarsGrid}>
-              {CULTURE_PILLARS.map((pillar, idx) => {
-                const IconComp = pillar.icon;
+            <View style={styles.perksGrid}>
+              {PERKS.map((perk, idx) => {
+                const IconComp = perk.icon;
                 return (
-                  <View key={idx} style={styles.pillarCard}>
-                    <View style={styles.pillarIconBox}>
-                      <IconComp size={22} color="#0D7377" />
+                  <View key={idx} style={styles.perkCard}>
+                    <View style={[styles.perkIconBox, { backgroundColor: perk.iconBg, borderColor: perk.iconBorder }]}>
+                      <IconComp size={16} color={perk.iconColor} />
                     </View>
-                    <Text style={styles.pillarTitle}>{pillar.title}</Text>
-                    <Text style={styles.pillarDesc}>{pillar.desc}</Text>
+                    <Text style={styles.perkTitle}>{perk.title}</Text>
+                    <Text style={styles.perkDesc}>{perk.desc}</Text>
                   </View>
                 );
               })}
             </View>
           </View>
-        </View>
 
-        {/* ======================================================== */}
-        {/* JOB EXPLORER & OPEN REQUISITIONS */}
-        {/* ======================================================== */}
-        <View style={styles.jobsSection} id="open-roles">
-          <View style={styles.jobsSectionInner}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sectionTitle}>Explore Open Opportunities</Text>
-                <Text style={styles.sectionSub}>
-                  Click on any position to review full responsibilities, tech stacks, salary benchmarks, and interview roadmaps.
-                </Text>
-              </View>
-              <View style={styles.liveOpeningsBadge}>
-                <Sparkles size={12} color="#0D7377" />
-                <Text style={styles.liveOpeningsText}>{filteredJobs.length} Active Positions</Text>
-              </View>
+          {/* ======================================================== */}
+          {/* OPEN POSITIONS SECTION */}
+          {/* ======================================================== */}
+          <View style={styles.openPositionsSection}>
+            <View style={styles.positionsHeaderRow}>
+              <Text style={styles.positionsHeading}>Open Positions</Text>
+              <Text style={styles.positionsCountText}>{jobs.length} roles available</Text>
             </View>
 
-            {/* Filters Bar */}
-            <View style={styles.controlsBar}>
-              {/* Search Bar */}
-              <View style={styles.searchBox}>
-                <Search size={18} color="#64748B" />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search by role title, technical skill, or keyword (e.g. React Native, SOC 2, Figma)..."
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholderTextColor="#94A3B8"
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <X size={16} color="#64748B" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Department & Employment Type Filters */}
-              <View style={styles.filtersWrapper}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.filterGroupLabel}>Department:</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillsRow}>
-                    {departments.map((dept) => {
-                      const active = selectedDept === dept;
-                      return (
-                        <TouchableOpacity
-                          key={dept}
-                          onPress={() => setSelectedDept(dept)}
-                          style={[styles.filterChip, active && styles.filterChipActive]}
-                        >
-                          <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{dept}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-
-                <View style={{ flex: 1, marginTop: isDesktop ? 0 : 12 }}>
-                  <Text style={styles.filterGroupLabel}>Work Arrangement:</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillsRow}>
-                    {employmentTypes.map((type) => {
-                      const active = selectedType === type;
-                      return (
-                        <TouchableOpacity
-                          key={type}
-                          onPress={() => setSelectedType(type)}
-                          style={[styles.filterChip, active && styles.filterChipActive]}
-                        >
-                          <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                            {type === 'All' ? 'All Arrangements' : type.toUpperCase()}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              </View>
-            </View>
-
-            {/* Open Jobs List */}
-            {loading ? (
-              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#0D7377" />
-                <Text style={{ marginTop: 12, color: '#64748B' }}>Loading Subedge career opportunities...</Text>
-              </View>
-            ) : filteredJobs.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Briefcase size={36} color="#94A3B8" />
-                <Text style={styles.emptyTitle}>No matching requisitions found</Text>
-                <Text style={styles.emptySub}>Try adjusting your keywords or clearing the department filters.</Text>
+            <View style={{ gap: 16 }}>
+              {jobs.map((job) => (
                 <TouchableOpacity
-                  onPress={() => {
-                    setSelectedDept('All');
-                    setSelectedType('All');
-                    setSearchQuery('');
-                  }}
-                  style={styles.resetFilterBtn}
+                  key={job.id}
+                  onPress={() => setViewDetailsJob(job)}
+                  style={styles.jobCard}
+                  activeOpacity={0.92}
                 >
-                  <Text style={styles.resetFilterText}>Reset All Filters</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={{ gap: 16 }}>
-                {filteredJobs.map((job) => (
-                  <View key={job.id} style={styles.jobCard}>
-                    <View style={{ flexDirection: isDesktop ? 'row' : 'column', justifyContent: 'space-between', gap: 16 }}>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                          <Text style={styles.jobCardTitle}>{job.title}</Text>
-                          <View style={styles.typeBadge}>
-                            <Text style={styles.typeBadgeText}>{(job.type || 'FULL-TIME').toUpperCase()}</Text>
-                          </View>
-                          {job.priority === 'urgent' && (
-                            <View style={styles.urgentBadge}>
-                              <Text style={styles.urgentBadgeText}>URGENT REQUISITION</Text>
-                            </View>
-                          )}
-                        </View>
+                  <View style={styles.jobCardMainRow}>
+                    {/* Left: Icon & Info */}
+                    <View style={styles.jobCardLeft}>
+                      <View
+                        style={[
+                          styles.jobIconBox,
+                          { backgroundColor: job.deptColor.iconBg, borderColor: job.deptColor.border },
+                        ]}
+                      >
+                        {renderJobIcon(job.iconType, job.deptColor.text)}
+                      </View>
 
-                        <View style={styles.jobMetaRow}>
-                          <View style={styles.metaItem}>
-                            <Building size={14} color="#0D7377" />
-                            <Text style={styles.metaText}>{job.department}</Text>
-                          </View>
-                          <View style={styles.metaItem}>
-                            <MapPin size={14} color="#64748B" />
-                            <Text style={styles.metaText}>{job.location}</Text>
-                          </View>
-                          <View style={styles.metaItem}>
-                            <DollarSign size={14} color="#10B981" />
-                            <Text style={[styles.metaText, { color: '#059669', fontWeight: '700' }]}>{job.salary_range}</Text>
-                          </View>
-                          <View style={styles.metaItem}>
-                            <Clock size={14} color="#64748B" />
-                            <Text style={styles.metaText}>{job.experience_level}</Text>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.jobTitleRow}>
+                          <Text style={styles.jobCardTitle}>{job.title}</Text>
+                          <View
+                            style={[
+                              styles.deptPill,
+                              { backgroundColor: job.deptColor.bg, borderColor: job.deptColor.border },
+                            ]}
+                          >
+                            <Text style={[styles.deptPillText, { color: job.deptColor.text }]}>
+                              {job.department}
+                            </Text>
                           </View>
                         </View>
 
                         <Text style={styles.jobCardDesc}>{job.description}</Text>
-
-                        {/* Requirements and Skills */}
-                        {job.skills && job.skills.length > 0 && (
-                          <View style={styles.skillsTagRow}>
-                            {job.skills.map((sk, idx) => (
-                              <View key={idx} style={styles.skillTag}>
-                                <Text style={styles.skillTagText}>{sk}</Text>
-                              </View>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Action Buttons */}
-                      <View style={[styles.jobCardActions, isDesktop && { alignItems: 'flex-end', justifyContent: 'center' }]}>
-                        <TouchableOpacity
-                          onPress={() => setDetailJob(job)}
-                          style={styles.detailsBtn}
-                          activeOpacity={0.85}
-                        >
-                          <FileText size={14} color="#0D7377" />
-                          <Text style={styles.detailsBtnText}>View Full Job Specs</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          onPress={() => openApplyForJob(job)}
-                          style={styles.applyBtn}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={styles.applyBtnText}>Apply Now</Text>
-                          <ArrowRight size={14} color="#FFFFFF" />
-                        </TouchableOpacity>
                       </View>
                     </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        </View>
 
-        {/* ======================================================== */}
-        {/* 4-STEP TRANSPARENT HIRING PROCESS */}
-        {/* ======================================================== */}
-        <View style={styles.hiringSection}>
-          <View style={styles.sectionInner}>
-            <View style={{ alignItems: 'center', marginBottom: 32 }}>
-              <Text style={styles.sectionBadgeText}>TRANSPARENT RECRUITMENT</Text>
-              <Text style={styles.mainSectionTitle}>Our 4-Step Hiring Roadmap</Text>
-              <Text style={styles.mainSectionSub}>
-                We respect your time. Expect proactive communication, transparent feedback, and rapid turnaround at every stage.
-              </Text>
-            </View>
+                    {/* Right: Meta & Arrow Button */}
+                    <View style={styles.jobCardRight}>
+                      <View style={styles.jobMetaColumn}>
+                        <View style={styles.metaBadge}>
+                          <MapPin size={12} color="#94A3B8" />
+                          <Text style={styles.metaBadgeText}>{job.location}</Text>
+                        </View>
+                        <View style={styles.metaBadge}>
+                          <Clock size={12} color="#94A3B8" />
+                          <Text style={styles.metaBadgeText}>{job.type}</Text>
+                        </View>
+                      </View>
 
-            <View style={styles.stepsGrid}>
-              {HIRING_STEPS.map((stepItem, idx) => (
-                <View key={idx} style={styles.stepCard}>
-                  <View style={styles.stepNumberBadge}>
-                    <Text style={styles.stepNumberText}>{stepItem.step}</Text>
+                      <TouchableOpacity
+                        onPress={() => setSelectedJob(job)}
+                        style={styles.arrowCircleBtn}
+                        activeOpacity={0.85}
+                      >
+                        <ArrowRight size={14} color="#0F172A" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <Text style={styles.stepTitle}>{stepItem.title}</Text>
-                  <View style={styles.stepTimeBadge}>
-                    <Clock size={11} color="#0D7377" />
-                    <Text style={styles.stepTimeText}>{stepItem.time}</Text>
-                  </View>
-                  <Text style={styles.stepDesc}>{stepItem.desc}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </View>
         </View>
 
         {/* ======================================================== */}
-        {/* COMPREHENSIVE PERKS & BENEFITS SHOWCASE */}
+        {/* FOOTER SECTION (Exact dark footer from subedge.vercel.app) */}
         {/* ======================================================== */}
-        <View style={styles.perksSection}>
-          <View style={styles.sectionInner}>
-            <View style={{ alignItems: 'center', marginBottom: 32 }}>
-              <Text style={styles.sectionBadgeText}>TOTAL REWARDS</Text>
-              <Text style={styles.mainSectionTitle}>Everything You Need to Do Your Best Work</Text>
-              <Text style={styles.mainSectionSub}>
-                Subedge provides comprehensive health, equipment, continuous learning, and flexibility packages.
-              </Text>
-            </View>
-
-            <View style={styles.benefitsGrid}>
-              {PERKS_BENEFITS.map((b, idx) => {
-                const IconC = b.icon;
-                return (
-                  <View key={idx} style={styles.benefitCard}>
-                    <View style={styles.benefitIconBox}>
-                      <IconC size={20} color="#0D7377" />
-                    </View>
-                    <Text style={styles.benefitTitle}>{b.title}</Text>
-                    <Text style={styles.benefitDesc}>{b.desc}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-
-        {/* ======================================================== */}
-        {/* TALENT COMMUNITY / GENERAL APPLICATION BANNER */}
-        {/* ======================================================== */}
-        <View style={styles.talentCommunitySection}>
-          <View style={styles.talentCommunityCard}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <Sparkles size={16} color="#0D7377" />
-                <Text style={styles.talentCommunityBadge}>JOIN OUR TALENT NETWORK</Text>
-              </View>
-              <Text style={styles.talentCommunityHeading}>Don't see an exact matching position?</Text>
-              <Text style={styles.talentCommunitySub}>
-                We are always seeking exceptional distributed systems engineers, cloud architects, and security specialists. Submit your profile directly to our talent pool.
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={() => {
-                const generalJob = jobs[0] || {
-                  id: 'general_spec',
-                  title: 'General Engineering & Product Talent Pool',
-                  department: 'Engineering',
-                  location: 'India Remote / Hybrid',
-                  salary_range: 'Top 10% Industry Standard',
-                };
-                openApplyForJob(generalJob as any);
-              }}
-              style={styles.talentCommunityBtn}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.talentCommunityBtnText}>Submit General Application</Text>
-              <ArrowRight size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Public Footer */}
-        <View style={styles.publicFooter}>
+        <View style={styles.footer}>
           <View style={styles.footerInner}>
-            <View>
-              <Text style={styles.footerBrand}>Subedge Technology Pvt Ltd</Text>
-              <Text style={styles.footerTagline}>Oasis Platform: Oasis HRMS & Cloud Enterprise Suite</Text>
+            <View style={styles.footerGrid}>
+              {/* Brand & Address Column */}
+              <View style={styles.footerBrandCol}>
+                <Image
+                  source={require('@/../assets/images/subedge-logo.png')}
+                  style={styles.footerLogo}
+                  resizeMode="contain"
+                />
+
+                <View style={styles.addressBlock}>
+                  <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+                    <MapPin size={16} color="#737373" style={{ marginTop: 3 }} />
+                    <View style={{ gap: 12 }}>
+                      <Text style={styles.addressText}>
+                        <Text style={styles.addressHeading}>Corporate Office:</Text>
+                        {'\n'}Samhita Manor, 1st Manor, Pai Layout
+                        {'\n'}Bengaluru, Pin-560016, Karnataka
+                      </Text>
+                      <Text style={styles.addressText}>
+                        <Text style={styles.addressHeading}>Development Office:</Text>
+                        {'\n'}3rd Floor, VIP-34A
+                        {'\n'}Bhubaneswar-751015, Odisha
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 }}>
+                    <Phone size={14} color="#737373" />
+                    <Text style={styles.contactText}>+91-9124008800</Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                    <Mail size={14} color="#737373" />
+                    <Text style={styles.contactText}>info@subedge.com</Text>
+                  </View>
+                </View>
+
+                <View style={styles.socialsRow}>
+                  <Text style={styles.socialLink}>Twitter</Text>
+                  <Text style={styles.socialLink}>GitHub</Text>
+                  <Text style={styles.socialLink}>LinkedIn</Text>
+                </View>
+              </View>
+
+              {/* Links Column 1: Services */}
+              <View style={styles.footerLinksCol}>
+                <Text style={styles.footerColTitle}>SERVICES</Text>
+                <Text style={styles.footerLink}>Healthcare Consulting</Text>
+                <Text style={styles.footerLink}>Hire, Train & Deploy</Text>
+                <Text style={styles.footerLink}>Cybersecurity</Text>
+                <Text style={styles.footerLink}>Digital Marketing</Text>
+              </View>
+
+              {/* Links Column 2: Resources */}
+              <View style={styles.footerLinksCol}>
+                <Text style={styles.footerColTitle}>RESOURCES</Text>
+                <Text style={styles.footerLink}>How It Works</Text>
+                <Text style={styles.footerLink}>Case Studies</Text>
+                <Text style={styles.footerLink}>Security Info</Text>
+                <Text style={styles.footerLink}>Blog</Text>
+              </View>
+
+              {/* Links Column 3: Company */}
+              <View style={styles.footerLinksCol}>
+                <Text style={styles.footerColTitle}>COMPANY</Text>
+                <Text style={styles.footerLink}>About</Text>
+                <Text style={styles.footerLink}>Team</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styles.footerLink, { color: '#FFFFFF' }]}>Careers</Text>
+                  <View style={styles.hiringTagSmall}>
+                    <Text style={styles.hiringTagSmallText}>Hiring</Text>
+                  </View>
+                </View>
+                <Text style={styles.footerLink}>Contact</Text>
+              </View>
+
+              {/* Links Column 4: Legal */}
+              <View style={styles.footerLinksCol}>
+                <Text style={styles.footerColTitle}>LEGAL</Text>
+                <Text style={styles.footerLink}>Privacy</Text>
+                <Text style={styles.footerLink}>Terms</Text>
+                <Text style={styles.footerLink}>Security Policy</Text>
+              </View>
             </View>
-            <Text style={styles.footerCopy}>© 2026 Subedge Technology Pvt Ltd. All rights reserved.</Text>
+
+            <View style={styles.footerBottomBar}>
+              <Text style={styles.copyrightText}>© 2026 Subedge. All rights reserved.</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
 
       {/* ======================================================== */}
-      {/* MODAL 1: COMPREHENSIVE JOB SPECIFICATIONS & DETAILS */}
+      {/* MODAL 1: VIEW FULL JOB DETAILS MODAL */}
       {/* ======================================================== */}
-      {detailJob && (
-        <Modal visible={!!detailJob} animationType="slide" transparent>
+      {viewDetailsJob && (
+        <Modal visible={!!viewDetailsJob} animationType="slide" transparent>
           <View style={styles.modalOverlay}>
-            <View style={styles.jobDetailModalCard}>
-              {/* Header */}
-              <View style={styles.jobDetailHeader}>
+            <View style={styles.detailsModalCard}>
+              <View style={styles.modalHeader}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <Text style={styles.jobDetailTitle}>{detailJob.title}</Text>
-                    <View style={styles.typeBadge}>
-                      <Text style={styles.typeBadgeText}>{(detailJob.type || 'FULL-TIME').toUpperCase()}</Text>
+                    <Text style={styles.modalTitle}>{viewDetailsJob.title}</Text>
+                    <View
+                      style={[
+                        styles.deptPill,
+                        { backgroundColor: viewDetailsJob.deptColor.bg, borderColor: viewDetailsJob.deptColor.border },
+                      ]}
+                    >
+                      <Text style={[styles.deptPillText, { color: viewDetailsJob.deptColor.text }]}>
+                        {viewDetailsJob.department}
+                      </Text>
                     </View>
                   </View>
-                  <Text style={styles.jobDetailSubtitle}>
-                    {detailJob.department} · {detailJob.location}
+                  <Text style={styles.modalSub}>
+                    {viewDetailsJob.location} · {viewDetailsJob.type} · {viewDetailsJob.experience_level}
                   </Text>
                 </View>
-                <TouchableOpacity onPress={() => setDetailJob(null)} style={styles.closeBtn}>
+                <TouchableOpacity onPress={() => setViewDetailsJob(null)} style={styles.closeBtn}>
                   <X size={20} color="#64748B" />
                 </TouchableOpacity>
               </View>
 
-              {/* Scrollable Job Details Content */}
-              <ScrollView style={{ padding: isMobile ? 16 : 24 }} showsVerticalScrollIndicator={false}>
-                {/* Meta Highlights Row */}
-                <View style={styles.detailMetaGrid}>
-                  <View style={styles.detailMetaBox}>
-                    <DollarSign size={16} color="#10B981" />
-                    <View>
-                      <Text style={styles.detailMetaLabel}>Compensation</Text>
-                      <Text style={styles.detailMetaVal}>{detailJob.salary_range}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.detailMetaBox}>
-                    <Clock size={16} color="#0D7377" />
-                    <View>
-                      <Text style={styles.detailMetaLabel}>Experience Target</Text>
-                      <Text style={styles.detailMetaVal}>{detailJob.experience_level}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.detailMetaBox}>
-                    <MapPin size={16} color="#64748B" />
-                    <View>
-                      <Text style={styles.detailMetaLabel}>Work Model</Text>
-                      <Text style={styles.detailMetaVal}>{detailJob.remote_policy || detailJob.location}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* About the Role */}
+              <ScrollView style={{ padding: 24 }} showsVerticalScrollIndicator={false}>
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionHeading}>About the Opportunity</Text>
-                  <Text style={styles.detailParagraph}>{detailJob.description}</Text>
+                  <Text style={styles.detailSectionTitle}>Overview</Text>
+                  <Text style={styles.detailSectionBody}>{viewDetailsJob.description}</Text>
                 </View>
 
-                {/* About the Team */}
-                {detailJob.about_team && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionHeading}>The Team & Mission</Text>
-                    <Text style={styles.detailParagraph}>{detailJob.about_team}</Text>
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Key Responsibilities</Text>
+                  <View style={{ gap: 8, marginTop: 6 }}>
+                    {viewDetailsJob.responsibilities.map((resp, idx) => (
+                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                        <CheckCircle2 size={15} color="#0D7377" style={{ marginTop: 2 }} />
+                        <Text style={styles.bulletText}>{resp}</Text>
+                      </View>
+                    ))}
                   </View>
-                )}
+                </View>
 
-                {/* Key Responsibilities */}
-                {detailJob.responsibilities && detailJob.responsibilities.length > 0 && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionHeading}>Key Responsibilities & Deliverables</Text>
-                    <View style={{ gap: 8, marginTop: 8 }}>
-                      {detailJob.responsibilities.map((resp, idx) => (
-                        <View key={idx} style={styles.bulletRow}>
-                          <CheckCircle2 size={16} color="#0D7377" style={{ marginTop: 2 }} />
-                          <Text style={styles.bulletText}>{resp}</Text>
-                        </View>
-                      ))}
-                    </View>
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Requirements & Qualifications</Text>
+                  <View style={{ gap: 8, marginTop: 6 }}>
+                    {viewDetailsJob.requirements.map((req, idx) => (
+                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                        <CheckCircle2 size={15} color="#2563EB" style={{ marginTop: 2 }} />
+                        <Text style={styles.bulletText}>{req}</Text>
+                      </View>
+                    ))}
                   </View>
-                )}
+                </View>
 
-                {/* Requirements & Technical Qualifications */}
-                {detailJob.requirements && detailJob.requirements.length > 0 && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionHeading}>What We Are Looking For</Text>
-                    <View style={{ gap: 8, marginTop: 8 }}>
-                      {detailJob.requirements.map((req, idx) => (
-                        <View key={idx} style={styles.bulletRow}>
-                          <Check size={16} color="#059669" style={{ marginTop: 2 }} />
-                          <Text style={styles.bulletText}>{req}</Text>
-                        </View>
-                      ))}
-                    </View>
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Skills & Tech Stack</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                    {viewDetailsJob.skills.map((s, idx) => (
+                      <View key={idx} style={styles.skillTag}>
+                        <Text style={styles.skillTagText}>{s}</Text>
+                      </View>
+                    ))}
                   </View>
-                )}
-
-                {/* Tech Stack & Architecture Tools */}
-                {detailJob.skills && detailJob.skills.length > 0 && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionHeading}>Primary Technical Stack</Text>
-                    <View style={styles.skillsTagRow}>
-                      {detailJob.skills.map((sk, idx) => (
-                        <View key={idx} style={[styles.skillTag, { backgroundColor: '#F0F7F7', borderColor: '#CCECEC' }]}>
-                          <Text style={[styles.skillTagText, { color: '#0D7377', fontWeight: '800' }]}>{sk}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Perks & Benefits for this Role */}
-                {detailJob.perks_and_benefits && detailJob.perks_and_benefits.length > 0 && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionHeading}>Role Perks & Total Rewards</Text>
-                    <View style={{ gap: 8, marginTop: 8 }}>
-                      {detailJob.perks_and_benefits.map((perk, idx) => (
-                        <View key={idx} style={styles.bulletRow}>
-                          <Award size={16} color="#10B981" style={{ marginTop: 2 }} />
-                          <Text style={styles.bulletText}>{perk}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Hiring Process for this Role */}
-                {detailJob.hiring_process && detailJob.hiring_process.length > 0 && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionHeading}>Hiring & Interview Stages</Text>
-                    <View style={{ gap: 8, marginTop: 8 }}>
-                      {detailJob.hiring_process.map((stage, idx) => (
-                        <View key={idx} style={styles.bulletRow}>
-                          <View style={styles.stageDotNum}>
-                            <Text style={styles.stageDotNumText}>{idx + 1}</Text>
-                          </View>
-                          <Text style={styles.bulletText}>{stage}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
+                </View>
               </ScrollView>
 
-              {/* Bottom Sticky Action Footer */}
-              <View style={styles.jobDetailFooter}>
+              <View style={styles.modalFooter}>
                 <TouchableOpacity
-                  onPress={() => handleShareRole(detailJob)}
-                  style={styles.shareRoleBtn}
-                >
-                  <Share2 size={16} color="#0D7377" />
-                  <Text style={styles.shareRoleText}>{copiedLink ? '✓ Copied Link' : 'Share Role'}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => openApplyForJob(detailJob)}
-                  style={styles.modalApplyCtaBtn}
+                  onPress={() => {
+                    const target = viewDetailsJob;
+                    setViewDetailsJob(null);
+                    setSelectedJob(target);
+                  }}
+                  style={styles.applyCtaBtn}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.modalApplyCtaText}>Apply for this Position →</Text>
+                  <Text style={styles.applyCtaBtnText}>Apply for Position →</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -852,12 +732,12 @@ export default function PublicCareersPage() {
       {selectedJob && (
         <Modal visible={!!selectedJob} animationType="slide" transparent>
           <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
+            <View style={styles.applyModalCard}>
               <View style={styles.modalHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.modalTitle}>Apply: {selectedJob.title}</Text>
-                  <Text style={styles.modalSubtitle}>
-                    {selectedJob.department} · {selectedJob.location} · {selectedJob.salary_range}
+                  <Text style={styles.modalSub}>
+                    {selectedJob.department} · {selectedJob.location} · {selectedJob.type}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={closeApplyModal} style={styles.closeBtn}>
@@ -866,42 +746,34 @@ export default function PublicCareersPage() {
               </View>
 
               {appliedSuccess ? (
-                <View style={styles.successContainer}>
-                  <View style={styles.successCircle}>
-                    <CheckCircle2 size={48} color="#10B981" />
+                <View style={styles.successBox}>
+                  <View style={styles.successIconCircle}>
+                    <CheckCircle2 size={44} color="#10B981" />
                   </View>
-                  <Text style={styles.successHeading}>Application Successfully Submitted! 🎉</Text>
-                  <Text style={styles.successSub}>
-                    Thank you, <Text style={{ fontWeight: '800', color: '#1A1A2E' }}>{fullName}</Text>. Your application for{' '}
-                    <Text style={{ fontWeight: '800', color: '#0D7377' }}>{selectedJob.title}</Text> has been ingested into our
-                    live recruitment pipeline.
+                  <Text style={styles.successHeading}>Application Submitted!</Text>
+                  <Text style={styles.successDesc}>
+                    Thank you, <Text style={{ fontWeight: '700' }}>{fullName}</Text>. Your application for{' '}
+                    <Text style={{ fontWeight: '700' }}>{selectedJob.title}</Text> has been received by Subedge Talent Acquisition.
                   </Text>
-                  <View style={styles.resendConfirmBox}>
-                    <ShieldCheck size={18} color="#0D7377" />
-                    <Text style={styles.resendConfirmText}>
-                      An automated confirmation receipt has been dispatched to <Text style={{ fontWeight: '700' }}>{email}</Text> via the Oasis Resend Engine.
-                    </Text>
-                  </View>
                   <TouchableOpacity onPress={closeApplyModal} style={styles.doneBtn}>
-                    <Text style={styles.doneBtnText}>Explore More Requisitions</Text>
+                    <Text style={styles.doneBtnText}>Close & Return</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <ScrollView style={{ padding: isMobile ? 16 : 24 }} showsVerticalScrollIndicator={false}>
+                <ScrollView style={{ padding: 24 }} showsVerticalScrollIndicator={false}>
                   {formError && (
-                    <View style={styles.errorBanner}>
-                      <AlertCircle size={16} color="#DC2626" />
-                      <Text style={styles.errorBannerText}>{formError}</Text>
+                    <View style={styles.errorBox}>
+                      <AlertCircle size={15} color="#DC2626" />
+                      <Text style={styles.errorText}>{formError}</Text>
                     </View>
                   )}
 
-                  {/* Section 1: Candidate Info */}
-                  <Text style={styles.sectionDividerText}>1. CONTACT & BASIC INFORMATION</Text>
+                  <Text style={styles.formGroupHeading}>1. Contact Information</Text>
 
-                  <Text style={styles.label}>Full Name *</Text>
+                  <Text style={styles.formLabel}>Full Name *</Text>
                   <TextInput
-                    style={styles.input}
-                    placeholder="e.g. Priya Sundaram"
+                    style={styles.formInput}
+                    placeholder="e.g. Priya Sharma"
                     value={fullName}
                     onChangeText={setFullName}
                     placeholderTextColor="#94A3B8"
@@ -909,10 +781,10 @@ export default function PublicCareersPage() {
 
                   <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 12 }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Email Address *</Text>
+                      <Text style={styles.formLabel}>Email Address *</Text>
                       <TextInput
-                        style={styles.input}
-                        placeholder="e.g. priya.sundaram@gmail.com"
+                        style={styles.formInput}
+                        placeholder="priya@example.com"
                         value={email}
                         onChangeText={setEmail}
                         keyboardType="email-address"
@@ -921,10 +793,10 @@ export default function PublicCareersPage() {
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Phone Number *</Text>
+                      <Text style={styles.formLabel}>Phone Number *</Text>
                       <TextInput
-                        style={styles.input}
-                        placeholder="e.g. +91 98765 43210"
+                        style={styles.formInput}
+                        placeholder="+91 98765 43210"
                         value={phone}
                         onChangeText={setPhone}
                         keyboardType="phone-pad"
@@ -933,24 +805,23 @@ export default function PublicCareersPage() {
                     </View>
                   </View>
 
-                  <Text style={styles.label}>Current Location (City, State)</Text>
+                  <Text style={styles.formLabel}>Current City</Text>
                   <TextInput
-                    style={styles.input}
+                    style={styles.formInput}
                     placeholder="e.g. Bengaluru, Karnataka"
                     value={currentLocation}
                     onChangeText={setCurrentLocation}
                     placeholderTextColor="#94A3B8"
                   />
 
-                  {/* Section 2: Professional Profile */}
-                  <Text style={[styles.sectionDividerText, { marginTop: 20 }]}>2. PROFESSIONAL BACKGROUND</Text>
+                  <Text style={[styles.formGroupHeading, { marginTop: 20 }]}>2. Experience & Links</Text>
 
                   <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 12 }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Years of Experience</Text>
+                      <Text style={styles.formLabel}>Years of Experience</Text>
                       <TextInput
-                        style={styles.input}
-                        placeholder="e.g. 5.5"
+                        style={styles.formInput}
+                        placeholder="e.g. 5"
                         value={experienceYears}
                         onChangeText={setExperienceYears}
                         keyboardType="numeric"
@@ -958,33 +829,10 @@ export default function PublicCareersPage() {
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Current / Previous Company</Text>
+                      <Text style={styles.formLabel}>Notice Period (Days)</Text>
                       <TextInput
-                        style={styles.input}
-                        placeholder="e.g. Infosys / Razorpay"
-                        value={currentCompany}
-                        onChangeText={setCurrentCompany}
-                        placeholderTextColor="#94A3B8"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 12 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Expected Compensation (INR)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="e.g. ₹28,00,000"
-                        value={expectedSalary}
-                        onChangeText={setExpectedSalary}
-                        placeholderTextColor="#94A3B8"
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Notice Period (Days)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="e.g. 15, 30, or Immediate"
+                        style={styles.formInput}
+                        placeholder="30"
                         value={noticePeriod}
                         onChangeText={setNoticePeriod}
                         keyboardType="numeric"
@@ -993,12 +841,9 @@ export default function PublicCareersPage() {
                     </View>
                   </View>
 
-                  {/* Section 3: Links */}
-                  <Text style={[styles.sectionDividerText, { marginTop: 20 }]}>3. RESUME & PORTFOLIO LINKS</Text>
-
-                  <Text style={styles.label}>Resume / CV URL (Google Drive / Dropbox link) *</Text>
+                  <Text style={styles.formLabel}>Resume Link (Google Drive / Dropbox) *</Text>
                   <TextInput
-                    style={styles.input}
+                    style={styles.formInput}
                     placeholder="https://drive.google.com/file/d/your-cv/view"
                     value={resumeUrl}
                     onChangeText={setResumeUrl}
@@ -1006,9 +851,9 @@ export default function PublicCareersPage() {
                     placeholderTextColor="#94A3B8"
                   />
 
-                  <Text style={styles.label}>LinkedIn Profile URL</Text>
+                  <Text style={styles.formLabel}>LinkedIn Profile or Portfolio URL</Text>
                   <TextInput
-                    style={styles.input}
+                    style={styles.formInput}
                     placeholder="https://linkedin.com/in/username"
                     value={linkedinUrl}
                     onChangeText={setLinkedinUrl}
@@ -1016,68 +861,18 @@ export default function PublicCareersPage() {
                     placeholderTextColor="#94A3B8"
                   />
 
-                  <Text style={styles.label}>GitHub / Design Portfolio / Website</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="https://github.com/username or https://behance.net/username"
-                    value={portfolioUrl}
-                    onChangeText={setPortfolioUrl}
-                    autoCapitalize="none"
-                    placeholderTextColor="#94A3B8"
-                  />
-
-                  {/* Section 4: Knockout & Eligibility Questions */}
-                  <Text style={[styles.sectionDividerText, { marginTop: 20 }]}>4. ELIGIBILITY & SCREENING</Text>
-
-                  <View style={styles.questionCard}>
-                    <Text style={styles.questionText}>Are you legally authorized to work in India without sponsorship?</Text>
-                    <View style={styles.radioRow}>
-                      <TouchableOpacity
-                        onPress={() => setWorkAuth('yes')}
-                        style={[styles.radioBtn, workAuth === 'yes' && styles.radioBtnActive]}
-                      >
-                        <Text style={[styles.radioBtnText, workAuth === 'yes' && styles.radioBtnTextActive]}>Yes</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => setWorkAuth('no')}
-                        style={[styles.radioBtn, workAuth === 'no' && styles.radioBtnActive]}
-                      >
-                        <Text style={[styles.radioBtnText, workAuth === 'no' && styles.radioBtnTextActive]}>No</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  <View style={styles.questionCard}>
-                    <Text style={styles.questionText}>Can you join Subedge Technology within 30 to 60 days?</Text>
-                    <View style={styles.radioRow}>
-                      <TouchableOpacity
-                        onPress={() => setCanJoin60Days('yes')}
-                        style={[styles.radioBtn, canJoin60Days === 'yes' && styles.radioBtnActive]}
-                      >
-                        <Text style={[styles.radioBtnText, canJoin60Days === 'yes' && styles.radioBtnTextActive]}>Yes</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => setCanJoin60Days('no')}
-                        style={[styles.radioBtn, canJoin60Days === 'no' && styles.radioBtnActive]}
-                      >
-                        <Text style={[styles.radioBtnText, canJoin60Days === 'no' && styles.radioBtnTextActive]}>No</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Submit Button */}
                   <TouchableOpacity
                     onPress={handleApplySubmit}
                     disabled={submitting}
-                    style={[styles.submitFormBtn, submitting && { opacity: 0.7 }]}
+                    style={[styles.submitBtn, submitting && { opacity: 0.7 }]}
                     activeOpacity={0.85}
                   >
                     {submitting ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                       <>
-                        <Send size={16} color="#FFFFFF" />
-                        <Text style={styles.submitFormBtnText}>Submit Direct Application</Text>
+                        <Send size={15} color="#FFFFFF" />
+                        <Text style={styles.submitBtnText}>Submit Application</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -1094,295 +889,244 @@ export default function PublicCareersPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
 
-  // Header
-  header: {
+  // Top Navigation Bar
+  navBar: {
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    borderBottomColor: '#E5E5E5',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
-  headerInner: {
-    maxWidth: 1200,
+  navBarInner: {
+    maxWidth: 1400,
     width: '100%',
     alignSelf: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logoImage: { width: 36, height: 36 },
-  logoTitle: { fontSize: 16, fontWeight: '900', color: '#0D7377', letterSpacing: 0.5 },
-  logoSub: { fontSize: 8, fontWeight: '700', color: '#64748B', letterSpacing: 1 },
-  portalLoginBtn: {
-    backgroundColor: '#F0F7F7',
-    paddingHorizontal: 16,
+  logoContainer: { flexDirection: 'row', alignItems: 'center' },
+  navLogo: { height: 22, width: 110 },
+  navLinksRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  navLinkItem: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  navLinkText: { fontSize: 14, color: '#1A1A1A', fontWeight: '500' },
+  navQuoteBtn: {
+    backgroundColor: '#0D7377',
+    paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CCECEC',
   },
-  portalLoginText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
+  navQuoteBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
 
-  // Hero
+  // Hero Section
   heroSection: {
     backgroundColor: '#FFFFFF',
-    paddingVertical: 56,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    paddingTop: 48,
+    paddingBottom: 64,
+    paddingHorizontal: 24,
   },
-  heroInner: { maxWidth: 960, width: '100%', alignSelf: 'center', alignItems: 'center' },
-  badge: {
+  heroInner: {
+    maxWidth: 1400,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  hiringBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F0F7F7',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 16,
+    gap: 8,
+    backgroundColor: '#F5F5F5',
     borderWidth: 1,
-    borderColor: '#CCECEC',
-  },
-  badgeText: { fontSize: 11, fontWeight: '800', color: '#0D7377', letterSpacing: 0.5 },
-  heroHeading: {
-    fontSize: 34,
-    fontWeight: '900',
-    color: '#1A1A2E',
-    textAlign: 'center',
-    letterSpacing: -0.5,
-    lineHeight: 44,
-  },
-  heroSubheading: {
-    fontSize: 15,
-    color: '#64748B',
-    textAlign: 'center',
-    marginTop: 14,
-    lineHeight: 24,
-    maxWidth: 760,
-  },
-
-  // Tech Stack Cloud
-  techStackContainer: { marginTop: 28, width: '100%', alignItems: 'center' },
-  techStackTitle: { fontSize: 11, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, marginBottom: 12 },
-  techStackRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  techTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F8FAFC',
+    borderColor: '#E5E5E5',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginBottom: 20,
   },
-  techTagText: { fontSize: 12, fontWeight: '700', color: '#1A1A2E' },
-
-  // Culture Pillars Section
-  cultureSection: { paddingVertical: 48, paddingHorizontal: 20, backgroundColor: '#F8FAFC' },
-  sectionInner: { maxWidth: 1200, width: '100%', alignSelf: 'center' },
-  sectionBadgeText: { fontSize: 11, fontWeight: '800', color: '#0D7377', letterSpacing: 1, marginBottom: 4 },
-  mainSectionTitle: { fontSize: 26, fontWeight: '900', color: '#1A1A2E', textAlign: 'center', letterSpacing: -0.5 },
-  mainSectionSub: { fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 6, maxWidth: 680 },
-  pillarsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 24 },
-  pillarCard: { flex: 1, minWidth: 260, backgroundColor: '#FFFFFF', padding: 22, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  pillarIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  pillarTitle: { fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 6 },
-  pillarDesc: { fontSize: 13, color: '#64748B', lineHeight: 20 },
-
-  // Job Explorer Section
-  jobsSection: { paddingVertical: 48, paddingHorizontal: 20, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
-  jobsSectionInner: { maxWidth: 1200, width: '100%', alignSelf: 'center' },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
-  sectionTitle: { fontSize: 22, fontWeight: '900', color: '#1A1A2E', letterSpacing: -0.5 },
-  sectionSub: { fontSize: 13, color: '#64748B', marginTop: 3 },
-  liveOpeningsBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0F7F7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#CCECEC' },
-  liveOpeningsText: { fontSize: 12, fontWeight: '800', color: '#0D7377' },
-
-  // Controls Bar
-  controlsBar: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 24,
-    gap: 14,
+  hiringBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#0D7377' },
+  hiringBadgeText: { fontSize: 12, fontWeight: '500', color: '#6B7280' },
+  heroCategory: { fontSize: 12, fontWeight: '600', color: '#0D7377', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12 },
+  heroTitle: {
+    fontSize: 44,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: -1,
+    lineHeight: 52,
+    marginBottom: 16,
   },
-  searchBox: {
+  heroSubtitle: {
+    fontSize: 18,
+    color: '#6B7280',
+    lineHeight: 28,
+    maxWidth: 680,
+  },
+
+  // Main Container
+  mainContentContainer: {
+    maxWidth: 1100,
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 80,
+  },
+
+  // Stats Strip
+  statsStrip: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 40,
+    paddingVertical: 32,
+    marginBottom: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  searchInput: { flex: 1, fontSize: 13, color: '#1A1A2E' },
-  filtersWrapper: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  filterGroupLabel: { fontSize: 11, fontWeight: '700', color: '#64748B', marginBottom: 6 },
-  filterPillsRow: { flexDirection: 'row', gap: 8 },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  filterChipActive: { backgroundColor: '#0D7377', borderColor: '#0D7377' },
-  filterChipText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
-  filterChipTextActive: { color: '#FFFFFF' },
+  statItem: {},
+  statNumber: { fontSize: 24, fontWeight: '600', color: '#0F172A' },
+  statLabel: { fontSize: 12, color: '#64748B', marginTop: 2 },
 
-  // Job Card
+  // Why build with us
+  whyBuildSection: { marginBottom: 64 },
+  sectionHeader: { marginBottom: 32 },
+  sectionTitle: { fontSize: 20, fontWeight: '600', color: '#0F172A', letterSpacing: -0.3, marginBottom: 6 },
+  sectionSub: { fontSize: 14, color: '#64748B', maxWidth: 540, lineHeight: 22 },
+
+  perksGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 24 },
+  perkCard: { flex: 1, minWidth: 220 },
+  perkIconBox: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  perkTitle: { fontSize: 14, fontWeight: '600', color: '#0F172A', marginBottom: 6 },
+  perkDesc: { fontSize: 12, color: '#64748B', lineHeight: 18 },
+
+  // Open Positions
+  openPositionsSection: { marginBottom: 40 },
+  positionsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingBottom: 14,
+    marginBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  positionsHeading: { fontSize: 20, fontWeight: '600', color: '#0F172A', letterSpacing: -0.3 },
+  positionsCountText: { fontSize: 12, fontWeight: '500', color: '#94A3B8' },
+
   jobCard: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
-    padding: 22,
+    borderColor: 'rgba(226, 232, 240, 0.8)',
+    borderRadius: 12,
+    padding: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
+    shadowOpacity: 0.02,
+    shadowRadius: 10,
     elevation: 1,
   },
-  jobCardTitle: { fontSize: 17, fontWeight: '900', color: '#1A1A2E' },
-  typeBadge: {
-    backgroundColor: '#F0F7F7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#CCECEC',
-  },
-  typeBadgeText: { fontSize: 10, fontWeight: '800', color: '#0D7377' },
-  urgentBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  urgentBadgeText: { fontSize: 10, fontWeight: '800', color: '#DC2626' },
-  jobMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginVertical: 10 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metaText: { fontSize: 12, color: '#475569', fontWeight: '600' },
-  jobCardDesc: { fontSize: 13, color: '#64748B', lineHeight: 20, marginTop: 4 },
-  skillsTagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
-  skillTag: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  skillTagText: { fontSize: 11, color: '#475569', fontWeight: '700' },
-
-  jobCardActions: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 8 },
-  detailsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F0F7F7',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CCECEC',
-  },
-  detailsBtnText: { color: '#0D7377', fontSize: 12, fontWeight: '800' },
-  applyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#0D7377',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  applyBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
-
-  // 4-Step Hiring Process Section
-  hiringSection: { paddingVertical: 48, paddingHorizontal: 20, backgroundColor: '#F8FAFC', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
-  stepsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  stepCard: { flex: 1, minWidth: 240, backgroundColor: '#FFFFFF', padding: 22, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  stepNumberBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#0D7377', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  stepNumberText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
-  stepTitle: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
-  stepTimeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginVertical: 6 },
-  stepTimeText: { fontSize: 11, fontWeight: '700', color: '#0D7377' },
-  stepDesc: { fontSize: 12, color: '#64748B', lineHeight: 18, marginTop: 4 },
-
-  // Perks & Benefits Grid
-  perksSection: { paddingVertical: 48, paddingHorizontal: 20, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
-  benefitsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  benefitCard: { flex: 1, minWidth: 260, backgroundColor: '#F8FAFC', padding: 20, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  benefitIconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  benefitTitle: { fontSize: 14, fontWeight: '800', color: '#1A1A2E', marginBottom: 4 },
-  benefitDesc: { fontSize: 12, color: '#64748B', lineHeight: 18 },
-
-  // Talent Community Card
-  talentCommunitySection: { paddingVertical: 40, paddingHorizontal: 20, backgroundColor: '#F8FAFC' },
-  talentCommunityCard: {
-    maxWidth: 1200,
-    width: '100%',
-    alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CCECEC',
-    borderRadius: 20,
-    padding: 28,
+  jobCardMainRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 20,
   },
-  talentCommunityBadge: { fontSize: 10, fontWeight: '800', color: '#0D7377', letterSpacing: 0.8 },
-  talentCommunityHeading: { fontSize: 20, fontWeight: '900', color: '#1A1A2E' },
-  talentCommunitySub: { fontSize: 13, color: '#64748B', marginTop: 4, maxWidth: 640 },
-  talentCommunityBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0D7377', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 },
-  talentCommunityBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  jobCardLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 16, flex: 1, minWidth: 280 },
+  jobIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  jobTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  jobCardTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
+  deptPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, borderWidth: 1 },
+  deptPillText: { fontSize: 11, fontWeight: '600' },
+  jobCardDesc: { fontSize: 12, color: '#64748B', lineHeight: 18, marginTop: 4 },
 
-  // Empty State
-  emptyState: { padding: 48, alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E', marginTop: 12 },
-  emptySub: { fontSize: 13, color: '#64748B', marginTop: 4, textAlign: 'center' },
-  resetFilterBtn: { marginTop: 16, backgroundColor: '#F0F7F7', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  resetFilterText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
+  jobCardRight: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  jobMetaColumn: { gap: 4 },
+  metaBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaBadgeText: { fontSize: 11, fontWeight: '500', color: '#94A3B8' },
+  arrowCircleBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
-  // Footer
-  publicFooter: {
-    paddingVertical: 32,
-    paddingHorizontal: 20,
+  // Dark Footer (Exact replica)
+  footer: {
+    backgroundColor: '#1A1A1A',
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: '#333333',
+    paddingTop: 64,
+    paddingBottom: 32,
+    paddingHorizontal: 24,
   },
   footerInner: {
-    maxWidth: 1200,
+    maxWidth: 1400,
     width: '100%',
     alignSelf: 'center',
+  },
+  footerGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 16,
+    gap: 40,
+    marginBottom: 56,
   },
-  footerBrand: { fontSize: 14, fontWeight: '800', color: '#1A1A2E' },
-  footerTagline: { fontSize: 11, color: '#64748B', marginTop: 2 },
-  footerCopy: { fontSize: 11, color: '#94A3B8' },
+  footerBrandCol: { flex: 2, minWidth: 260 },
+  footerLogo: { height: 24, width: 110, tintColor: '#FFFFFF', marginBottom: 24 },
+  addressBlock: { gap: 4, marginBottom: 20 },
+  addressHeading: { color: '#FFFFFF', fontWeight: '700' },
+  addressText: { fontSize: 13, color: '#A3A3A3', lineHeight: 20 },
+  contactText: { fontSize: 13, color: '#A3A3A3' },
+  socialsRow: { flexDirection: 'row', gap: 16, marginTop: 12 },
+  socialLink: { fontSize: 13, fontWeight: '500', color: '#A3A3A3' },
 
-  // Job Details Specs Modal
+  footerLinksCol: { flex: 1, minWidth: 130, gap: 12 },
+  footerColTitle: { fontSize: 12, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.8, marginBottom: 6 },
+  footerLink: { fontSize: 13, color: '#A3A3A3' },
+  hiringTagSmall: { backgroundColor: 'rgba(13, 115, 119, 0.25)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(13, 115, 119, 0.4)' },
+  hiringTagSmallText: { fontSize: 9, fontWeight: '700', color: '#0D7377' },
+
+  footerBottomBar: {
+    borderTopWidth: 1,
+    borderTopColor: '#333333',
+    paddingTop: 24,
+  },
+  copyrightText: { fontSize: 13, color: '#737373' },
+
+  // Modals
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
   },
-  jobDetailModalCard: {
+  detailsModalCard: {
     width: '100%',
-    maxWidth: 780,
-    maxHeight: '94%',
+    maxWidth: 680,
+    maxHeight: '92%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: 'hidden',
   },
-  jobDetailHeader: {
+  applyModalCard: {
+    width: '100%',
+    maxWidth: 600,
+    maxHeight: '92%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
@@ -1391,113 +1135,64 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
     backgroundColor: '#F8FAFC',
   },
-  jobDetailTitle: { fontSize: 19, fontWeight: '900', color: '#1A1A2E' },
-  jobDetailSubtitle: { fontSize: 12, color: '#64748B', marginTop: 3 },
-  detailMetaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
-  detailMetaBox: { flex: 1, minWidth: 180, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  detailMetaLabel: { fontSize: 10, fontWeight: '700', color: '#64748B', textTransform: 'uppercase' },
-  detailMetaVal: { fontSize: 12, fontWeight: '800', color: '#1A1A2E', marginTop: 2 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  modalSub: { fontSize: 12, color: '#64748B', marginTop: 3 },
+  closeBtn: { padding: 4 },
+
   detailSection: { marginBottom: 20 },
-  detailSectionHeading: { fontSize: 14, fontWeight: '900', color: '#1A1A2E', marginBottom: 8, letterSpacing: -0.2 },
-  detailParagraph: { fontSize: 13, color: '#475569', lineHeight: 21 },
-  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  bulletText: { flex: 1, fontSize: 13, color: '#475569', lineHeight: 20 },
-  stageDotNum: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#F0F7F7', borderWidth: 1, borderColor: '#0D7377', alignItems: 'center', justifyContent: 'center', marginTop: 2 },
-  stageDotNumText: { fontSize: 10, fontWeight: '900', color: '#0D7377' },
-  jobDetailFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  detailSectionTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 6 },
+  detailSectionBody: { fontSize: 13, color: '#475569', lineHeight: 20 },
+  bulletText: { flex: 1, fontSize: 13, color: '#475569', lineHeight: 19 },
+  skillTag: { backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  skillTagText: { fontSize: 12, fontWeight: '600', color: '#334155' },
+
+  modalFooter: {
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     backgroundColor: '#F8FAFC',
-    gap: 12,
   },
-  shareRoleBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CCECEC', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10 },
-  shareRoleText: { fontSize: 12, fontWeight: '800', color: '#0D7377' },
-  modalApplyCtaBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0D7377', paddingVertical: 12, borderRadius: 10 },
-  modalApplyCtaText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-
-  // Application Modal
-  modalCard: {
-    width: '100%',
-    maxWidth: 680,
-    maxHeight: '94%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-  },
-  modalTitle: { fontSize: 16, fontWeight: '900', color: '#1A1A2E' },
-  modalSubtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  closeBtn: { padding: 6, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
-  sectionDividerText: { fontSize: 11, fontWeight: '800', color: '#0D7377', letterSpacing: 0.8, marginBottom: 8 },
-  label: { fontSize: 12, fontWeight: '700', color: '#1A1A2E', marginBottom: 5, marginTop: 10 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  applyCtaBtn: {
+    backgroundColor: '#0D7377',
+    paddingVertical: 12,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 13,
-    color: '#1A1A2E',
-    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
   },
+  applyCtaBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 
-  // Questions
-  questionCard: {
-    backgroundColor: '#F8FAFC',
-    padding: 14,
-    borderRadius: 10,
+  // Application Form
+  formGroupHeading: { fontSize: 12, fontWeight: '700', color: '#0D7377', letterSpacing: 0.5, marginBottom: 8 },
+  formLabel: { fontSize: 12, fontWeight: '600', color: '#0F172A', marginBottom: 4, marginTop: 10 },
+  formInput: {
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginTop: 10,
-  },
-  questionText: { fontSize: 12, fontWeight: '700', color: '#1A1A2E' },
-  radioRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  radioBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
     borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#0F172A',
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
-  radioBtnActive: { backgroundColor: '#0D7377', borderColor: '#0D7377' },
-  radioBtnText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
-  radioBtnTextActive: { color: '#FFFFFF' },
-
-  submitFormBtn: {
+  submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#0D7377',
-    paddingVertical: 14,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 8,
     marginTop: 24,
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  submitFormBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEE2E2', padding: 12, borderRadius: 8, marginBottom: 16 },
-  errorBannerText: { fontSize: 12, color: '#DC2626', fontWeight: '700' },
+  submitBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEE2E2', padding: 10, borderRadius: 6, marginBottom: 14 },
+  errorText: { fontSize: 12, color: '#DC2626', fontWeight: '600' },
 
-  // Success
-  successContainer: { padding: 32, alignItems: 'center', textAlign: 'center' },
-  successCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  successHeading: { fontSize: 20, fontWeight: '900', color: '#1A1A2E', textAlign: 'center' },
-  successSub: { fontSize: 13, color: '#475569', textAlign: 'center', marginTop: 8, lineHeight: 20 },
-  resendConfirmBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F0F7F7', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#CCECEC', marginVertical: 20 },
-  resendConfirmText: { flex: 1, fontSize: 12, color: '#0D7377', lineHeight: 18 },
-  doneBtn: { backgroundColor: '#0D7377', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
-  doneBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  // Success Box
+  successBox: { padding: 36, alignItems: 'center' },
+  successIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  successHeading: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
+  successDesc: { fontSize: 13, color: '#475569', textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  doneBtn: { backgroundColor: '#0D7377', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 6, marginTop: 20 },
+  doneBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
 });
