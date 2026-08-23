@@ -245,32 +245,32 @@ export default function AttendanceScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 24, gap: 28, paddingBottom: 60 },
+  content: { padding: 16, gap: 20, paddingBottom: 60 },
   contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', padding: 40, gap: 36 },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 },
-  title: { fontSize: 32, fontWeight: '700', letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, marginTop: 4 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' },
+  title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, marginTop: 4 },
 
   cardsGridDesktop: { flexDirection: 'row', gap: 20 },
-  cardsGridMobile: { gap: 14 },
-  kpiCard: { flex: 1, padding: 24, borderRadius: 12, borderWidth: 1, gap: 12 },
+  cardsGridMobile: { gap: 12 },
+  kpiCard: { flex: 1, padding: 18, borderRadius: 12, borderWidth: 1, gap: 10 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   kpiTitle: { fontSize: 13, fontWeight: '600' },
   iconPill: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  kpiValue: { fontSize: 32, fontWeight: '700', letterSpacing: -0.5 },
+  kpiValue: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
 
   tableCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
   tableHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
     borderBottomWidth: 1,
     flexWrap: 'wrap',
     gap: 12,
   },
-  sectionTitle: { fontSize: 17, fontWeight: '600' },
+  sectionTitle: { fontSize: 16, fontWeight: '700' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -278,10 +278,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    width: 200,
+    minWidth: 160,
+    flex: 1,
+    maxWidth: 240,
     gap: 6,
   },
-  searchInput: { flex: 1, fontSize: 13, outlineStyle: 'none' } as any,
+  searchInput: { flex: 1, fontSize: 13 },
 
   table: { width: '100%' },
   tableRowHeader: {

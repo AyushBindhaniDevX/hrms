@@ -174,28 +174,28 @@ export default function DirectoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 24, gap: 28, paddingBottom: 60 },
+  content: { padding: 16, gap: 20, paddingBottom: 60 },
   contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', padding: 40, gap: 36 },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 },
-  title: { fontSize: 32, fontWeight: '700', letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, marginTop: 4 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' },
+  title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, marginTop: 4 },
 
-  controls: { gap: 16 },
+  controls: { gap: 12 },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
   },
-  searchInput: { flex: 1, fontSize: 15, outlineStyle: 'none' } as any,
+  searchInput: { flex: 1, fontSize: 14, outlineStyle: 'none' } as any,
   searchDot: { width: 6, height: 6, borderRadius: 3 },
 
-  filterScroll: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  filterPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  filterScroll: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
+  filterPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
   filterText: { fontSize: 13, fontWeight: '600' },
 
   emptyState: {
@@ -208,12 +208,12 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 20,
+    gap: 16,
   },
   card: {
-    minWidth: 240,
+    minWidth: 280,
     flex: 1,
-    padding: 24,
+    padding: 20,
     borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
