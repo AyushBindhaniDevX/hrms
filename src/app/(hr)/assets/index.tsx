@@ -11,6 +11,8 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { SidebarLayout } from '@/components/layout/Sidebar';
@@ -59,6 +61,8 @@ import {
   Smartphone,
   Tablet,
   HardDrive,
+  Focus,
+  Volume2,
 } from 'lucide-react-native';
 
 const CATEGORIES: { key: AssetCategory; label: string; prefix: string }[] = [
@@ -73,8 +77,10 @@ const CATEGORIES: { key: AssetCategory; label: string; prefix: string }[] = [
 
 export default function HRAssetsScreen() {
   const colors = useTheme();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const isTablet = width >= 768 && width < 1024;
+  const isMobile = width < 768;
 
   const [assets, setAssets] = useState<CompanyAsset[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -114,20 +120,45 @@ export default function HRAssetsScreen() {
   const [auditSuccessMsg, setAuditSuccessMsg] = useState<string | null>(null);
   const lastScannedTime = useRef<number>(0);
 
+  // Laser Scan Animation
+  const laserAnim = useRef(new Animated.Value(0)).current;
+
   // Disposal Form
   const [salvageVal, setSalvageVal] = useState('5000');
   const [disposalReason, setDisposalReason] = useState('End of lifecycle / hardware refresh');
 
+  useEffect(() => {
+    // Start continuous laser animation when scanner is active
+    if (showScannerModal) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(laserAnim, {
+            toValue: 1,
+            duration: 1800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+          Animated.timing(laserAnim, {
+            toValue: 0,
+            duration: 1800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+        ])
+      ).start();
+    } else {
+      laserAnim.setValue(0);
+    }
+  }, [showScannerModal]);
+
   // Real-time Firestore Subscription & Employee Fetching
   useEffect(() => {
-    // 1. Subscribe to Live Real-Time Assets in Firestore
     const unsubscribe = subscribeToAssets((liveAssets) => {
       setAssets(liveAssets);
       setLoading(false);
       setRefreshing(false);
     });
 
-    // 2. Fetch live employees for assignment
     getEmployees().then((data) => {
       setEmployees(data);
     }).catch((err) => console.error('Error fetching employees:', err));
@@ -136,6 +167,48 @@ export default function HRAssetsScreen() {
       unsubscribe();
     };
   }, []);
+
+  // Web BarcodeDetector Fallback for HTML5 video
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !showScannerModal || !isScanningActive) return;
+
+    let intervalId: any;
+    const initWebScanner = async () => {
+      try {
+        // @ts-ignore
+        if (typeof window !== 'undefined' && window.BarcodeDetector) {
+          // @ts-ignore
+          const detector = new window.BarcodeDetector({
+            formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'pdf417'],
+          });
+
+          intervalId = setInterval(async () => {
+            const videoElem = document.querySelector('video');
+            if (videoElem && videoElem.readyState === 4) {
+              try {
+                const barcodes = await detector.detect(videoElem);
+                if (barcodes && barcodes.length > 0) {
+                  const rawValue = barcodes[0].rawValue;
+                  if (rawValue) {
+                    handleScanLookup(rawValue);
+                  }
+                }
+              } catch (detectErr) {
+                // frame detection skip
+              }
+            }
+          }, 300);
+        }
+      } catch (e) {
+        console.log('Web BarcodeDetector fallback not active:', e);
+      }
+    };
+
+    initWebScanner();
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [showScannerModal, isScanningActive, assets]);
 
   const loadData = async () => {
     try {
@@ -181,26 +254,31 @@ export default function HRAssetsScreen() {
   };
 
   const handleScanLookup = (code: string) => {
-    setScanCode(code);
+    if (!code) return;
+    const cleanCode = code.trim();
+    setScanCode(cleanCode);
     setAuditSuccessMsg(null);
-    if (!code || !code.trim()) {
-      setScannedAsset(null);
-      return;
-    }
-    const cleanCode = code.trim().toLowerCase();
-    const match = assets.find(
-      (a) =>
-        a.asset_tag.toLowerCase() === cleanCode ||
-        a.serial_number.toLowerCase() === cleanCode ||
-        cleanCode.includes(a.asset_tag.toLowerCase())
-    );
+
+    const match = assets.find((a) => {
+      const tag = (a.asset_tag || '').toLowerCase();
+      const sn = (a.serial_number || '').toLowerCase();
+      const input = cleanCode.toLowerCase();
+      return (
+        tag === input ||
+        sn === input ||
+        input.includes(tag) ||
+        tag.includes(input) ||
+        (a.qr_code && input.includes(a.qr_code.toLowerCase()))
+      );
+    });
+
     setScannedAsset(match || null);
   };
 
   const handleBarcodeScanned = (result: BarcodeScanningResult) => {
     const now = Date.now();
-    // Throttle duplicate scan events within 1.5 seconds
-    if (now - lastScannedTime.current < 1500) return;
+    // Prevent duplicate rapid scans within 1.2 seconds
+    if (now - lastScannedTime.current < 1200) return;
     lastScannedTime.current = now;
 
     if (result && result.data) {
@@ -252,12 +330,6 @@ export default function HRAssetsScreen() {
     setShowDisposalModal(null);
   };
 
-  const handleDeleteAsset = async (assetId: string) => {
-    if (confirm('Are you sure you want to delete this asset from the registry?')) {
-      await deleteAsset(assetId);
-    }
-  };
-
   if (loading) return <LoadingState />;
 
   const filtered = assets.filter((a) => {
@@ -285,25 +357,30 @@ export default function HRAssetsScreen() {
     return nameMatch || codeMatch || desigMatch || deptMatch;
   });
 
+  const laserTranslateY = laserAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [10, 160],
+  });
+
   return (
     <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Top Header */}
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={[styles.title, { color: colors.text }]}>IT Assets & Hardware Inventory</Text>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text style={[styles.title, { color: colors.text }]}>IT Hardware & Assets</Text>
               <View style={styles.proBadge}>
                 <ShieldCheck size={11} color="#0D7377" />
-                <Text style={styles.proBadgeText}>LIVE FIRESTORE ENGINE</Text>
+                <Text style={styles.proBadgeText}>LIVE FIRESTORE</Text>
               </View>
             </View>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Physical Camera Barcode Scanning, Real-time Allocation, Audit Verification & Hardware Lifecycle
+              Physical Camera Barcode & QR Verification, Live Hardware Allocation & Audit
             </Text>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: isMobile ? 10 : 0 }}>
             <TouchableOpacity
               onPress={() => {
                 setScanCode('');
@@ -315,12 +392,12 @@ export default function HRAssetsScreen() {
               style={styles.scanActionBtn}
               activeOpacity={0.8}
             >
-              <Camera size={15} color="#0D7377" />
-              <Text style={styles.scanActionText}>📷 Camera Barcode Scanner</Text>
+              <Camera size={16} color="#0D7377" />
+              <Text style={styles.scanActionText}>📷 Scan Barcode</Text>
             </TouchableOpacity>
 
             <Button
-              title="+ Add New Asset"
+              title="+ Add Asset"
               onPress={() => setShowAddModal(true)}
               style={{ backgroundColor: '#0D7377' }}
               size="sm"
@@ -329,15 +406,16 @@ export default function HRAssetsScreen() {
         </View>
 
         <ScrollView
-          style={{ flex: 1, padding: 24 }}
+          style={{ flex: 1, padding: isMobile ? 14 : 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
+          showsVerticalScrollIndicator={false}
         >
           {/* Top KPI Metrics */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>Hardware Portfolio Value</Text>
               <Text style={styles.statNumber}>{formatCurrency(totalValue)}</Text>
-              <Text style={styles.statSub}>{assets.length} live hardware devices in registry</Text>
+              <Text style={styles.statSub}>{assets.length} live hardware devices</Text>
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>Active in Deployment</Text>
@@ -357,18 +435,19 @@ export default function HRAssetsScreen() {
               <Search size={16} color="#64748B" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search by asset tag (SUB-LPT-042), serial number, device name, or employee..."
+                placeholder="Search tag (SUB-LPT-042), serial number, device, or employee..."
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                placeholderTextColor="#94A3B8"
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <X size={15} color="#64748B" />
+                  <X size={16} color="#64748B" />
                 </TouchableOpacity>
               )}
             </View>
 
-            <View style={styles.filterRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
               {(['all', 'in_use', 'available', 'maintenance', 'retired'] as const).map((status) => {
                 const active = filter === status;
                 return (
@@ -383,25 +462,25 @@ export default function HRAssetsScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
           </View>
 
           {/* Empty State */}
           {filtered.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Package size={36} color="#94A3B8" />
+              <Package size={40} color="#94A3B8" />
               <Text style={styles.emptyTitle}>No hardware assets found</Text>
               <Text style={styles.emptySub}>
                 {searchQuery || filter !== 'all'
                   ? 'No items matched your search filter criteria.'
-                  : 'Start by clicking "+ Add New Asset" to register hardware.'}
+                  : 'Start by clicking "+ Add Asset" to register hardware devices into Firestore.'}
               </Text>
             </View>
           ) : (
-            /* Assets Grid */
+            /* Responsive Assets Grid */
             <View style={styles.grid}>
               {filtered.map((item) => (
-                <View key={item.id} style={styles.card}>
+                <View key={item.id} style={[styles.card, isMobile && { width: '100%', minWidth: '100%' }]}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <View style={styles.iconBox}>
                       {item.category === 'laptop' ? (
@@ -423,7 +502,7 @@ export default function HRAssetsScreen() {
                         style={styles.qrBadge}
                       >
                         <Barcode size={12} color="#0D7377" />
-                        <Text style={styles.qrBadgeText}>QR Sticker</Text>
+                        <Text style={styles.qrBadgeText}>QR Label</Text>
                       </TouchableOpacity>
 
                       <View
@@ -486,13 +565,15 @@ export default function HRAssetsScreen() {
                       <TouchableOpacity
                         onPress={() => handleOpenAssignModal(item)}
                         style={styles.assignBtn}
+                        activeOpacity={0.8}
                       >
-                        <Text style={styles.btnText}>Assign to Employee</Text>
+                        <Text style={styles.btnText}>Assign Employee</Text>
                       </TouchableOpacity>
                     ) : item.status === 'in_use' ? (
                       <TouchableOpacity
                         onPress={() => handleReturnAsset(item.id)}
                         style={styles.returnBtn}
+                        activeOpacity={0.8}
                       >
                         <RotateCcw size={12} color="#475569" />
                         <Text style={styles.returnBtnText}>Return to Stock</Text>
@@ -504,7 +585,7 @@ export default function HRAssetsScreen() {
                         onPress={() => handleMaintenance(item.id)}
                         style={styles.maintBtn}
                       >
-                        <Wrench size={13} color="#D97706" />
+                        <Wrench size={14} color="#D97706" />
                       </TouchableOpacity>
                     )}
 
@@ -513,7 +594,7 @@ export default function HRAssetsScreen() {
                         onPress={() => setShowDisposalModal(item)}
                         style={styles.disposeBtn}
                       >
-                        <Trash2 size={13} color="#DC2626" />
+                        <Trash2 size={14} color="#DC2626" />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -529,25 +610,25 @@ export default function HRAssetsScreen() {
         {showScannerModal && (
           <Modal visible={showScannerModal} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
-              <View style={styles.scannerModal}>
+              <View style={[styles.scannerModal, isMobile && styles.scannerModalMobile]}>
                 <View style={styles.modalHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Camera size={20} color="#0D7377" />
-                    <Text style={styles.modalTitle}>Physical Asset Camera & Barcode Verifier</Text>
+                    <Text style={styles.modalTitle}>Physical Hardware Barcode Scanner</Text>
                   </View>
-                  <TouchableOpacity onPress={() => setShowScannerModal(false)}>
+                  <TouchableOpacity onPress={() => setShowScannerModal(false)} style={styles.modalCloseBtn}>
                     <X size={20} color="#64748B" />
                   </TouchableOpacity>
                 </View>
 
-                <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+                <ScrollView style={{ padding: isMobile ? 14 : 20 }} showsVerticalScrollIndicator={false}>
                   {/* Camera View / Permission Request */}
                   {!permission?.granted ? (
                     <View style={styles.cameraPermissionBox}>
-                      <Camera size={44} color="#0D7377" />
+                      <Camera size={48} color="#0D7377" />
                       <Text style={styles.cameraPermHeading}>Camera Access Required</Text>
                       <Text style={styles.cameraPermSub}>
-                        Grant camera permissions to scan physical QR codes and barcode serial tags affixed to company hardware.
+                        Grant camera permission to scan physical QR codes and barcode stickers attached to company devices.
                       </Text>
                       <TouchableOpacity
                         onPress={requestPermission}
@@ -560,21 +641,38 @@ export default function HRAssetsScreen() {
                   ) : (
                     <View style={styles.cameraContainer}>
                       <CameraView
-                        style={styles.cameraPreview}
+                        style={[styles.cameraPreview, { height: isMobile ? 280 : 250 }]}
                         facing={facing}
                         enableTorch={enableTorch}
+                        autofocus="on"
                         barcodeScannerSettings={{
-                          barcodeTypes: ['qr', 'ean13', 'code128', 'code39', 'upc_a', 'upc_e', 'ean8', 'pdf417'],
+                          barcodeTypes: [
+                            'qr',
+                            'code128',
+                            'code39',
+                            'ean13',
+                            'ean8',
+                            'upc_a',
+                            'upc_e',
+                            'pdf417',
+                            'aztec',
+                            'datamatrix',
+                          ],
                         }}
                         onBarcodeScanned={isScanningActive ? handleBarcodeScanned : undefined}
                       >
                         {/* Target Reticle Overlay */}
-                        <View style={styles.reticleOverlay}>
+                        <View style={[styles.reticleOverlay, isMobile && { width: 240, height: 180 }]}>
                           <View style={styles.reticleCornerTL} />
                           <View style={styles.reticleCornerTR} />
                           <View style={styles.reticleCornerBL} />
                           <View style={styles.reticleCornerBR} />
-                          <View style={styles.scanningLaser} />
+                          <Animated.View
+                            style={[
+                              styles.scanningLaser,
+                              { transform: [{ translateY: laserTranslateY }] },
+                            ]}
+                          />
                         </View>
 
                         {/* Top Controls Overlay */}
@@ -599,13 +697,13 @@ export default function HRAssetsScreen() {
                         </View>
                       </CameraView>
                       <Text style={styles.cameraInstructions}>
-                        Align hardware barcode or QR label inside the camera frame
+                        Align hardware barcode or QR label inside the targeting frame
                       </Text>
                     </View>
                   )}
 
                   {/* Manual Barcode / Serial Lookup Fallback */}
-                  <Text style={[styles.label, { marginTop: 16 }]}>Or Enter Tag / Serial Number Manually:</Text>
+                  <Text style={[styles.label, { marginTop: 12 }]}>Or Lookup Tag / Serial Number Manually:</Text>
                   <View style={styles.searchBar}>
                     <Barcode size={16} color="#0D7377" />
                     <TextInput
@@ -613,6 +711,7 @@ export default function HRAssetsScreen() {
                       placeholder="e.g. SUB-LPT-042 or C02G99812A"
                       value={scanCode}
                       onChangeText={handleScanLookup}
+                      placeholderTextColor="#94A3B8"
                     />
                     {scanCode.length > 0 && (
                       <TouchableOpacity onPress={() => handleScanLookup('')}>
@@ -680,42 +779,43 @@ export default function HRAssetsScreen() {
         {assignAsset && (
           <Modal visible={!!assignAsset} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
-              <View style={styles.employeePickerModal}>
+              <View style={[styles.employeePickerModal, isMobile && styles.employeePickerModalMobile]}>
                 <View style={styles.modalHeader}>
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.modalTitle}>Assign Hardware to Employee</Text>
                     <Text style={styles.modalSubtitle}>
                       {assignAsset.name} ({assignAsset.asset_tag})
                     </Text>
                   </View>
-                  <TouchableOpacity onPress={() => setAssignAsset(null)}>
+                  <TouchableOpacity onPress={() => setAssignAsset(null)} style={styles.modalCloseBtn}>
                     <X size={20} color="#64748B" />
                   </TouchableOpacity>
                 </View>
 
-                <View style={{ padding: 20 }}>
+                <View style={{ padding: isMobile ? 14 : 20, flex: 1 }}>
                   {/* Search Employees */}
-                  <View style={[styles.searchBar, { marginBottom: 14 }]}>
+                  <View style={[styles.searchBar, { marginBottom: 12 }]}>
                     <Search size={16} color="#64748B" />
                     <TextInput
                       style={styles.searchInput}
                       placeholder="Search employee by name, code, designation, or department..."
                       value={employeeSearch}
                       onChangeText={setEmployeeSearch}
+                      placeholderTextColor="#94A3B8"
                     />
                     {employeeSearch.length > 0 && (
                       <TouchableOpacity onPress={() => setEmployeeSearch('')}>
-                        <X size={15} color="#64748B" />
+                        <X size={16} color="#64748B" />
                       </TouchableOpacity>
                     )}
                   </View>
 
                   <Text style={styles.label}>Select Target Employee ({filteredEmployees.length} Available)</Text>
 
-                  <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={true}>
+                  <ScrollView style={{ flex: 1, maxHeight: isMobile ? 320 : 280 }} showsVerticalScrollIndicator={true}>
                     {filteredEmployees.length === 0 ? (
                       <View style={{ padding: 24, alignItems: 'center' }}>
-                        <User size={28} color="#94A3B8" />
+                        <User size={30} color="#94A3B8" />
                         <Text style={{ marginTop: 8, color: '#64748B', fontSize: 13 }}>No matching employees found.</Text>
                       </View>
                     ) : (
@@ -761,7 +861,7 @@ export default function HRAssetsScreen() {
                     style={[
                       styles.modalSubmitBtn,
                       (!selectedEmployee || assigning) && { opacity: 0.5 },
-                      { marginTop: 16 },
+                      { marginTop: 14 },
                     ]}
                   >
                     {assigning ? (
@@ -789,7 +889,7 @@ export default function HRAssetsScreen() {
         {showBarcodeModal && (
           <Modal visible={!!showBarcodeModal} animationType="fade" transparent>
             <View style={styles.modalOverlay}>
-              <View style={styles.barcodeModal}>
+              <View style={[styles.barcodeModal, isMobile && { width: '95%' }]}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Hardware Barcode Sticker</Text>
                   <TouchableOpacity onPress={() => setShowBarcodeModal(null)}>
@@ -840,47 +940,49 @@ export default function HRAssetsScreen() {
         {/* ======================================================== */}
         {/* MODAL 4: REGISTER NEW ASSET */}
         {/* ======================================================== */}
-        <Modal visible={showAddModal} animationType="slide" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Register New Hardware Asset</Text>
-                <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={{ padding: 20 }}>
-                <Text style={styles.label}>Device / Asset Name *</Text>
-                <TextInput style={styles.input} placeholder="e.g. MacBook Pro 16 M3 Max" value={name} onChangeText={setName} />
-
-                <Text style={styles.label}>Asset Category</Text>
-                <View style={styles.catGrid}>
-                  {CATEGORIES.map((c) => (
-                    <TouchableOpacity
-                      key={c.key}
-                      onPress={() => setCategory(c.key)}
-                      style={[styles.catBtn, category === c.key && styles.catBtnActive]}
-                    >
-                      <Text style={[styles.catText, category === c.key && styles.catTextActive]}>{c.label}</Text>
-                    </TouchableOpacity>
-                  ))}
+        {showAddModal && (
+          <Modal visible={showAddModal} animationType="slide" transparent>
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, isMobile && { width: '95%', maxHeight: '92%' }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Register New Hardware Asset</Text>
+                  <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                    <X size={20} color="#64748B" />
+                  </TouchableOpacity>
                 </View>
 
-                <Text style={styles.label}>Model & Specifications</Text>
-                <TextInput style={styles.input} placeholder="e.g. 64GB RAM / 1TB SSD" value={model} onChangeText={setModel} />
+                <ScrollView style={{ padding: 20 }}>
+                  <Text style={styles.label}>Device / Asset Name *</Text>
+                  <TextInput style={styles.input} placeholder="e.g. MacBook Pro 16 M3 Max" value={name} onChangeText={setName} />
 
-                <Text style={styles.label}>Hardware Serial Number (SN) *</Text>
-                <TextInput style={styles.input} placeholder="e.g. C02G99812A" value={serial} onChangeText={setSerial} />
+                  <Text style={styles.label}>Asset Category</Text>
+                  <View style={styles.catGrid}>
+                    {CATEGORIES.map((c) => (
+                      <TouchableOpacity
+                        key={c.key}
+                        onPress={() => setCategory(c.key)}
+                        style={[styles.catBtn, category === c.key && styles.catBtnActive]}
+                      >
+                        <Text style={[styles.catText, category === c.key && styles.catTextActive]}>{c.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-                <Text style={styles.label}>Purchase Valuation (INR)</Text>
-                <TextInput style={styles.input} placeholder="e.g. 240000" value={value} onChangeText={setValue} keyboardType="numeric" />
+                  <Text style={styles.label}>Model & Specifications</Text>
+                  <TextInput style={styles.input} placeholder="e.g. 64GB RAM / 1TB SSD" value={model} onChangeText={setModel} />
 
-                <Button title="Register Asset in Live Firestore" onPress={handleCreateAsset} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
-              </ScrollView>
+                  <Text style={styles.label}>Hardware Serial Number (SN) *</Text>
+                  <TextInput style={styles.input} placeholder="e.g. C02G99812A" value={serial} onChangeText={setSerial} />
+
+                  <Text style={styles.label}>Purchase Valuation (INR)</Text>
+                  <TextInput style={styles.input} placeholder="e.g. 240000" value={value} onChangeText={setValue} keyboardType="numeric" />
+
+                  <Button title="Register Asset in Live Firestore" onPress={handleCreateAsset} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
+                </ScrollView>
+              </View>
             </View>
-          </View>
-        </Modal>
+          </Modal>
+        )}
 
         {/* ======================================================== */}
         {/* MODAL 5: DISPOSAL / RETIREMENT */}
@@ -888,7 +990,7 @@ export default function HRAssetsScreen() {
         {showDisposalModal && (
           <Modal visible={!!showDisposalModal} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
+              <View style={[styles.modalContent, isMobile && { width: '95%' }]}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Retire / Dispose Asset</Text>
                   <TouchableOpacity onPress={() => setShowDisposalModal(null)}>
@@ -919,8 +1021,8 @@ export default function HRAssetsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   topBar: {
-    paddingHorizontal: 24,
-    paddingVertical: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -929,32 +1031,32 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, marginTop: 2 },
+  subtitle: { fontSize: 12, marginTop: 2 },
   proBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0F7F7', borderWidth: 1, borderColor: '#CCECEC', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   proBadgeText: { color: '#0D7377', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   scanActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0F7F7', borderWidth: 1, borderColor: '#CCECEC', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   scanActionText: { color: '#0D7377', fontSize: 12, fontWeight: '800' },
-  statsRow: { flexDirection: 'row', gap: 16, marginBottom: 20, flexWrap: 'wrap' },
-  statCard: { flex: 1, minWidth: 200, backgroundColor: '#FFFFFF', padding: 18, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  statLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
-  statNumber: { fontSize: 24, fontWeight: '800', marginVertical: 4, color: '#1A1A2E' },
+  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
+  statCard: { flex: 1, minWidth: 160, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
+  statLabel: { fontSize: 11, color: '#64748B', fontWeight: '700' },
+  statNumber: { fontSize: 22, fontWeight: '900', marginVertical: 4, color: '#1A1A2E' },
   statSub: { fontSize: 11, color: '#94A3B8' },
-  controlsBar: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 20, gap: 12 },
+  controlsBar: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 16, gap: 10 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   searchInput: { flex: 1, fontSize: 13, color: '#1A1A2E' },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterRow: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
   filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F5F9' },
   filterChipActive: { backgroundColor: '#0D7377' },
   filterText: { fontSize: 11, fontWeight: '700', color: '#64748B' },
   filterTextActive: { color: '#FFFFFF' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  card: { width: '48%', minWidth: 320, backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  iconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  card: { width: '48.5%', minWidth: 320, backgroundColor: '#FFFFFF', padding: 18, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
+  iconBox: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
   qrBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0F7F7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#CCECEC' },
   qrBadgeText: { fontSize: 10, fontWeight: '800', color: '#0D7377' },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusBadgeText: { fontSize: 10, fontWeight: '800' },
-  assetName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E', marginTop: 12 },
+  assetName: { fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginTop: 12 },
   tagRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   tagBox: { backgroundColor: '#F0F7F7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   tagText: { fontSize: 10, fontWeight: '800', color: '#0D7377' },
@@ -966,60 +1068,64 @@ const styles = StyleSheet.create({
   assignedBox: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ECFDF5', padding: 8, borderRadius: 8, marginTop: 10 },
   assignedText: { fontSize: 11, fontWeight: '700', color: '#059669' },
   cardActions: { flexDirection: 'row', gap: 8, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
-  assignBtn: { flex: 1, backgroundColor: '#0D7377', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  btnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  returnBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#F1F5F9', paddingVertical: 8, borderRadius: 8 },
+  assignBtn: { flex: 1, backgroundColor: '#0D7377', paddingVertical: 9, borderRadius: 8, alignItems: 'center' },
+  btnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  returnBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#F1F5F9', paddingVertical: 9, borderRadius: 8 },
   returnBtnText: { color: '#475569', fontSize: 11, fontWeight: '700' },
-  maintBtn: { backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  disposeBtn: { backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  maintBtn: { backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  disposeBtn: { backgroundColor: '#FEE2E2', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   emptyCard: { padding: 48, alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', width: '100%' },
   emptyTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E', marginTop: 12 },
   emptySub: { fontSize: 13, color: '#64748B', marginTop: 4, textAlign: 'center' },
 
   // Scanner Modal & Camera View
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   scannerModal: { width: '100%', maxWidth: 620, maxHeight: '92%', backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden' },
+  scannerModalMobile: { width: '100%', maxHeight: '96%', borderRadius: 16 },
   barcodeModal: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden' },
   modalContent: { width: '100%', maxWidth: 520, backgroundColor: '#FFFFFF', borderRadius: 18, overflow: 'hidden' },
   employeePickerModal: { width: '100%', maxWidth: 540, maxHeight: '90%', backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
-  modalTitle: { fontSize: 17, fontWeight: '800', color: '#1A1A2E' },
+  employeePickerModalMobile: { width: '100%', maxHeight: '95%', borderRadius: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
   modalSubtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  modalCloseBtn: { padding: 4, borderRadius: 6, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
 
   // Camera Box
-  cameraContainer: { width: '100%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#000000', marginBottom: 12 },
-  cameraPreview: { width: '100%', height: 260, justifyContent: 'center', alignItems: 'center' },
+  cameraContainer: { width: '100%', borderRadius: 14, overflow: 'hidden', backgroundColor: '#000000', marginBottom: 10 },
+  cameraPreview: { width: '100%', justifyContent: 'center', alignItems: 'center' },
   reticleOverlay: {
-    width: 200,
-    height: 140,
+    width: 210,
+    height: 150,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.35)',
     borderRadius: 12,
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
-  reticleCornerTL: { position: 'absolute', top: -2, left: -2, width: 16, height: 16, borderTopWidth: 3, borderLeftWidth: 3, borderColor: '#0D7377' },
-  reticleCornerTR: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderTopWidth: 3, borderRightWidth: 3, borderColor: '#0D7377' },
-  reticleCornerBL: { position: 'absolute', bottom: -2, left: -2, width: 16, height: 16, borderBottomWidth: 3, borderLeftWidth: 3, borderColor: '#0D7377' },
-  reticleCornerBR: { position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderBottomWidth: 3, borderRightWidth: 3, borderColor: '#0D7377' },
-  scanningLaser: { width: '90%', height: 2, backgroundColor: '#0D7377', shadowColor: '#0D7377', shadowOpacity: 0.8, shadowRadius: 4 },
-  cameraControlsBar: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', gap: 8 },
-  camControlBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  reticleCornerTL: { position: 'absolute', top: -2, left: -2, width: 18, height: 18, borderTopWidth: 3.5, borderLeftWidth: 3.5, borderColor: '#10B981' },
+  reticleCornerTR: { position: 'absolute', top: -2, right: -2, width: 18, height: 18, borderTopWidth: 3.5, borderRightWidth: 3.5, borderColor: '#10B981' },
+  reticleCornerBL: { position: 'absolute', bottom: -2, left: -2, width: 18, height: 18, borderBottomWidth: 3.5, borderLeftWidth: 3.5, borderColor: '#10B981' },
+  reticleCornerBR: { position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderBottomWidth: 3.5, borderRightWidth: 3.5, borderColor: '#10B981' },
+  scanningLaser: { width: '100%', height: 3, backgroundColor: '#10B981', shadowColor: '#10B981', shadowOpacity: 0.9, shadowRadius: 6 },
+  cameraControlsBar: { position: 'absolute', top: 10, right: 10, flexDirection: 'row', gap: 8 },
+  camControlBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
   camControlBtnActive: { backgroundColor: '#FFFFFF' },
   camControlText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
   camControlTextActive: { color: '#0D7377' },
   cameraInstructions: { fontSize: 11, color: '#64748B', textAlign: 'center', marginTop: 8 },
 
   cameraPermissionBox: {
-    height: 220,
+    height: 230,
     backgroundColor: '#F0F7F7',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#CCECEC',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: 20,
     textAlign: 'center',
   },
   cameraPermHeading: { fontSize: 16, fontWeight: '800', color: '#1A1A2E', marginTop: 12 },
@@ -1058,7 +1164,7 @@ const styles = StyleSheet.create({
   matchAssign: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   matchAssignText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
   lastAuditedText: { fontSize: 11, color: '#64748B', marginTop: 4 },
-  verifyAuditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0D7377', paddingVertical: 10, borderRadius: 8, marginTop: 12 },
+  verifyAuditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0D7377', paddingVertical: 11, borderRadius: 8, marginTop: 12 },
   verifyAuditBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
   noMatchCard: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFFBEB', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A', marginTop: 12 },
   noMatchText: { fontSize: 12, color: '#92400E', fontWeight: '600' },

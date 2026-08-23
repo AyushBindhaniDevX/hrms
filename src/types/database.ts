@@ -552,6 +552,8 @@ export interface CompanyAsset {
   assigned_employee_name?: string | null;
   status: AssetStatus;
   notes?: string;
+  qr_code?: string;
+  warranty_expiry?: string;
   last_audited_at?: string;
   last_auditor_name?: string;
   salvage_value?: number;
