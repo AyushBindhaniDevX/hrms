@@ -194,29 +194,8 @@ export default function AdminDashboard() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero Header */}
-          <Animated.View entering={FadeInDown.duration(350).springify()}>
-            <View style={[styles.heroBar, { backgroundColor: '#1A1A2E' }]}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.heroGreeting}>{getGreeting().toUpperCase()}, {profile?.full_name?.split(' ')[0] || 'ADMIN'}</Text>
-                <Text style={styles.heroTitle}>{organization?.name || 'Subedge Technology Pvt Ltd'}</Text>
-                <Text style={styles.heroSub}>
-                  Oasis Platform: System Administration Console · {formatDate(new Date())}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push('/(admin)/users' as never)}
-                style={styles.heroAddBtn}
-                activeOpacity={0.85}
-              >
-                <UserPlus size={16} color="#FFF" />
-                <Text style={styles.heroAddBtnText}>Add User</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-
           {/* KPI Grid */}
-          <Animated.View entering={FadeInDown.delay(80).duration(350).springify()}>
+          <Animated.View entering={FadeInDown.duration(350).springify()}>
             <View style={isDesktop ? styles.kpiRowDesktop : styles.kpiRowMobile}>
               {kpis.map((k, i) => (
                 <View key={i} style={[styles.kpiCard, { backgroundColor: k.bg, borderColor: k.border }]}>
@@ -375,34 +354,11 @@ export default function AdminDashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { gap: 24, paddingBottom: 60 },
-  contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', paddingHorizontal: 36, paddingTop: 36, gap: 28 },
-
-  heroBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-    paddingTop: 36,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  heroGreeting: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
-  heroTitle: { color: '#FFF', fontSize: 24, fontWeight: '800', marginTop: 4, letterSpacing: -0.4 },
-  heroSub: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 4 },
-  heroAddBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#006a61',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  heroAddBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  content: { gap: 24, paddingBottom: 60, paddingHorizontal: 16, paddingTop: 20 },
+  contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', paddingHorizontal: 36, paddingTop: 28, gap: 28 },
 
   kpiRowDesktop: { flexDirection: 'row', gap: 16 },
-  kpiRowMobile: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16 },
+  kpiRowMobile: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   kpiCard: {
     flex: 1,
     minWidth: 140,
