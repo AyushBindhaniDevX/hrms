@@ -60,14 +60,20 @@ export default function DirectoryScreen() {
       contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
     >
       {/* Header */}
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: colors.text }]}>Company Directory</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Find and connect with {employees.length} colleagues across the organization.
-          </Text>
+      {isDesktop ? (
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: colors.text }]}>Company Directory</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Find and connect with {employees.length} colleagues across the organization.
+            </Text>
+          </View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.mHeader}>
+          <Text style={styles.mHeaderTitle}>Directory</Text>
+        </View>
+      )}
 
       {/* Search + Filters */}
       <View style={styles.controls}>
@@ -180,6 +186,24 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' },
   title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 14, marginTop: 4 },
+
+  mHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    marginHorizontal: -16, // Counteract content padding
+    marginTop: -16,
+    marginBottom: 0,
+  },
+  mHeaderTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    paddingHorizontal: 20,
+    letterSpacing: -0.5,
+  },
 
   controls: { gap: 12 },
   searchBox: {

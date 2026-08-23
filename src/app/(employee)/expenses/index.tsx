@@ -6,10 +6,11 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Modal,
+  Modal as RNModal,
   RefreshControl,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
-import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { LoadingState } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
@@ -17,30 +18,32 @@ import { getExpenses, createExpenseClaim } from '@/lib/services/expenses';
 import { ExpenseClaim, ExpenseCategory } from '@/types/database';
 import { formatCurrency } from '@/utils/format';
 import {
-  DollarSign,
   Plus,
-  Clock,
-  CheckCircle,
   X,
   Receipt,
   Car,
-  Plane,
-  Building,
-  TrendingUp,
-  Sparkles,
+  Utensils,
+  Globe,
+  GraduationCap,
+  Laptop,
+  Package,
 } from 'lucide-react-native';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
-const CATEGORIES: { key: ExpenseCategory; label: string; icon: string }[] = [
-  { key: 'travel', label: 'Travel & Mileage', icon: '🚗' },
-  { key: 'meals', label: 'Per Diem / Meals', icon: '🍱' },
-  { key: 'internet', label: 'Broadband / Phone', icon: '🌐' },
-  { key: 'learning', label: 'Certification / L&D', icon: '🎓' },
-  { key: 'hardware', label: 'Home Office Hardware', icon: '💻' },
-  { key: 'other', label: 'Other Sundry', icon: '📦' },
+const CATEGORIES: { key: ExpenseCategory; label: string; Icon: React.ElementType }[] = [
+  { key: 'travel', label: 'Travel & Mileage', Icon: Car },
+  { key: 'meals', label: 'Per Diem / Meals', Icon: Utensils },
+  { key: 'internet', label: 'Broadband / Phone', Icon: Globe },
+  { key: 'learning', label: 'Certification / L&D', Icon: GraduationCap },
+  { key: 'hardware', label: 'Home Office Hardware', Icon: Laptop },
+  { key: 'other', label: 'Other Sundry', Icon: Package },
 ];
 
 export default function EmployeeExpensesScreen() {
   const colors = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+
   const [expenses, setExpenses] = useState<ExpenseClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,7 +88,7 @@ export default function EmployeeExpensesScreen() {
 
     if (isMileage) {
       const km = parseFloat(kmDistance) || 0;
-      finalAmt = km * 46; // Official mileage rate ₹46/km
+      finalAmt = km * 46;
       finalDesc = `Mileage claim: ${km} km @ ₹46/km. ${desc}`;
     }
 
@@ -113,6 +116,173 @@ export default function EmployeeExpensesScreen() {
 
   const myTotal = expenses.reduce((acc, curr) => acc + curr.amount, 0);
 
+  if (!isDesktop) {
+    return (
+      <View style={[mStyles.root, { backgroundColor: colors.background }]}>
+        <Animated.View entering={FadeInDown.duration(300).springify()} style={[mStyles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+          <Text style={[mStyles.headerTitle, { color: colors.text }]}>Expenses</Text>
+        </Animated.View>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={mStyles.content}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View entering={FadeInDown.delay(100).duration(300).springify()}>
+            <View style={mStyles.banner}>
+              <View>
+                <Text style={mStyles.bannerSub}>Total Claims (INR)</Text>
+                <Text style={mStyles.bannerAmount}>{formatCurrency(myTotal)}</Text>
+              </View>
+              <View style={mStyles.badgePill}>
+                <Text style={mStyles.badgePillText}>Settled Monthly</Text>
+              </View>
+            </View>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(200).duration(300).springify()}>
+            <View style={mStyles.sectionHeader}>
+              <Text style={[mStyles.sectionTitle, { color: colors.text }]}>History ({expenses.length})</Text>
+            </View>
+
+            {expenses.length === 0 ? (
+              <Text style={mStyles.emptyText}>No expense claims submitted yet.</Text>
+            ) : (
+              <View style={{ gap: 12 }}>
+                {expenses.map((item, idx) => (
+                  <View key={item.id} style={[mStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={mStyles.cardRow}>
+                      <View style={mStyles.iconBox}>
+                        <Receipt size={18} color="#0D7377" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[mStyles.cardTitle, { color: colors.text }]}>{item.title}</Text>
+                        <Text style={[mStyles.cardMeta, { color: colors.textSecondary }]}>
+                          {item.category.toUpperCase()} · {item.spent_at}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                        <Text style={[mStyles.cardAmount, { color: colors.text }]}>{formatCurrency(item.amount)}</Text>
+                        <View
+                          style={[
+                            mStyles.statusTag,
+                            item.status === 'approved' && { backgroundColor: '#D1FAE5' },
+                            item.status === 'pending' && { backgroundColor: '#FEF3C7' },
+                            item.status === 'rejected' && { backgroundColor: '#FEE2E2' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              mStyles.statusText,
+                              item.status === 'approved' && { color: '#059669' },
+                              item.status === 'pending' && { color: '#D97706' },
+                              item.status === 'rejected' && { color: '#DC2626' },
+                            ]}
+                          >
+                            {item.status.toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </Animated.View>
+          <View style={{ height: 80 }} />
+        </ScrollView>
+
+        {/* FAB */}
+        <TouchableOpacity
+          onPress={() => setShowModal(true)}
+          style={mStyles.fab}
+          activeOpacity={0.8}
+        >
+          <Plus size={24} color="#FFF" />
+        </TouchableOpacity>
+
+        {/* Mobile Modal */}
+        <RNModal visible={showModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowModal(false)}>
+          <View style={[mStyles.modalSheet, { backgroundColor: colors.background }]}>
+            <View style={[mStyles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+              <Text style={[mStyles.modalTitle, { color: colors.text }]}>New Claim</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)} style={{ padding: 4 }}>
+                <X size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ flex: 1, padding: 20 }} keyboardShouldPersistTaps="handled">
+              <Text style={[mStyles.label, { color: colors.text }]}>Claim Title *</Text>
+              <TextInput style={[mStyles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surface }]} placeholder="e.g. Client Site Visit Mileage" placeholderTextColor={colors.textSecondary} value={title} onChangeText={setTitle} />
+
+              <Text style={[mStyles.label, { color: colors.text, marginTop: 16 }]}>Category</Text>
+              <View style={mStyles.catGrid}>
+                {CATEGORIES.map((c) => {
+                  const Icon = c.Icon;
+                  const isActive = category === c.key;
+                  return (
+                    <TouchableOpacity
+                      key={c.key}
+                      onPress={() => {
+                        setCategory(c.key);
+                        setIsMileage(c.key === 'travel');
+                      }}
+                      style={[mStyles.catBtn, { backgroundColor: isActive ? '#0D7377' : colors.surface, borderColor: colors.border }]}
+                    >
+                      <Icon size={16} color={isActive ? '#FFF' : colors.textSecondary} />
+                      <Text style={[mStyles.catText, { color: isActive ? '#FFF' : colors.text }]}>
+                        {c.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {isMileage && (
+                <View style={mStyles.mileageBox}>
+                  <Text style={mStyles.mileageTitle}>🚗 Mileage Calculator (₹46 / km)</Text>
+                  <TextInput
+                    style={[mStyles.input, { borderColor: '#CCECEC', color: '#0F172A', backgroundColor: '#FFF' }]}
+                    placeholder="Enter distance in kilometers (e.g. 75)"
+                    value={kmDistance}
+                    onChangeText={handleMileageChange}
+                    keyboardType="numeric"
+                  />
+                </View>
+              )}
+
+              <Text style={[mStyles.label, { color: colors.text, marginTop: 16 }]}>Amount (INR) *</Text>
+              <TextInput
+                style={[mStyles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surface }]}
+                placeholder="0.00"
+                placeholderTextColor={colors.textSecondary}
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="numeric"
+              />
+
+              <Text style={[mStyles.label, { color: colors.text, marginTop: 16 }]}>Description</Text>
+              <TextInput
+                style={[mStyles.input, { height: 80, borderColor: colors.border, color: colors.text, backgroundColor: colors.surface }]}
+                multiline
+                placeholder="Briefly justify..."
+                placeholderTextColor={colors.textSecondary}
+                value={desc}
+                onChangeText={setDesc}
+              />
+
+              <Button title="Submit Claim" onPress={handleSubmit} style={{ backgroundColor: '#0D7377', marginTop: 24 }} />
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </View>
+        </RNModal>
+      </View>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // DESKTOP LAYOUT (unchanged mostly, but use RNModal nicely)
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
@@ -133,65 +303,63 @@ export default function EmployeeExpensesScreen() {
         style={{ flex: 1, padding: 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
       >
-        {/* Banner */}
         <View style={styles.banner}>
           <View>
             <Text style={styles.bannerSub}>Total Submitted Claims</Text>
             <Text style={styles.bannerAmount}>{formatCurrency(myTotal)}</Text>
           </View>
           <View style={styles.badgePill}>
-              <Text style={styles.badgePillText}>Standard Settlement: Monthly Payroll</Text>
-            </View>
+            <Text style={styles.badgePillText}>Standard Settlement: Monthly Payroll</Text>
           </View>
+        </View>
 
-          {/* List */}
-          <Text style={styles.sectionTitle}>Claim History ({expenses.length})</Text>
-          <View style={{ gap: 12 }}>
-            {expenses.map((item) => (
-              <View key={item.id} style={styles.card}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                  <View style={styles.iconBox}>
-                    <Receipt size={20} color="#0D7377" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cardTitle}>{item.title}</Text>
-                    <Text style={styles.cardDesc}>{item.description}</Text>
-                    <Text style={styles.cardMeta}>Category: {item.category.toUpperCase()} · Date: {item.spent_at}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                    <Text style={styles.cardAmount}>{formatCurrency(item.amount)}</Text>
-                    <View
+        <Text style={styles.sectionTitle}>Claim History ({expenses.length})</Text>
+        <View style={{ gap: 12 }}>
+          {expenses.map((item) => (
+            <View key={item.id} style={styles.card}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <View style={styles.iconBox}>
+                  <Receipt size={20} color="#0D7377" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={styles.cardDesc}>{item.description}</Text>
+                  <Text style={styles.cardMeta}>Category: {item.category.toUpperCase()} · Date: {item.spent_at}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                  <Text style={styles.cardAmount}>{formatCurrency(item.amount)}</Text>
+                  <View
+                    style={[
+                      styles.statusTag,
+                      item.status === 'approved' && { backgroundColor: '#D1FAE5' },
+                      item.status === 'pending' && { backgroundColor: '#FEF3C7' },
+                      item.status === 'rejected' && { backgroundColor: '#FEE2E2' },
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.statusTag,
-                        item.status === 'approved' && { backgroundColor: '#D1FAE5' },
-                        item.status === 'pending' && { backgroundColor: '#FEF3C7' },
-                        item.status === 'rejected' && { backgroundColor: '#FEE2E2' },
+                        styles.statusText,
+                        item.status === 'approved' && { color: '#059669' },
+                        item.status === 'pending' && { color: '#D97706' },
+                        item.status === 'rejected' && { color: '#DC2626' },
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.statusText,
-                          item.status === 'approved' && { color: '#059669' },
-                          item.status === 'pending' && { color: '#D97706' },
-                          item.status === 'rejected' && { color: '#DC2626' },
-                        ]}
-                      >
-                        {item.status.toUpperCase()}
-                      </Text>
-                    </View>
+                      {item.status.toUpperCase()}
+                    </Text>
                   </View>
                 </View>
               </View>
-            ))}
-          </View>
-        </ScrollView>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
 
-        {/* Claim Modal */}
-        <Modal visible={showModal} animationType="slide" transparent>
+      {showModal && (
+        <RNModal visible={showModal} animationType="fade" transparent onRequestClose={() => setShowModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Submit Reimbursement Claim</Text>
+                <Text style={styles.modalTitle}>Submit Reimbursement</Text>
                 <TouchableOpacity onPress={() => setShowModal(false)}>
                   <X size={20} color="#64748B" />
                 </TouchableOpacity>
@@ -199,24 +367,25 @@ export default function EmployeeExpensesScreen() {
 
               <ScrollView style={{ padding: 20 }}>
                 <Text style={styles.label}>Claim Title *</Text>
-                <TextInput style={styles.input} placeholder="e.g. Client Site Visit Mileage" value={title} onChangeText={setTitle} />
+                <TextInput style={styles.input} placeholder="e.g. Client Site Visit" value={title} onChangeText={setTitle} />
 
                 <Text style={styles.label}>Category</Text>
                 <View style={styles.catGrid}>
-                  {CATEGORIES.map((c) => (
-                    <TouchableOpacity
-                      key={c.key}
-                      onPress={() => {
-                        setCategory(c.key);
-                        setIsMileage(c.key === 'travel');
-                      }}
-                      style={[styles.catBtn, category === c.key && styles.catBtnActive]}
-                    >
-                      <Text style={[styles.catText, category === c.key && styles.catTextActive]}>
-                        {c.icon} {c.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {CATEGORIES.map((c) => {
+                    const Icon = c.Icon;
+                    return (
+                      <TouchableOpacity
+                        key={c.key}
+                        onPress={() => { setCategory(c.key); setIsMileage(c.key === 'travel'); }}
+                        style={[styles.catBtn, category === c.key && styles.catBtnActive]}
+                      >
+                        <Icon size={14} color={category === c.key ? '#FFF' : '#475569'} />
+                        <Text style={[styles.catText, category === c.key && styles.catTextActive]}>
+                          {c.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
                 {isMileage && (
@@ -224,7 +393,7 @@ export default function EmployeeExpensesScreen() {
                     <Text style={styles.mileageTitle}>🚗 Mileage Calculator (₹46 / km)</Text>
                     <TextInput
                       style={styles.input}
-                      placeholder="Enter distance in kilometers (e.g. 75)"
+                      placeholder="Enter distance in km"
                       value={kmDistance}
                       onChangeText={handleMileageChange}
                       keyboardType="numeric"
@@ -233,53 +402,98 @@ export default function EmployeeExpensesScreen() {
                 )}
 
                 <Text style={styles.label}>Reimbursement Amount (INR) *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0.00"
-                  value={amount}
-                  onChangeText={setAmount}
-                  keyboardType="numeric"
-                />
+                <TextInput style={styles.input} placeholder="0.00" value={amount} onChangeText={setAmount} keyboardType="numeric" />
 
-                <Text style={styles.label}>Description & Purpose</Text>
-                <TextInput
-                  style={[styles.input, { height: 75 }]}
-                  multiline
-                  placeholder="Briefly justify the business expenditure..."
-                  value={desc}
-                  onChangeText={setDesc}
-                />
+                <Text style={styles.label}>Description</Text>
+                <TextInput style={[styles.input, { height: 75 }]} multiline placeholder="Justify..." value={desc} onChangeText={setDesc} />
 
                 <Button title="Submit for Approval" onPress={handleSubmit} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
               </ScrollView>
             </View>
           </View>
-        </Modal>
-      </View>
+        </RNModal>
+      )}
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  topBar: {
-    paddingHorizontal: 24,
-    paddingVertical: 18,
+// ─── MOBILE STYLES ─────────────────────────────────────────────────────────────
+const mStyles = StyleSheet.create({
+  root: { flex: 1 },
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: 24,
+    paddingBottom: 16,
     borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, marginTop: 2 },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    paddingHorizontal: 20,
+    letterSpacing: -0.5,
+  },
+  content: { padding: 16 },
   banner: {
     backgroundColor: '#0D7377',
     padding: 20,
-    borderRadius: 14,
+    borderRadius: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
   },
+  bannerSub: { color: '#CCECEC', fontSize: 13, fontWeight: '600' },
+  bannerAmount: { color: '#FFFFFF', fontSize: 28, fontWeight: '800', marginTop: 4, letterSpacing: -0.5 },
+  badgePill: { backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  badgePillText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+
+  sectionHeader: { marginBottom: 12 },
+  sectionTitle: { fontSize: 17, fontWeight: '700' },
+  emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 32, fontSize: 14 },
+  
+  card: { padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 12 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: 15, fontWeight: '700' },
+  cardMeta: { fontSize: 12, marginTop: 4 },
+  cardAmount: { fontSize: 15, fontWeight: '800' },
+  
+  statusTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  statusText: { fontSize: 10, fontWeight: '800' },
+
+  fab: {
+    position: 'absolute', right: 20, bottom: 20,
+    backgroundColor: '#0D7377', width: 56, height: 56, borderRadius: 28,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 5,
+  },
+
+  modalSheet: { flex: 1 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
+  
+  catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  catBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
+  catText: { fontSize: 13, fontWeight: '600' },
+  
+  mileageBox: { backgroundColor: '#F0F7F7', padding: 16, borderRadius: 12, marginTop: 16 },
+  mileageTitle: { fontSize: 13, fontWeight: '800', color: '#0D7377', marginBottom: 10 },
+});
+
+// ─── DESKTOP STYLES ─────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  topBar: { paddingHorizontal: 24, paddingVertical: 18, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, marginTop: 2 },
+  banner: { backgroundColor: '#0D7377', padding: 20, borderRadius: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   bannerSub: { color: '#CCECEC', fontSize: 12, fontWeight: '600' },
   bannerAmount: { color: '#FFFFFF', fontSize: 28, fontWeight: '800', marginTop: 2 },
   badgePill: { backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
@@ -300,7 +514,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '700', color: '#1A1A2E', marginBottom: 6, marginTop: 12 },
   input: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1A1A2E', backgroundColor: '#F8FAFC' },
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  catBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F5F9' },
+  catBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F5F9' },
   catBtnActive: { backgroundColor: '#0D7377' },
   catText: { fontSize: 11, color: '#475569', fontWeight: '600' },
   catTextActive: { color: '#FFFFFF' },

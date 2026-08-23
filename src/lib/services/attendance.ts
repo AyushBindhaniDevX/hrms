@@ -208,18 +208,96 @@ export async function getTodayAttendance(employeeId: string): Promise<Attendance
 
 export async function getAttendanceHistory(
   employeeId: string,
-  limit = 30,
+  limitDays = 30,
   offset = 0
 ): Promise<Attendance[]> {
+  let calculatedLimit = limitDays;
+
+  // 1. Fetch employee to get joining_date
+  try {
+    const empDoc = await getDoc(doc(db, 'employees', employeeId));
+    if (empDoc.exists()) {
+      const empData = empDoc.data() as Employee;
+      if (empData.joining_date) {
+        const joinDate = new Date(empData.joining_date);
+        const today = new Date();
+        if (joinDate > today) {
+          calculatedLimit = 0;
+        } else {
+          const diffTime = today.getTime() - joinDate.getTime();
+          calculatedLimit = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error fetching employee joining date', e);
+  }
+
+  // Safe cap for performance if needed, but we'll allow full history
+  // if (calculatedLimit > 365) calculatedLimit = 365;
+
   const q = query(
     collection(db, 'attendance'),
     where('employee_id', '==', employeeId),
     orderBy('date', 'desc'),
-    limitDocs(limit) // offset logic omitted for simplicity in MVP
+    limitDocs(calculatedLimit > 0 ? calculatedLimit : 1) 
   );
   
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance));
+  const rawRecords = snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance));
+
+  const results: Attendance[] = [];
+  const shiftStartTime = "09:30"; // Standard hardcoded shift
+
+  // Generate date range from today backwards
+  for (let i = 0; i < calculatedLimit; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+    const existingRecord = rawRecords.find(r => r.date === dateStr);
+
+    if (existingRecord) {
+      if (existingRecord.clock_in) {
+        const clockInDate = new Date(existingRecord.clock_in);
+        // Format to HH:mm
+        const clockInTime = `${String(clockInDate.getHours()).padStart(2, '0')}:${String(clockInDate.getMinutes()).padStart(2, '0')}`;
+        
+        if (clockInTime > shiftStartTime && existingRecord.status !== 'half_day' && existingRecord.status !== 'on_leave') {
+          existingRecord.status = 'late';
+        } else if (existingRecord.status !== 'half_day' && existingRecord.status !== 'on_leave') {
+          existingRecord.status = 'present';
+        }
+      }
+      results.push(existingRecord);
+    } else {
+      // Missing record
+      if (!isWeekend) {
+        // Mark as absent if it's a weekday and they didn't clock in
+        results.push({
+          id: `missing_${dateStr}`,
+          employee_id: employeeId,
+          workplace_id: null,
+          date: dateStr,
+          clock_in: null,
+          clock_out: null,
+          clock_in_latitude: null,
+          clock_in_longitude: null,
+          clock_out_latitude: null,
+          clock_out_longitude: null,
+          clock_in_verified: false,
+          clock_out_verified: false,
+          working_minutes: 0,
+          status: 'absent',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+  }
+
+  return results;
 }
 
 export async function getOrgAttendance(date: string): Promise<Attendance[]> {

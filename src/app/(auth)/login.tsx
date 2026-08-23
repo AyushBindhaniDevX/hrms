@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LottieView from 'lottie-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
 import { Input } from '@/components/ui/Input';
@@ -64,6 +65,107 @@ export default function LoginScreen() {
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // MOBILE NATIVE LAYOUT
+  // ---------------------------------------------------------------------------
+  if (!isDesktop) {
+    return (
+      <View style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.mobileScroll,
+              { paddingTop: Math.max(insets.top + 20, 40), paddingBottom: Math.max(insets.bottom + 20, 40) },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Mobile Hero */}
+            <View style={styles.mobileHero}>
+              <Image
+                source={SUBEDGE_LOGO}
+                style={styles.mobileLogo}
+                resizeMode="contain"
+              />
+              
+              <View style={styles.mobileLottieContainer}>
+                <LottieView
+                  source={require('../../../assets/lottie/wired-outline-187-briefcase-hover-pinch.json')}
+                  autoPlay
+                  loop
+                  style={styles.mobileLottie}
+                />
+              </View>
+
+              <Text style={styles.mobileHeroTitle}>Welcome Back</Text>
+              <Text style={styles.mobileHeroSub}>
+                Sign in to your workplace account to continue.
+              </Text>
+            </View>
+
+            {/* Mobile Form */}
+            <View style={styles.mobileForm}>
+              {error ? (
+                <View style={[styles.errorBox, { backgroundColor: '#FEE2E2', marginBottom: 16 }]}>
+                  <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '500' }}>{error}</Text>
+                </View>
+              ) : null}
+
+              <Input
+                label="Work Email"
+                placeholder="name@subedge.com"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <Input
+                label="Password"
+                placeholder="Enter your password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+
+              <Button
+                title="Sign In"
+                onPress={handleLogin}
+                loading={loading}
+                style={styles.mobileLoginBtn}
+              />
+
+              <Button
+                title="Forgot Password?"
+                onPress={() => router.push('/(auth)/forgot-password')}
+                variant="ghost"
+                size="sm"
+                style={{ marginTop: 8 }}
+              />
+            </View>
+
+            <TouchableOpacity
+              onPress={() => router.push('/careers' as any)}
+              style={styles.mobileCareersBtn}
+            >
+              <Text style={styles.mobileCareersText}>
+                Looking for opportunities? Explore Careers →
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DESKTOP WEB LAYOUT
+  // ---------------------------------------------------------------------------
+
   return (
     <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
       <KeyboardAvoidingView
@@ -111,7 +213,12 @@ export default function LoginScreen() {
             <View style={styles.featureGrid}>
               <View style={styles.featureCard}>
                 <View style={styles.featureIconBox}>
-                  <ShieldCheck size={20} color="#0D7377" />
+                  <LottieView
+                    source={require('../../../assets/lottie/wired-outline-966-file-policy-hover-swipe.json')}
+                    autoPlay
+                    loop
+                    style={{ width: 28, height: 28 }}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.featureTitle}>Cybersecurity & Governance</Text>
@@ -121,7 +228,12 @@ export default function LoginScreen() {
 
               <View style={styles.featureCard}>
                 <View style={styles.featureIconBox}>
-                  <MapPin size={20} color="#0D7377" />
+                  <LottieView
+                    source={require('../../../assets/lottie/wired-flat-18-location-pin-hover-jump.json')}
+                    autoPlay
+                    loop
+                    style={{ width: 28, height: 28 }}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.featureTitle}>Geofenced Smart Attendance</Text>
@@ -131,7 +243,12 @@ export default function LoginScreen() {
 
               <View style={styles.featureCard}>
                 <View style={styles.featureIconBox}>
-                  <Award size={20} color="#0D7377" />
+                  <LottieView
+                    source={require('../../../assets/lottie/wired-outline-1092-hands-applause-hover-pinch.json')}
+                    autoPlay
+                    loop
+                    style={{ width: 28, height: 28 }}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.featureTitle}>Performance & OKR Reviews</Text>
@@ -141,7 +258,12 @@ export default function LoginScreen() {
 
               <View style={styles.featureCard}>
                 <View style={styles.featureIconBox}>
-                  <CreditCard size={20} color="#0D7377" />
+                  <LottieView
+                    source={require('../../../assets/lottie/wired-outline-403-bank-hover-pinch.json')}
+                    autoPlay
+                    loop
+                    style={{ width: 28, height: 28 }}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.featureTitle}>Automated Payroll Engine</Text>
@@ -246,6 +368,72 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
     gap: 28,
+  },
+
+  // Mobile Native Styles
+  mobileScroll: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+  },
+  mobileHero: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  mobileLogo: {
+    width: 160,
+    height: 36,
+    marginBottom: 24,
+  },
+  mobileLottieContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F0F7F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  mobileLottie: {
+    width: 70,
+    height: 70,
+  },
+  mobileHeroTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  mobileHeroSub: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  mobileForm: {
+    width: '100%',
+    gap: 16,
+  },
+  mobileLoginBtn: {
+    marginTop: 12,
+    backgroundColor: '#0D7377',
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: '#0D7377',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  mobileCareersBtn: {
+    marginTop: 32,
+    alignItems: 'center',
+  },
+  mobileCareersText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0D7377',
   },
 
   // Hero Section

@@ -20,7 +20,7 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 const stripEmoji = (s: string) =>
-  s.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}]/gu, '').trim();
+  s.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F]/gu, '').trim();
 
 function getLeaveIcon(name: string, size = 20) {
   const n = name.toLowerCase();
@@ -92,19 +92,22 @@ export default function LeaveScreen() {
 
       {/* Header */}
       <Animated.View entering={FadeInDown.duration(300).springify()}>
-        <View style={[styles.pageHero, { backgroundColor: '#0b1c30' }]}>
-          <View>
-            <Text style={styles.heroTitle}>Leave Management</Text>
-            <Text style={styles.heroSub}>Track your time off and submit requests.</Text>
+        {isDesktop ? (
+          <View style={[styles.pageHero, { backgroundColor: '#0b1c30' }]}>
+            <View>
+              <Text style={styles.heroTitle}>Leave Management</Text>
+              <Text style={styles.heroSub}>Track your time off and submit requests.</Text>
+            </View>
+            <TouchableOpacity style={styles.applyBtn} onPress={() => router.push('/(employee)/leave/apply' as never)}>
+              <Plus size={16} color="#FFF" />
+              <Text style={styles.applyBtnText}>Apply</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.applyBtn}
-            onPress={() => router.push('/(employee)/leave/apply' as never)}
-          >
-            <Plus size={16} color="#FFF" />
-            <Text style={styles.applyBtnText}>Apply</Text>
-          </TouchableOpacity>
-        </View>
+        ) : (
+          <View style={styles.mHeader}>
+            <Text style={styles.mHeaderTitle}>Leave Management</Text>
+          </View>
+        )}
       </Animated.View>
 
       {/* Balance Cards */}
@@ -217,6 +220,22 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { gap: 24, paddingBottom: 64 },
   contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', paddingHorizontal: 40, paddingTop: 40, gap: 32 },
+
+  mHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    marginBottom: -8, // Offset the gap slightly
+  },
+  mHeaderTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    paddingHorizontal: 20,
+    letterSpacing: -0.5,
+  },
 
   pageHero: {
     flexDirection: 'row',

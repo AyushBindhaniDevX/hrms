@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
 import { Badge } from '@/components/ui/Badge';
+import { Avatar } from '@/components/ui/Avatar';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getEmployeeCount } from '@/lib/services/employee';
@@ -32,12 +33,12 @@ import {
   UserPlus,
   ArrowRight,
   Activity,
-  CheckCircle2,
   MapPin,
-  CreditCard,
-  Umbrella,
   Server,
   Award,
+  Workflow,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -104,7 +105,7 @@ export default function AdminDashboard() {
     {
       label: 'Total Staff',
       value: empCount,
-      sub: `${activeCount} active user accounts`,
+      sub: `${activeCount} active accounts`,
       icon: <Users size={20} color={colors.textSecondary} />,
       bg: colors.surface,
       border: '#e2e8f0',
@@ -136,46 +137,11 @@ export default function AdminDashboard() {
   ];
 
   const quickActions = [
-    {
-      label: 'Add New User',
-      sub: 'Create login & role',
-      href: '/(admin)/users',
-      icon: UserPlus,
-      color: colors.primary,
-      bg: colors.background,
-    },
-    {
-      label: 'User Management',
-      sub: `${users.length} registered accounts`,
-      href: '/(admin)/users',
-      icon: Key,
-      color: colors.primary,
-      bg: colors.background,
-    },
-    {
-      label: 'Workplace Locations',
-      sub: 'Geofences & office radius',
-      href: '/(hr)/locations',
-      icon: MapPin,
-      color: colors.primary,
-      bg: colors.background,
-    },
-    {
-      label: 'Performance & OKRs',
-      sub: 'Goals & 360 Appraisals',
-      href: '/(hr)/performance',
-      icon: Award,
-      color: colors.primary,
-      bg: colors.background,
-    },
-    {
-      label: 'Organization Settings',
-      sub: 'Company name & hours',
-      href: '/(admin)/settings',
-      icon: Settings,
-      color: colors.primary,
-      bg: colors.background,
-    },
+    { label: 'Add New User', sub: 'Create login & role', href: '/(admin)/users', icon: UserPlus, color: colors.primary, bg: colors.background },
+    { label: 'User Management', sub: `${users.length} registered accounts`, href: '/(admin)/users', icon: Key, color: colors.primary, bg: colors.background },
+    { label: 'Workplace Locations', sub: 'Geofences & office radius', href: '/(hr)/locations', icon: MapPin, color: colors.primary, bg: colors.background },
+    { label: 'Performance & OKRs', sub: 'Goals & 360 Appraisals', href: '/(hr)/performance', icon: Award, color: colors.primary, bg: colors.background },
+    { label: 'Organization Settings', sub: 'Company name & hours', href: '/(admin)/settings', icon: Settings, color: colors.primary, bg: colors.background },
   ];
 
   const actionColor = (action: string): 'successLight' | 'warningLight' | 'dangerLight' | 'neutral' => {
@@ -185,159 +151,352 @@ export default function AdminDashboard() {
     return 'neutral';
   };
 
-  return (
-    <>
-      <SidebarLayout items={ADMIN_NAV}>
-        <ScrollView
-          style={[styles.container, { backgroundColor: colors.background }]}
-          contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* KPI Grid */}
-          <Animated.View entering={FadeInDown.duration(350).springify()}>
-            <View style={isDesktop ? styles.kpiRowDesktop : styles.kpiRowMobile}>
-              {kpis.map((k, i) => (
-                <View key={i} style={[styles.kpiCard, { backgroundColor: k.bg, borderColor: k.border }]}>
-                  <View style={[styles.kpiIconWrap, { backgroundColor: 'rgba(255,255,255,0.85)' }]}>
-                    {k.icon}
+  // ─── Mobile KPI strip data ────────────────────────────────────────────────
+  const mobileKpis = [
+    { label: 'Total Staff', value: `${empCount}`, color: '#0D7377', bg: '#E6F4F4', icon: Users },
+    { label: 'Present', value: `${attendanceStats.present}`, color: '#059669', bg: '#D1FAE5', icon: Calendar },
+    { label: 'Late', value: `${attendanceStats.late}`, color: '#D97706', bg: '#FEF3C7', icon: AlertTriangle },
+    { label: 'Admins', value: `${adminCount}`, color: '#7C3AED', bg: '#EDE9FE', icon: ShieldCheck },
+    { label: 'System', value: 'OK', color: '#0369A1', bg: '#E0F2FE', icon: Server },
+  ];
+
+  const mobileAdminActions = [
+    { label: 'Add User', icon: UserPlus, href: '/(admin)/users', color: '#0D7377', bg: '#E6F4F4' },
+    { label: 'All Users', icon: Key, href: '/(admin)/users', color: '#7C3AED', bg: '#EDE9FE' },
+    { label: 'Employees', icon: Users, href: '/(hr)/employees', color: '#0369A1', bg: '#E0F2FE' },
+    { label: 'Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
+    { label: 'Automations', icon: Workflow, href: '/(admin)/automations', color: '#D97706', bg: '#FEF3C7' },
+    { label: 'Audit Logs', icon: Shield, href: '/(admin)/audit-logs', color: '#DC2626', bg: '#FEE2E2' },
+    { label: 'Performance', icon: Award, href: '/(hr)/performance', color: '#7C3AED', bg: '#EDE9FE' },
+    { label: 'Settings', icon: Settings, href: '/(admin)/settings', color: '#475569', bg: '#F1F5F9' },
+  ];
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MOBILE LAYOUT
+  // ─────────────────────────────────────────────────────────────────────────────
+  const mobileContent = (
+    <ScrollView
+      style={mStyles.root}
+      contentContainerStyle={mStyles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0D7377" />}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* ── Admin Hero Banner ──────────────────────────────────────────────── */}
+      <View style={mStyles.heroBanner}>
+        <View style={mStyles.heroBannerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={mStyles.heroGreeting}>{getGreeting()}</Text>
+            <Text style={mStyles.heroName}>{profile?.full_name?.split(' ')[0] ?? 'Admin'} ⚡</Text>
+            <Text style={mStyles.heroDate}>System Administration Console</Text>
+          </View>
+          <View style={mStyles.heroRight}>
+            {profile && (
+              <View style={mStyles.heroAvatarRing}>
+                <Avatar name={profile.full_name} url={profile.avatar_url} size={44} />
+              </View>
+            )}
+            <View style={mStyles.systemOkPill}>
+              <CheckCircle2 size={10} color="#FFF" />
+              <Text style={mStyles.systemOkText}>LIVE</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Org info strip */}
+        <View style={mStyles.orgStrip}>
+          <View style={mStyles.orgChip}>
+            <Text style={mStyles.orgChipLabel}>Organization</Text>
+            <Text style={mStyles.orgChipValue} numberOfLines={1}>{organization?.name || 'Subedge Technology'}</Text>
+          </View>
+          <View style={mStyles.orgDivider} />
+          <View style={mStyles.orgChip}>
+            <Text style={mStyles.orgChipLabel}>Active Accounts</Text>
+            <Text style={mStyles.orgChipValue}>{activeCount}</Text>
+          </View>
+          <View style={mStyles.orgDivider} />
+          <View style={mStyles.orgChip}>
+            <Text style={mStyles.orgChipLabel}>HR Managers</Text>
+            <Text style={mStyles.orgChipValue}>{hrCount}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ── Horizontal KPI Strip ──────────────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(60).duration(350).springify()}>
+        <Text style={mStyles.sectionTitle}>Today's Overview</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={mStyles.kpiStrip}>
+          {mobileKpis.map((k, i) => {
+            const Icon = k.icon;
+            return (
+              <View key={i} style={[mStyles.kpiChip, { backgroundColor: k.bg }]}>
+                <View style={[mStyles.kpiChipIcon, { backgroundColor: 'rgba(255,255,255,0.7)' }]}>
+                  <Icon size={16} color={k.color} />
+                </View>
+                <Text style={[mStyles.kpiChipValue, { color: k.color }]} numberOfLines={1}>{k.value}</Text>
+                <Text style={mStyles.kpiChipLabel} numberOfLines={1}>{k.label}</Text>
+              </View>
+            );
+          })}
+        </ScrollView>
+      </Animated.View>
+
+      {/* ── Quick Admin Actions 2×4 Grid ─────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(120).duration(350).springify()}>
+        <Text style={mStyles.sectionTitle}>Admin Shortcuts</Text>
+        <View style={mStyles.quickGrid}>
+          {mobileAdminActions.map((qa) => {
+            const Icon = qa.icon;
+            return (
+              <TouchableOpacity
+                key={qa.href + qa.label}
+                onPress={() => router.push(qa.href as never)}
+                style={mStyles.quickTile}
+                activeOpacity={0.75}
+              >
+                <View style={[mStyles.quickTileIcon, { backgroundColor: qa.bg }]}>
+                  <Icon size={24} color={qa.color} />
+                </View>
+                <Text style={mStyles.quickTileLabel} numberOfLines={1}>{qa.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Animated.View>
+
+      {/* ── System Status Card ────────────────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(180).duration(350).springify()}>
+        <View style={mStyles.card}>
+          <View style={mStyles.cardHead}>
+            <View style={[mStyles.cardIconWrap, { backgroundColor: '#E6F4F4' }]}>
+              <Server size={16} color="#0D7377" />
+            </View>
+            <Text style={mStyles.cardTitle}>System Infrastructure</Text>
+            <Badge label="ONLINE" variant="successLight" />
+          </View>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 14, gap: 10 }}>
+            <View style={mStyles.infraRow}>
+              <Text style={mStyles.infraLabel}>Database</Text>
+              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Cloud Firestore ✓</Text>
+            </View>
+            <View style={mStyles.infraRow}>
+              <Text style={mStyles.infraLabel}>Auth Service</Text>
+              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Firebase Auth ✓</Text>
+            </View>
+            <View style={mStyles.infraRow}>
+              <Text style={mStyles.infraLabel}>Org ID</Text>
+              <Text style={mStyles.infraValue} numberOfLines={1}>
+                {profile?.organization_id?.slice(0, 16) || '00000000-0000...'}…
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* ── Recent Audit Events ────────────────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(240).duration(350).springify()}>
+        <View style={mStyles.card}>
+          <View style={mStyles.cardHead}>
+            <View style={[mStyles.cardIconWrap, { backgroundColor: '#FEF3C7' }]}>
+              <Activity size={16} color="#D97706" />
+            </View>
+            <Text style={mStyles.cardTitle}>Recent Audit Events</Text>
+            <TouchableOpacity onPress={() => router.push('/(admin)/audit-logs' as never)}>
+              <Text style={mStyles.cardActionText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recentLogs.length === 0 ? (
+            <Text style={mStyles.emptyText}>No audit events recorded yet.</Text>
+          ) : (
+            <View style={{ paddingBottom: 4 }}>
+              {recentLogs.map((log, idx) => (
+                <View key={log.id} style={[mStyles.logRow, idx < recentLogs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }]}>
+                  <View style={[mStyles.logDot, {
+                    backgroundColor:
+                      actionColor(log.action) === 'successLight' ? '#10B981' :
+                      actionColor(log.action) === 'dangerLight' ? '#EF4444' :
+                      actionColor(log.action) === 'warningLight' ? '#F59E0B' : '#94A3B8'
+                  }]} />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Badge label={log.action.replace('_', ' ')} variant={actionColor(log.action)} />
+                      <Text style={mStyles.logEntity}>{log.entity_type}</Text>
+                    </View>
+                    <Text style={mStyles.logTime}>{formatDateTime(log.created_at)}</Text>
                   </View>
-                  <Text style={styles.kpiLabel}>{k.label}</Text>
-                  <Text style={styles.kpiValue} numberOfLines={1}>{k.value}</Text>
-                  <Text style={styles.kpiSub} numberOfLines={1}>{k.sub}</Text>
                 </View>
               ))}
             </View>
+          )}
+
+          <TouchableOpacity style={mStyles.cardFooter} onPress={() => router.push('/(admin)/audit-logs' as never)}>
+            <Text style={mStyles.cardFooterText}>Complete Audit Trail</Text>
+            <ArrowRight size={14} color="#0D7377" />
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+
+      <View style={{ height: 24 }} />
+    </ScrollView>
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // DESKTOP LAYOUT (unchanged)
+  // ─────────────────────────────────────────────────────────────────────────────
+  const desktopContent = (
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={[styles.content, styles.contentDesktop]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* KPI Grid */}
+      <Animated.View entering={FadeInDown.duration(350).springify()}>
+        <View style={styles.kpiRowDesktop}>
+          {kpis.map((k, i) => (
+            <View key={i} style={[styles.kpiCard, { backgroundColor: k.bg, borderColor: k.border }]}>
+              <View style={[styles.kpiIconWrap, { backgroundColor: 'rgba(255,255,255,0.85)' }]}>
+                {k.icon}
+              </View>
+              <Text style={styles.kpiLabel}>{k.label}</Text>
+              <Text style={styles.kpiValue} numberOfLines={1}>{k.value}</Text>
+              <Text style={styles.kpiSub} numberOfLines={1}>{k.sub}</Text>
+            </View>
+          ))}
+        </View>
+      </Animated.View>
+
+      {/* 2-Column Grid */}
+      <View style={styles.gridDesktop}>
+        {/* Left Column: Quick Actions & Navigation */}
+        <View style={styles.colMain}>
+          <Animated.View entering={FadeInDown.delay(160).duration(350).springify()}>
+            <Text style={[styles.sectionHeading, { color: colors.text }]}>Admin Shortcuts</Text>
+            <View style={styles.quickGrid}>
+              {quickActions.map((qa) => {
+                const Icon = qa.icon;
+                return (
+                  <TouchableOpacity
+                    key={qa.label}
+                    onPress={() => router.push(qa.href as never)}
+                    activeOpacity={0.75}
+                    style={[styles.quickCard, { backgroundColor: qa.bg }]}
+                  >
+                    <View style={[styles.quickIconWrap, { backgroundColor: 'rgba(255,255,255,0.8)' }]}>
+                      <Icon size={22} color={qa.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.quickLabel, { color: colors.text }]}>{qa.label}</Text>
+                      <Text style={[styles.quickSub, { color: colors.textSecondary }]}>{qa.sub}</Text>
+                    </View>
+                    <ArrowRight size={16} color={qa.color} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </Animated.View>
 
-          {/* 2-Column Grid */}
-          <View style={isDesktop ? styles.gridDesktop : styles.gridMobile}>
-            {/* Left Column: Quick Actions & Navigation */}
-            <View style={isDesktop ? styles.colMain : styles.fullCol}>
-              <Animated.View entering={FadeInDown.delay(160).duration(350).springify()}>
-                <Text style={[styles.sectionHeading, { color: colors.text }]}>Admin Shortcuts</Text>
-                <View style={styles.quickGrid}>
-                  {quickActions.map((qa) => {
-                    const Icon = qa.icon;
-                    return (
-                      <TouchableOpacity
-                        key={qa.label}
-                        onPress={() => router.push(qa.href as never)}
-                        activeOpacity={0.75}
-                        style={[styles.quickCard, { backgroundColor: qa.bg }]}
-                      >
-                        <View style={[styles.quickIconWrap, { backgroundColor: 'rgba(255,255,255,0.8)' }]}>
-                          <Icon size={22} color={qa.color} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.quickLabel, { color: colors.text }]}>{qa.label}</Text>
-                          <Text style={[styles.quickSub, { color: colors.textSecondary }]}>{qa.sub}</Text>
-                        </View>
-                        <ArrowRight size={16} color={qa.color} />
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </Animated.View>
-
-              {/* System Overview Card */}
-              <Animated.View entering={FadeInDown.delay(240).duration(350).springify()}>
-                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-                  <View style={styles.cardHeader}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <View style={[styles.cardIconWrap, { backgroundColor: '#edf8f6' }]}>
-                        <Server size={18} color="#006a61" />
-                      </View>
-                      <Text style={[styles.cardTitle, { color: colors.text }]}>System Infrastructure</Text>
-                    </View>
-                    <Badge label="ONLINE" variant="successLight" />
+          {/* System Overview Card */}
+          <Animated.View entering={FadeInDown.delay(240).duration(350).springify()}>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+              <View style={styles.cardHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: '#edf8f6' }]}>
+                    <Server size={18} color="#006a61" />
                   </View>
-                  <View style={styles.infraGrid}>
-                    <View style={styles.infraItem}>
-                      <Text style={styles.infraLabel}>Database</Text>
-                      <Text style={[styles.infraVal, { color: '#006a61' }]}>Cloud Firestore (Connected)</Text>
-                    </View>
-                    <View style={styles.infraItem}>
-                      <Text style={styles.infraLabel}>Auth Service</Text>
-                      <Text style={[styles.infraVal, { color: '#006a61' }]}>Firebase Authentication</Text>
-                    </View>
-                    <View style={styles.infraItem}>
-                      <Text style={styles.infraLabel}>Org ID</Text>
-                      <Text style={[styles.infraVal, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {profile?.organization_id || '00000000-0000-0000-0000-000000000001'}
-                      </Text>
-                    </View>
-                  </View>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>System Infrastructure</Text>
                 </View>
-              </Animated.View>
+                <Badge label="ONLINE" variant="successLight" />
+              </View>
+              <View style={styles.infraGrid}>
+                <View style={styles.infraItem}>
+                  <Text style={styles.infraLabel}>Database</Text>
+                  <Text style={[styles.infraVal, { color: '#006a61' }]}>Cloud Firestore (Connected)</Text>
+                </View>
+                <View style={styles.infraItem}>
+                  <Text style={styles.infraLabel}>Auth Service</Text>
+                  <Text style={[styles.infraVal, { color: '#006a61' }]}>Firebase Authentication</Text>
+                </View>
+                <View style={styles.infraItem}>
+                  <Text style={styles.infraLabel}>Org ID</Text>
+                  <Text style={[styles.infraVal, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {profile?.organization_id || '00000000-0000-0000-0000-000000000001'}
+                  </Text>
+                </View>
+              </View>
             </View>
+          </Animated.View>
+        </View>
 
-            {/* Right Column: Recent Audit Activity */}
-            <View style={isDesktop ? styles.colSide : styles.fullCol}>
-              <Animated.View entering={FadeInDown.delay(320).duration(350).springify()}>
-                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-                  <View style={styles.cardHeader}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <View style={[styles.cardIconWrap, { backgroundColor: '#fef3c7' }]}>
-                        <Activity size={18} color="#b45309" />
-                      </View>
-                      <Text style={[styles.cardTitle, { color: colors.text }]}>Recent Audit Events</Text>
-                    </View>
-                    <TouchableOpacity onPress={() => router.push('/(admin)/audit-logs' as never)}>
-                      <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>View All</Text>
-                    </TouchableOpacity>
+        {/* Right Column: Recent Audit Activity */}
+        <View style={styles.colSide}>
+          <Animated.View entering={FadeInDown.delay(320).duration(350).springify()}>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+              <View style={styles.cardHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: '#fef3c7' }]}>
+                    <Activity size={18} color="#b45309" />
                   </View>
-
-                  {recentLogs.length === 0 ? (
-                    <View style={{ padding: 32, alignItems: 'center' }}>
-                      <Shield size={32} color={colors.textSecondary} />
-                      <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 13 }}>
-                        No audit events recorded yet.
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-                      {recentLogs.map((log, idx) => (
-                        <View
-                          key={log.id}
-                          style={[
-                            styles.logRow,
-                            idx !== recentLogs.length - 1 && {
-                              borderBottomWidth: 1,
-                              borderBottomColor: '#f1f5f9',
-                            },
-                          ]}
-                        >
-                          <View style={{ flex: 1, gap: 2 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              <Badge label={log.action.replace('_', ' ')} variant={actionColor(log.action)} />
-                              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text }}>
-                                {log.entity_type}
-                              </Text>
-                            </View>
-                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                              {formatDateTime(log.created_at)}
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <TouchableOpacity
-                    style={[styles.cardFooter, { borderTopColor: '#f1f5f9' }]}
-                    onPress={() => router.push('/(admin)/audit-logs' as never)}
-                  >
-                    <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 13 }}>
-                      Complete Audit Trail
-                    </Text>
-                    <ArrowRight size={14} color={colors.primary} />
-                  </TouchableOpacity>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Recent Audit Events</Text>
                 </View>
-              </Animated.View>
+                <TouchableOpacity onPress={() => router.push('/(admin)/audit-logs' as never)}>
+                  <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>View All</Text>
+                </TouchableOpacity>
+              </View>
+
+              {recentLogs.length === 0 ? (
+                <View style={{ padding: 32, alignItems: 'center' }}>
+                  <Shield size={32} color={colors.textSecondary} />
+                  <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 13 }}>
+                    No audit events recorded yet.
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                  {recentLogs.map((log, idx) => (
+                    <View
+                      key={log.id}
+                      style={[
+                        styles.logRow,
+                        idx !== recentLogs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+                      ]}
+                    >
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Badge label={log.action.replace('_', ' ')} variant={actionColor(log.action)} />
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text }}>
+                            {log.entity_type}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                          {formatDateTime(log.created_at)}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.cardFooter, { borderTopColor: '#f1f5f9' }]}
+                onPress={() => router.push('/(admin)/audit-logs' as never)}
+              >
+                <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 13 }}>
+                  Complete Audit Trail
+                </Text>
+                <ArrowRight size={14} color={colors.primary} />
+              </TouchableOpacity>
             </View>
-          </View>
-        </ScrollView>
+          </Animated.View>
+        </View>
+      </View>
+    </ScrollView>
+  );
+
+  return (
+    <>
+      <SidebarLayout items={ADMIN_NAV}>
+        {isDesktop ? desktopContent : mobileContent}
       </SidebarLayout>
 
       <OrgSetupWizard
@@ -352,22 +511,129 @@ export default function AdminDashboard() {
   );
 }
 
+// ─── MOBILE STYLES ────────────────────────────────────────────────────────────
+const mStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#F1F5F9' },
+  content: { paddingBottom: 80 },
+
+  heroBanner: {
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 0,
+    marginBottom: 16,
+  },
+  heroBannerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingBottom: 16,
+  },
+  heroGreeting: { fontSize: 13, color: 'rgba(255,255,255,0.55)', fontWeight: '600', letterSpacing: 0.3 },
+  heroName: { fontSize: 26, color: '#FFFFFF', fontWeight: '800', marginTop: 2, letterSpacing: -0.5 },
+  heroDate: { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 },
+  heroRight: { alignItems: 'center', gap: 8 },
+  heroAvatarRing: {
+    width: 52, height: 52, borderRadius: 26,
+    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  systemOkPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 10, backgroundColor: '#10B981',
+  },
+  systemOkText: { fontSize: 10, color: '#FFF', fontWeight: '800' },
+
+  orgStrip: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginHorizontal: -20,
+  },
+  orgChip: { flex: 1, alignItems: 'center' },
+  orgChipLabel: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '600', textTransform: 'uppercase' },
+  orgChipValue: { fontSize: 12, color: '#FFFFFF', fontWeight: '800', marginTop: 2 },
+  orgDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 4 },
+
+  sectionTitle: {
+    fontSize: 16, fontWeight: '800', color: '#0F172A',
+    paddingHorizontal: 16, marginBottom: 10, letterSpacing: -0.2,
+  },
+
+  kpiStrip: { paddingHorizontal: 16, gap: 10, paddingBottom: 4, paddingRight: 24 },
+  kpiChip: {
+    width: 90, paddingVertical: 14, paddingHorizontal: 10,
+    borderRadius: 16, alignItems: 'center', gap: 5,
+  },
+  kpiChipIcon: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  kpiChipValue: { fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  kpiChipLabel: { fontSize: 10, color: '#64748B', fontWeight: '600', textTransform: 'uppercase', textAlign: 'center' },
+
+  quickGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    paddingHorizontal: 12, gap: 8, marginBottom: 20,
+  },
+  quickTile: { width: '22%', alignItems: 'center', paddingVertical: 10 },
+  quickTileIcon: {
+    width: 52, height: 52, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  quickTileLabel: { fontSize: 11, fontWeight: '700', color: '#334155', textAlign: 'center' },
+
+  card: {
+    marginHorizontal: 16, marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
+  },
+  cardHead: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
+  },
+  cardIconWrap: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { flex: 1, fontSize: 14, fontWeight: '800', color: '#0F172A' },
+  cardActionText: { fontSize: 12, fontWeight: '800', color: '#0D7377' },
+  emptyText: { textAlign: 'center', fontSize: 13, color: '#94A3B8', paddingVertical: 20 },
+
+  infraRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infraLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
+  infraValue: { fontSize: 12, fontWeight: '700', color: '#334155' },
+
+  logRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  logDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
+  logEntity: { fontSize: 12, fontWeight: '600', color: '#334155' },
+  logTime: { fontSize: 11, color: '#94A3B8', marginTop: 3 },
+
+  cardFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderTopWidth: 1, borderTopColor: '#F1F5F9', marginTop: 4,
+  },
+  cardFooterText: { fontSize: 13, fontWeight: '700', color: '#0D7377' },
+});
+
+// ─── DESKTOP STYLES (unchanged) ───────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { gap: 24, paddingBottom: 60, paddingHorizontal: 16, paddingTop: 20 },
   contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', paddingHorizontal: 36, paddingTop: 28, gap: 28 },
 
   kpiRowDesktop: { flexDirection: 'row', gap: 16 },
-  kpiRowMobile: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   kpiCard: {
-    flex: 1,
-    minWidth: 140,
-    padding: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#fff',
-    gap: 8,
+    flex: 1, minWidth: 140, padding: 20,
+    borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0',
+    backgroundColor: '#fff', gap: 8,
   },
   kpiIconWrap: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
   kpiLabel: { fontSize: 13, fontWeight: '500', color: '#64748b' },
@@ -375,40 +641,22 @@ const styles = StyleSheet.create({
   kpiSub: { fontSize: 12, color: '#94a3b8' },
 
   gridDesktop: { flexDirection: 'row', gap: 28, alignItems: 'flex-start' },
-  gridMobile: { gap: 20, paddingHorizontal: 16 },
   colMain: { flex: 3, gap: 24 },
   colSide: { flex: 2, gap: 20 },
-  fullCol: { gap: 20 },
 
   sectionHeading: { fontSize: 16, fontWeight: '700', marginBottom: 12, letterSpacing: -0.2 },
 
   quickGrid: { gap: 12 },
   quickCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#fff',
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    padding: 16, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff',
   },
   quickIconWrap: { width: 40, height: 40, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
   quickLabel: { fontSize: 15, fontWeight: '600' },
   quickSub: { fontSize: 13, marginTop: 2, color: '#64748b' },
 
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingBottom: 14,
-  },
+  card: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingBottom: 14 },
   cardIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { fontSize: 15, fontWeight: '700' },
 
@@ -419,11 +667,7 @@ const styles = StyleSheet.create({
 
   logRow: { paddingVertical: 12 },
   cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderTopWidth: 1,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1,
   },
 });

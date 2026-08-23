@@ -1,6 +1,53 @@
 import { db } from '../firebase';
 import { collection, query, where, getDocs, orderBy, updateDoc, doc, setDoc, limit } from 'firebase/firestore';
 import type { Notification } from '@/types';
+import * as ExpoNotifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+// Configure how notifications behave when the app is in foreground
+ExpoNotifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+export async function requestNotificationPermissions() {
+  const { status: existingStatus } = await ExpoNotifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  
+  if (existingStatus !== 'granted') {
+    const { status } = await ExpoNotifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  
+  return finalStatus === 'granted';
+}
+
+export async function sendClockInNotification(startTime: string) {
+  const hasPermission = await requestNotificationPermissions();
+  if (!hasPermission) return;
+
+  await cancelClockInNotification();
+
+  await ExpoNotifications.scheduleNotificationAsync({
+    content: {
+      title: "✅ Clocked In",
+      body: `You are currently clocked in. Started at ${startTime}. Don't forget to clock out when you leave!`,
+      data: { type: 'clock_in' },
+      sound: true,
+    },
+    trigger: null,
+  });
+}
+
+export async function cancelClockInNotification() {
+  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    await ExpoNotifications.dismissAllNotificationsAsync();
+    await ExpoNotifications.cancelAllScheduledNotificationsAsync();
+  }
+}
 
 export async function getUserNotifications(profileId: string): Promise<Notification[]> {
   try {

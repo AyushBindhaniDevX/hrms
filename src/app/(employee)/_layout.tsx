@@ -59,7 +59,8 @@ export default function EmployeeLayout() {
     <SidebarLayout>
       <Stack screenOptions={{ 
         headerShown: false,
-        animation: Platform.OS === 'web' ? 'none' : 'default',
+        gestureEnabled: false,
+        animation: Platform.OS === 'web' ? 'none' : 'fade',
         contentStyle: { backgroundColor: '#F8FAFC' }
       }}>
         <Stack.Screen name="dashboard" />

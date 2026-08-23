@@ -10,5 +10,5 @@ export default function AdminLayout() {
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
   if (role !== 'admin') return <Redirect href="/(employee)/dashboard" />;
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return <Stack screenOptions={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />;
 }

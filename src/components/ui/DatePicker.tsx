@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/utils/format';
 import { Modal } from './Modal';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 interface DatePickerProps {
   label?: string;
@@ -38,18 +39,18 @@ export function DatePicker({ label, value, onChange, error, placeholder = 'Selec
         <Text style={{ color: value ? colors.text : colors.textSecondary, fontSize: 15 }}>
           {value ? formatDate(value) : placeholder}
         </Text>
-        <Text style={{ color: colors.textSecondary }}>📅</Text>
+        <Calendar size={18} color={colors.textSecondary} />
       </TouchableOpacity>
       {error && <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>}
 
       <Modal visible={show} onClose={() => setShow(false)} title="Select Date">
         <View style={styles.row}>
-          <TouchableOpacity onPress={() => setTempYear(y => y - 1)}>
-            <Text style={[styles.navBtn, { color: colors.text }]}>◀</Text>
+          <TouchableOpacity onPress={() => setTempYear(y => y - 1)} style={styles.navBtn}>
+            <ChevronLeft size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.yearText, { color: colors.text }]}>{tempYear}</Text>
-          <TouchableOpacity onPress={() => setTempYear(y => y + 1)}>
-            <Text style={[styles.navBtn, { color: colors.text }]}>▶</Text>
+          <TouchableOpacity onPress={() => setTempYear(y => y + 1)} style={styles.navBtn}>
+            <ChevronRight size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -107,7 +108,7 @@ const styles = StyleSheet.create({
   },
   error: { fontSize: 12, marginTop: 4 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 12 },
-  navBtn: { fontSize: 18, padding: 8 },
+  navBtn: { padding: 4 },
   yearText: { fontSize: 18, fontWeight: '600' },
   monthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   monthBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },

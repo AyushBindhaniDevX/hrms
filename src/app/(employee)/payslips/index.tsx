@@ -29,8 +29,20 @@ import {
   TrendingUp,
   CreditCard,
   ShieldCheck,
+  Banknote,
+  ArrowUpRight,
+  ArrowDownRight,
+  CheckCircle2,
 } from 'lucide-react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  FadeIn,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  Easing,
+} from 'react-native-reanimated';
 
 export default function PayslipsScreen() {
   const colors = useTheme();
@@ -89,10 +101,248 @@ export default function PayslipsScreen() {
     : 0;
   const netPay = latest?.payroll?.net_salary || 0;
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MOBILE LAYOUT
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (!isDesktop) {
+    return (
+      <ScrollView
+        style={mStyles.root}
+        contentContainerStyle={mStyles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Standard Page Header ───────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.duration(300).springify()} style={mStyles.header}>
+          <Text style={mStyles.headerTitle}>Salary & Payslips</Text>
+        </Animated.View>
+
+        {/* ── Hero Salary Banner ─────────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(40).duration(400).springify()}>
+          <View style={mStyles.heroBanner}>
+            <Text style={mStyles.heroLabel}>OFFICIAL SALARY STATEMENT</Text>
+            <Text style={mStyles.heroPeriod}>{monthName} {yearStr}</Text>
+
+            {/* Big net salary display */}
+            <View style={mStyles.salaryDisplay}>
+              <Text style={mStyles.salaryLabel}>Net Take Home</Text>
+              <Text style={mStyles.salaryAmount}>{formatCurrency(netPay)}</Text>
+              <View style={mStyles.salaryStatusRow}>
+                <CheckCircle2 size={14} color="#34D399" />
+                <Text style={mStyles.salaryStatusText}>Verified & Disbursed</Text>
+              </View>
+            </View>
+
+            {/* 3 Metric Chips */}
+            <View style={mStyles.metricRow}>
+              <View style={mStyles.metricChip}>
+                <ArrowUpRight size={14} color="#34D399" />
+                <View>
+                  <Text style={mStyles.metricChipLabel}>Gross Salary</Text>
+                  <Text style={mStyles.metricChipValue}>{formatCurrency(grossEarnings)}</Text>
+                </View>
+              </View>
+              <View style={mStyles.metricDivider} />
+              <View style={mStyles.metricChip}>
+                <ArrowDownRight size={14} color="#F87171" />
+                <View>
+                  <Text style={mStyles.metricChipLabel}>Deductions</Text>
+                  <Text style={[mStyles.metricChipValue, { color: '#F87171' }]}>-{formatCurrency(deductions)}</Text>
+                </View>
+              </View>
+              <View style={mStyles.metricDivider} />
+              <View style={mStyles.metricChip}>
+                <Banknote size={14} color="#60A5FA" />
+                <View>
+                  <Text style={mStyles.metricChipLabel}>Basic Pay</Text>
+                  <Text style={mStyles.metricChipValue}>{formatCurrency(latest?.payroll?.basic_salary || 0)}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* ── Download Latest Button ─────────────────────────────────────── */}
+        {latest && (
+          <Animated.View entering={FadeInDown.delay(80).duration(350).springify()}>
+            <TouchableOpacity
+              style={mStyles.downloadLatestBtn}
+              onPress={() => handleDownload(latest)}
+              activeOpacity={0.85}
+              disabled={downloadingId === latest.id}
+            >
+              {downloadingId === latest.id ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Download size={18} color="#FFF" />
+                  <Text style={mStyles.downloadLatestText}>Download {monthName} Payslip</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        {/* ── Earnings Breakdown Card ───────────────────────────────────── */}
+        {latest && (
+          <Animated.View entering={FadeInDown.delay(140).duration(350).springify()}>
+            <View style={mStyles.card}>
+              <View style={mStyles.cardHead}>
+                <View style={mStyles.cardIconWrap}>
+                  <TrendingUp size={16} color="#0D7377" />
+                </View>
+                <Text style={mStyles.cardTitle}>Earnings Breakdown</Text>
+                <Badge label="PAID" variant="successLight" />
+              </View>
+
+              {/* Breakdown rows */}
+              <View style={{ gap: 0 }}>
+                <View style={mStyles.bRow}>
+                  <Text style={mStyles.bLabel}>Basic Salary</Text>
+                  <Text style={mStyles.bValue}>{formatCurrency(latest.payroll?.basic_salary || 0)}</Text>
+                </View>
+
+                {latest.payroll?.allowances &&
+                  Object.entries(latest.payroll.allowances).map(([key, val]) => (
+                    <View key={key} style={mStyles.bRow}>
+                      <Text style={mStyles.bLabel}>{key.replace(/_/g, ' ')}</Text>
+                      <Text style={[mStyles.bValue, { color: '#0D7377' }]}>+{formatCurrency(val)}</Text>
+                    </View>
+                  ))}
+
+                {/* Gross total */}
+                <View style={[mStyles.bRow, mStyles.bRowTotal]}>
+                  <Text style={mStyles.bTotalLabel}>Gross Earnings</Text>
+                  <Text style={mStyles.bTotalValue}>{formatCurrency(grossEarnings)}</Text>
+                </View>
+
+                {latest.payroll?.deductions && Object.keys(latest.payroll.deductions).length > 0 && (
+                  <>
+                    <View style={mStyles.sectionDivider}>
+                      <Text style={mStyles.sectionDividerText}>DEDUCTIONS & TAXES</Text>
+                    </View>
+                    {Object.entries(latest.payroll.deductions).map(([key, val]) => (
+                      <View key={key} style={mStyles.bRow}>
+                        <Text style={mStyles.bLabel}>{key.replace(/_/g, ' ')}</Text>
+                        <Text style={[mStyles.bValue, { color: '#EF4444' }]}>-{formatCurrency(val)}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+
+                {/* Net pay total */}
+                <View style={[mStyles.bRow, mStyles.bRowNet]}>
+                  <Text style={mStyles.netLabel}>Net Take Home</Text>
+                  <Text style={mStyles.netValue}>{formatCurrency(netPay)}</Text>
+                </View>
+              </View>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* ── Payslip History Feed ──────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(200).duration(350).springify()}>
+          <Text style={mStyles.sectionTitle}>Payslip History</Text>
+
+          {payslips.length === 0 ? (
+            <View style={mStyles.emptyState}>
+              <FileText size={36} color="#CBD5E1" />
+              <Text style={mStyles.emptyText}>No payroll statements yet.</Text>
+            </View>
+          ) : (
+            <View style={{ gap: 10, paddingHorizontal: 16 }}>
+              {payslips.map((ps, idx) => (
+                <Animated.View
+                  key={ps.id}
+                  entering={FadeInDown.delay(200 + idx * 60).duration(350).springify()}
+                >
+                  <View style={mStyles.payslipCard}>
+                    {/* Left color bar */}
+                    <View style={mStyles.payslipColorBar} />
+
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <View>
+                          <Text style={mStyles.payslipMonth}>{MONTHS[ps.period_month - 1]} {ps.period_year}</Text>
+                          <Text style={mStyles.payslipRef}>
+                            {ps.payslip_number || `PS-${ps.id.slice(0, 8).toUpperCase()}`}
+                          </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={mStyles.payslipAmount}>
+                            {ps.payroll ? formatCurrency(ps.payroll.net_salary) : '—'}
+                          </Text>
+                          <Badge label="PAID" variant="successLight" />
+                        </View>
+                      </View>
+
+                      {/* Actions */}
+                      <View style={mStyles.payslipActions}>
+                        <TouchableOpacity
+                          style={mStyles.payslipDownloadBtn}
+                          onPress={() => handleDownload(ps)}
+                          disabled={downloadingId === ps.id}
+                          activeOpacity={0.75}
+                        >
+                          {downloadingId === ps.id ? (
+                            <ActivityIndicator size="small" color="#0D7377" />
+                          ) : (
+                            <>
+                              <Download size={13} color="#0D7377" />
+                              <Text style={mStyles.payslipDownloadText}>PDF</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={mStyles.payslipViewBtn}
+                          onPress={() => router.push(`/(employee)/payslips/${ps.id}` as never)}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={mStyles.payslipViewText}>View Details</Text>
+                          <ChevronRight size={13} color="#64748B" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </Animated.View>
+              ))}
+            </View>
+          )}
+        </Animated.View>
+
+        {/* ── Bank Account Card ─────────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(300).duration(350).springify()}>
+          <View style={[mStyles.card, { marginHorizontal: 16 }]}>
+            <View style={mStyles.cardHead}>
+              <View style={[mStyles.cardIconWrap, { backgroundColor: '#E6F4F4' }]}>
+                <Landmark size={16} color="#0D7377" />
+              </View>
+              <Text style={mStyles.cardTitle}>Disbursement Account</Text>
+              <Badge label="ACTIVE" variant="successLight" />
+            </View>
+            <View style={mStyles.bankRow}>
+              <CreditCard size={16} color="#0D7377" />
+              <Text style={mStyles.bankText}>Direct Bank Transfer  ···· ···· ···· 4567</Text>
+            </View>
+            <View style={mStyles.bankRow}>
+              <ShieldCheck size={14} color="#10B981" />
+              <Text style={[mStyles.bankText, { color: '#10B981' }]}>256-Bit Encrypted Payroll Channel</Text>
+            </View>
+          </View>
+        </Animated.View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // DESKTOP LAYOUT (unchanged)
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+      contentContainerStyle={[styles.content, styles.contentDesktop]}
       showsVerticalScrollIndicator={false}
     >
       {/* Hero Header */}
@@ -125,9 +375,9 @@ export default function PayslipsScreen() {
         </View>
       </Animated.View>
 
-      <View style={isDesktop ? styles.dashboardGrid : styles.mobileStack}>
+      <View style={styles.dashboardGrid}>
         {/* Main Column */}
-        <View style={isDesktop ? styles.mainCol : styles.mobileStack}>
+        <View style={styles.mainCol}>
           {/* Summary Card */}
           <Animated.View entering={FadeInDown.delay(80).duration(350).springify()}>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
@@ -287,7 +537,7 @@ export default function PayslipsScreen() {
         </View>
 
         {/* Side Column */}
-        <View style={isDesktop ? styles.sideCol : styles.mobileStack}>
+        <View style={styles.sideCol}>
           {/* Direct Deposit Card */}
           <Animated.View entering={FadeInDown.delay(240).duration(350).springify()}>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
@@ -330,62 +580,223 @@ export default function PayslipsScreen() {
   );
 }
 
+// ─── MOBILE STYLES ─────────────────────────────────────────────────────────────
+const mStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#F1F5F9' },
+  content: { paddingBottom: 90 },
+
+  // Standard Header
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    paddingHorizontal: 20,
+    letterSpacing: -0.5,
+  },
+
+  // Hero Banner
+  heroBanner: {
+    backgroundColor: '#0D7377',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+  },
+  heroLabel: {
+    fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.6)',
+    letterSpacing: 1.2, textTransform: 'uppercase',
+  },
+  heroPeriod: {
+    fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.75)',
+    marginTop: 4,
+  },
+  salaryDisplay: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  salaryLabel: {
+    fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.65)',
+    letterSpacing: 0.5,
+  },
+  salaryAmount: {
+    fontSize: 40, fontWeight: '900', color: '#FFFFFF',
+    letterSpacing: -1.5, marginTop: 6, marginBottom: 10,
+  },
+  salaryStatusRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20,
+  },
+  salaryStatusText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+
+  // Metric chips in banner
+  metricRow: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+  },
+  metricChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6 },
+  metricDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 4 },
+  metricChipLabel: { fontSize: 9, color: 'rgba(255,255,255,0.6)', fontWeight: '700', textTransform: 'uppercase' },
+  metricChipValue: { fontSize: 12, color: '#FFFFFF', fontWeight: '800', marginTop: 1 },
+
+  // Download button
+  downloadLatestBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginHorizontal: 16, marginBottom: 16,
+    backgroundColor: '#0D7377',
+    paddingVertical: 14, borderRadius: 14,
+    shadowColor: '#0D7377', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+  },
+  downloadLatestText: { fontSize: 15, fontWeight: '800', color: '#FFF' },
+
+  // Breakdown card
+  card: {
+    marginHorizontal: 16, marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
+  },
+  cardHead: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: '#F8FAFC',
+  },
+  cardIconWrap: {
+    width: 32, height: 32, borderRadius: 9,
+    backgroundColor: '#E6F4F4',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cardTitle: { flex: 1, fontSize: 14, fontWeight: '800', color: '#0F172A' },
+
+  // Breakdown rows
+  bRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 11,
+    borderBottomWidth: 1, borderBottomColor: '#F8FAFC',
+  },
+  bLabel: { fontSize: 13, color: '#475569', fontWeight: '500', textTransform: 'capitalize' },
+  bValue: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
+  bRowTotal: {
+    backgroundColor: '#F8FAFC',
+    borderBottomColor: '#E2E8F0',
+  },
+  bTotalLabel: { fontSize: 13, fontWeight: '800', color: '#0F172A' },
+  bTotalValue: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  sectionDivider: {
+    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: '#FEF2F2',
+    borderBottomWidth: 1, borderBottomColor: '#FECACA',
+  },
+  sectionDividerText: {
+    fontSize: 10, fontWeight: '900', color: '#EF4444',
+    letterSpacing: 1, textTransform: 'uppercase',
+  },
+  bRowNet: {
+    backgroundColor: '#E6F4F4',
+    borderBottomWidth: 0,
+    paddingVertical: 14,
+  },
+  netLabel: { fontSize: 14, fontWeight: '900', color: '#0D7377' },
+  netValue: { fontSize: 18, fontWeight: '900', color: '#0D7377' },
+
+  // Section title
+  sectionTitle: {
+    fontSize: 16, fontWeight: '800', color: '#0F172A',
+    paddingHorizontal: 16, marginBottom: 10, letterSpacing: -0.2,
+  },
+
+  // Payslip history cards
+  payslipCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 16,
+    borderWidth: 1, borderColor: '#E2E8F0',
+    flexDirection: 'row', overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
+  },
+  payslipColorBar: {
+    width: 4, backgroundColor: '#0D7377',
+  },
+  payslipMonth: { fontSize: 14, fontWeight: '800', color: '#0F172A', padding: 14, paddingBottom: 2 },
+  payslipRef: { fontSize: 11, color: '#94A3B8', paddingHorizontal: 14, paddingBottom: 4, fontFamily: 'monospace' },
+  payslipAmount: { fontSize: 16, fontWeight: '900', color: '#0F172A', padding: 14, paddingBottom: 4, paddingLeft: 0 },
+  payslipActions: {
+    flexDirection: 'row', gap: 8,
+    paddingHorizontal: 14, paddingBottom: 12, paddingTop: 4,
+  },
+  payslipDownloadBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 8, borderWidth: 1.5, borderColor: '#0D7377',
+  },
+  payslipDownloadText: { fontSize: 11, fontWeight: '800', color: '#0D7377' },
+  payslipViewBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 8, borderWidth: 1.5, borderColor: '#E2E8F0',
+  },
+  payslipViewText: { fontSize: 11, fontWeight: '700', color: '#64748B' },
+
+  // Bank card
+  bankRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingBottom: 10,
+  },
+  bankText: { fontSize: 13, fontWeight: '600', color: '#334155' },
+
+  // Empty state
+  emptyState: { alignItems: 'center', paddingVertical: 40, gap: 10 },
+  emptyText: { fontSize: 14, color: '#94A3B8', fontWeight: '600' },
+});
+
+// ─── DESKTOP STYLES (unchanged) ───────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { gap: 24, paddingBottom: 64 },
   contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', paddingHorizontal: 36, paddingTop: 36, gap: 28 },
 
   heroBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    paddingTop: 32,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    flexWrap: 'wrap',
-    gap: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 24, paddingTop: 32,
+    borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
+    flexWrap: 'wrap', gap: 14,
   },
   heroSubHeader: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
   heroTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', marginTop: 4, letterSpacing: -0.4 },
   heroDate: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 4 },
   heroDownloadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#006a61',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#006a61', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10,
   },
   heroDownloadText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
 
   dashboardGrid: { flexDirection: 'row', gap: 28, alignItems: 'flex-start' },
-  mobileStack: { gap: 20, paddingHorizontal: 16 },
   mainCol: { flex: 3, gap: 24 },
   sideCol: { flex: 2, gap: 20 },
 
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 20,
-    gap: 16,
-  },
+  card: { borderRadius: 16, borderWidth: 1, padding: 20, gap: 16 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   cardTitle: { fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
   cardSub: { fontSize: 12, marginTop: 2 },
   iconWrap: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 
   summaryGrid: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  summaryBox: {
-    flex: 1,
-    minWidth: 120,
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 4,
-  },
+  summaryBox: { flex: 1, minWidth: 120, padding: 14, borderRadius: 10, borderWidth: 1, gap: 4 },
   summaryLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', color: '#64748b' },
   summaryValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
 
@@ -403,17 +814,11 @@ const styles = StyleSheet.create({
   rowRef: { fontSize: 11, fontFamily: 'monospace', marginTop: 2 },
   rowAmount: { fontSize: 15, fontWeight: '800' },
   pdfDownloadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#006a61',
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 6, borderWidth: 1, borderColor: '#006a61',
   },
   pdfDownloadText: { fontSize: 11, fontWeight: '700', color: '#006a61' },
-
   emptyCard: { padding: 32, alignItems: 'center' },
   bankBox: { padding: 14, borderRadius: 10, borderWidth: 1 },
 });

@@ -8,23 +8,46 @@ import {
   useWindowDimensions,
   TextInput,
   Modal,
+  Platform,
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { Avatar } from '@/components/ui/Avatar';
-import { APP_NAME } from '@/constants/config';
 import {
   LogOut,
   HelpCircle,
   Bell,
   Settings,
   Search,
-  Menu,
-  X,
   Bot,
   Plus,
+  LayoutDashboard,
+  CalendarClock,
+  CalendarDays,
+  Banknote,
+  Users,
+  Briefcase,
+  Network,
+  Calendar,
+  Umbrella,
+  Award,
+  CreditCard,
+  Receipt,
+  Laptop,
+  LifeBuoy,
+  GraduationCap,
+  FileText,
+  Clock,
+  BarChart3,
+  MapPin,
+  Key,
+  Workflow,
+  Shield,
+  Grid,
+  X,
+  ChevronRight,
 } from 'lucide-react-native';
 import { OasisAssistant } from '@/components/ai/OasisAssistant';
 import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
@@ -42,14 +65,13 @@ export function SidebarLayout({ items, children }: SidebarProps) {
   const pathname = usePathname();
   const { profile, role, signOut } = useAuth();
   const [showAssistant, setShowAssistant] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [moreSearchQuery, setMoreSearchQuery] = useState('');
 
   // Effective role determination
   const effectiveRole = profile?.role || role || 'employee';
 
-  // Ensure consistent sidebar items across all pages for the current user's role
-  // If user is Admin, ALWAYS keep full Admin menu even when viewing HR pages
   const effectiveItems: NavItem[] = React.useMemo(() => {
     if (effectiveRole === 'admin') {
       return ADMIN_NAV;
@@ -76,6 +98,35 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     }
     return pathname.startsWith(itemHref);
   };
+
+  // ----------------------------------------------------
+  // PRIMARY MOBILE BOTTOM TABS DEFINITION
+  // ----------------------------------------------------
+  const mobileTabs = React.useMemo(() => {
+    if (effectiveRole === 'admin') {
+      return [
+        { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
+        { label: 'Users', href: '/(admin)/users', icon: Key },
+        { label: 'Employees', href: '/(hr)/employees', icon: Users },
+        { label: 'Automations', href: '/(admin)/automations', icon: Workflow },
+      ];
+    }
+    if (effectiveRole === 'hr') {
+      return [
+        { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
+        { label: 'Employees', href: '/(hr)/employees', icon: Users },
+        { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
+        { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
+      ];
+    }
+    // Employee
+    return [
+      { label: 'Dashboard', href: '/(employee)/dashboard', icon: LayoutDashboard },
+      { label: 'Attendance', href: '/(employee)/attendance', icon: CalendarClock },
+      { label: 'Leave', href: '/(employee)/leave', icon: CalendarDays },
+      { label: 'Salary', href: '/(employee)/payslips', icon: Banknote },
+    ];
+  }, [effectiveRole]);
 
   const handleSearchSubmit = () => {
     if (!searchQuery.trim()) return;
@@ -129,169 +180,242 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     }
   };
 
+  // Filter modules inside More Sheet
+  const filteredMoreModules = effectiveItems.filter((item) =>
+    item.label.toLowerCase().includes(moreSearchQuery.toLowerCase())
+  );
+
   // ----------------------------------------------------
-  // MOBILE LAYOUT
+  // MOBILE / TABLET NATIVE APP LAYOUT
   // ----------------------------------------------------
   if (!isDesktop) {
     return (
-      <SafeAreaView
-        style={[styles.mobileContainer, { backgroundColor: colors.background }]}
-        edges={['top', 'left', 'right']}
-      >
-        <View
-          style={[
-            styles.mobileHeader,
-            { backgroundColor: '#ffffff', borderBottomColor: colors.border },
-          ]}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity
-              onPress={() => setMobileMenuOpen(true)}
-              style={styles.hamburgerBtn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Menu size={22} color={colors.text} />
-            </TouchableOpacity>
+      <View style={[styles.mobileRoot, { backgroundColor: colors.background }]}>
+        {/* Status bar safe area */}
+        <SafeAreaView
+          edges={['top']}
+          style={{
+            backgroundColor: pathname.includes('dashboard')
+              ? (effectiveRole === 'admin' ? '#0F172A' : effectiveRole === 'hr' ? '#1E3A5F' : '#0D7377')
+              : '#FFFFFF'
+          }}
+        />
 
-            <TouchableOpacity onPress={handleDashboardPress}>
-              <SubedgeBrand size="sm" subtitle={`${effectiveRole.toUpperCase()} SUITE`} />
-            </TouchableOpacity>
-          </View>
+        {/* Main Screen Content */}
+        <View style={styles.mobileContentWrapper}>{children}</View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-            <TouchableOpacity
-              onPress={handleNotificationPress}
-              style={{ position: 'relative', padding: 4 }}
-            >
-              <Bell size={20} color="#45464d" />
-              <View style={styles.notificationDot} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleSettingsPress} style={{ padding: 4 }}>
-              <Settings size={20} color="#45464d" />
-            </TouchableOpacity>
-            {profile && (
-              <TouchableOpacity onPress={() => router.push('/(employee)/profile' as never)}>
-                <Avatar name={profile.full_name} url={profile.avatar_url} size={30} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+        {/* ==================================================== */}
+        {/* NATIVE BOTTOM TAB NAVIGATION BAR */}
+        {/* ==================================================== */}
+        <SafeAreaView edges={['bottom']} style={styles.bottomNavSafeArea}>
+          <View style={styles.bottomTabBar}>
+            {mobileTabs.map((tab) => {
+              const active = isItemActive(tab.href);
+              const IconComp = tab.icon;
 
-        {/* Mobile Navigation Drawer Modal */}
-        <Modal
-          visible={mobileMenuOpen}
-          animationType="fade"
-          transparent
-          onRequestClose={() => setMobileMenuOpen(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View
-              style={[
-                styles.mobileDrawer,
-                { backgroundColor: colors.background, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.drawerHeader}>
+              return (
                 <TouchableOpacity
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    handleDashboardPress();
-                  }}
+                  key={tab.href}
+                  onPress={() => router.push(tab.href as never)}
+                  style={styles.tabBtn}
+                  activeOpacity={0.75}
                 >
-                  <SubedgeBrand size="md" subtitle={`${effectiveRole.toUpperCase()} PORTAL`} />
+                  <View style={[styles.tabIconContainer, active && styles.tabIconContainerActive]}>
+                    <IconComp
+                      size={20}
+                      color={active ? '#0D7377' : '#64748B'}
+                      strokeWidth={active ? 2.5 : 2}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      active ? styles.tabLabelActive : styles.tabLabelInactive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
+                  </Text>
                 </TouchableOpacity>
+              );
+            })}
+
+            {/* 5th Tab: More / Apps Hub */}
+            <TouchableOpacity
+              onPress={() => setShowMoreSheet(true)}
+              style={styles.tabBtn}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.tabIconContainer, showMoreSheet && styles.tabIconContainerActive]}>
+                <Grid
+                  size={20}
+                  color={showMoreSheet ? '#0D7377' : '#64748B'}
+                  strokeWidth={showMoreSheet ? 2.5 : 2}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.tabLabel,
+                  showMoreSheet ? styles.tabLabelActive : styles.tabLabelInactive,
+                ]}
+                numberOfLines={1}
+              >
+                More
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+
+        {/* ==================================================== */}
+        {/* "MORE APPS & MODULES" NATIVE BOTTOM SHEET */}
+        {/* ==================================================== */}
+        <Modal
+          visible={showMoreSheet}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setShowMoreSheet(false)}
+        >
+          <View style={styles.sheetOverlay}>
+            <TouchableOpacity
+              style={styles.sheetBackdrop}
+              activeOpacity={1}
+              onPress={() => setShowMoreSheet(false)}
+            />
+
+            <View style={styles.sheetContainer}>
+              {/* Sheet Handle */}
+              <View style={styles.sheetHandle} />
+
+              {/* Sheet Header */}
+              <View style={styles.sheetHeader}>
+                <View>
+                  <Text style={styles.sheetTitle}>All Oasis Modules</Text>
+                  <Text style={styles.sheetSubtitle}>
+                    {effectiveRole.toUpperCase()} Console & Workflows
+                  </Text>
+                </View>
                 <TouchableOpacity
-                  onPress={() => setMobileMenuOpen(false)}
-                  style={{ padding: 4 }}
+                  onPress={() => setShowMoreSheet(false)}
+                  style={styles.sheetCloseBtn}
                 >
-                  <X size={22} color={colors.textSecondary} />
+                  <X size={20} color="#64748B" />
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={styles.drawerList} showsVerticalScrollIndicator={false}>
-                {effectiveItems.map((item) => {
-                  const active = isItemActive(item.href);
-                  const Icon = item.icon;
-                  return (
-                    <TouchableOpacity
-                      key={item.href}
-                      onPress={() => {
-                        setMobileMenuOpen(false);
-                        router.push(item.href as never);
-                      }}
-                      style={[
-                        styles.navItem,
-                        active && { backgroundColor: colors.backgroundSelected },
-                      ]}
-                    >
-                      <View style={styles.navItemContent}>
-                        {Icon && (
-                          <Icon
-                            size={20}
-                            color={active ? colors.primary : colors.textSecondary}
+              {/* Search Modules Filter */}
+              <View style={styles.sheetSearchBox}>
+                <Search size={16} color="#94A3B8" />
+                <TextInput
+                  style={styles.sheetSearchInput}
+                  placeholder="Search apps, payroll, documents..."
+                  value={moreSearchQuery}
+                  onChangeText={setMoreSearchQuery}
+                  placeholderTextColor="#94A3B8"
+                />
+                {moreSearchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setMoreSearchQuery('')}>
+                    <X size={14} color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* 3-Column Modern App Icon Grid */}
+              <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.appLauncherGrid}>
+                  {filteredMoreModules.map((item) => {
+                    const active = isItemActive(item.href);
+                    const IconComponent = item.icon || LayoutDashboard;
+
+                    return (
+                      <TouchableOpacity
+                        key={item.href}
+                        onPress={() => {
+                          setShowMoreSheet(false);
+                          router.push(item.href as never);
+                        }}
+                        style={styles.appGridItem}
+                        activeOpacity={0.8}
+                      >
+                        <View
+                          style={[
+                            styles.appIconCircle,
+                            active && { backgroundColor: '#CCECEC', borderColor: '#0D7377' },
+                          ]}
+                        >
+                          <IconComponent
+                            size={22}
+                            color={active ? '#0D7377' : '#1E293B'}
                             strokeWidth={active ? 2.5 : 2}
                           />
-                        )}
+                        </View>
                         <Text
                           style={[
-                            styles.navLabel,
-                            { color: active ? colors.primary : colors.textSecondary },
-                            active && styles.navLabelActive,
+                            styles.appGridLabel,
+                            active && { color: '#0D7377', fontWeight: '800' },
                           ]}
+                          numberOfLines={2}
                         >
                           {item.label}
                         </Text>
-                      </View>
-                      {active && (
-                        <View
-                          style={[
-                            styles.activeIndicator,
-                            { backgroundColor: colors.primary },
-                          ]}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-              <View style={[styles.drawerFooter, { borderTopColor: colors.border }]}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    handleHelpPress();
-                  }}
-                  style={styles.footerBtn}
-                >
-                  <HelpCircle size={20} color={colors.textSecondary} />
-                  <Text style={[styles.footerBtnText, { color: colors.textSecondary }]}>
-                    Help Center
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    signOut();
-                  }}
-                  style={styles.footerBtn}
-                >
-                  <LogOut size={20} color={colors.danger} />
-                  <Text style={[styles.footerBtnText, { color: colors.danger }]}>Logout</Text>
-                </TouchableOpacity>
-              </View>
+                {/* User & Settings Bar at bottom of Sheet */}
+                <View style={styles.sheetUserSection}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowMoreSheet(false);
+                      handleSettingsPress();
+                    }}
+                    style={styles.sheetActionRow}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Settings size={18} color="#475569" />
+                      <Text style={styles.sheetActionText}>Account & App Settings</Text>
+                    </View>
+                    <ChevronRight size={16} color="#94A3B8" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowMoreSheet(false);
+                      handleHelpPress();
+                    }}
+                    style={styles.sheetActionRow}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <HelpCircle size={18} color="#475569" />
+                      <Text style={styles.sheetActionText}>Help & Support Center</Text>
+                    </View>
+                    <ChevronRight size={16} color="#94A3B8" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowMoreSheet(false);
+                      signOut();
+                    }}
+                    style={[styles.sheetActionRow, { borderBottomWidth: 0 }]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <LogOut size={18} color="#DC2626" />
+                      <Text style={[styles.sheetActionText, { color: '#DC2626', fontWeight: '700' }]}>
+                        Sign Out of Oasis
+                      </Text>
+                    </View>
+                    <ChevronRight size={16} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>
 
-        <View style={styles.mobileContent}>{children}</View>
-
-        {/* Mobile AI FAB */}
-        <TouchableOpacity style={styles.fab} onPress={() => setShowAssistant(true)}>
-          <Bot color="#FFF" size={24} />
-        </TouchableOpacity>
-
+        {/* Oasis AI Copilot Modal */}
         <OasisAssistant visible={showAssistant} onClose={() => setShowAssistant(false)} />
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -443,56 +567,209 @@ export function SidebarLayout({ items, children }: SidebarProps) {
 }
 
 const styles = StyleSheet.create({
-  mobileContainer: { flex: 1 },
-  mobileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  hamburgerBtn: {
-    padding: 4,
-    marginRight: 4,
-  },
-  modalOverlay: {
+  // ==========================================
+  // MOBILE NATIVE APP STYLES
+  // ==========================================
+  mobileRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
   },
-  mobileDrawer: {
-    width: 280,
-    height: '100%',
-    paddingVertical: 20,
-    borderRightWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  drawerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  drawerList: {
+  mobileContentWrapper: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 16,
+    backgroundColor: '#F8FAFC',
   },
-  drawerFooter: {
-    borderTopWidth: 1,
-    paddingTop: 14,
-    paddingHorizontal: 20,
-    gap: 12,
+  notificationDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#EF4444',
   },
-  mobileContent: { flex: 1, backgroundColor: '#FFFFFF' },
 
+  // ==========================================
+  // NATIVE BOTTOM TAB BAR STYLES
+  // ==========================================
+  bottomNavSafeArea: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  bottomTabBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    height: 56,
+    paddingHorizontal: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  tabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  tabIconContainer: {
+    width: 38,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  tabIconContainerActive: {
+    backgroundColor: '#E6F4F4',
+  },
+  tabLabel: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  tabLabelActive: {
+    color: '#0D7377',
+    fontWeight: '800',
+  },
+  tabLabelInactive: {
+    color: '#64748B',
+    fontWeight: '500',
+  },
+
+  // ==========================================
+  // MORE APPS & MODULES BOTTOM SHEET
+  // ==========================================
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheetBackdrop: {
+    flex: 1,
+  },
+  sheetContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 20,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  sheetSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  sheetCloseBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  sheetSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
+  },
+  sheetSearchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  sheetScroll: {
+    paddingHorizontal: 16,
+  },
+  appLauncherGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingVertical: 10,
+  },
+  appGridItem: {
+    width: '33.33%',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+  },
+  appIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  appGridLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#334155',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  sheetUserSection: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 8,
+    marginHorizontal: 4,
+  },
+  sheetActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  sheetActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+
+  // ==========================================
+  // DESKTOP LAYOUT STYLES
+  // ==========================================
   desktopContainer: { flex: 1, flexDirection: 'row' },
   sidebar: {
     width: 260,
@@ -504,22 +781,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginBottom: 28,
   },
-  logoCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#0b1c30',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  brandText: { fontSize: 17, fontWeight: '700', letterSpacing: -0.5 },
-  brandSubtitle: { fontSize: 10, fontWeight: '600', color: '#64748b', letterSpacing: 0.5 },
-
   newRequestBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -539,7 +800,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-
   navList: { flex: 1, paddingHorizontal: 14 },
   navItem: {
     flexDirection: 'row',
@@ -567,7 +827,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 4,
     borderBottomLeftRadius: 4,
   },
-
   footerActions: {
     borderTopWidth: 1,
     paddingTop: 16,
@@ -584,7 +843,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-
   mainArea: { flex: 1, backgroundColor: '#F8FAFC' },
   topBar: {
     height: 60,
@@ -618,19 +876,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 18,
   },
-  notificationDot: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#EF4444',
-  },
   topBarUser: {
     marginLeft: 8,
   },
-
   mainContentScroll: {
     flex: 1,
     backgroundColor: '#F8FAFC',

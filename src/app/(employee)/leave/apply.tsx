@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import LottieView from 'lottie-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
 import { Select } from '@/components/ui/Select';
@@ -58,12 +59,7 @@ function getLeaveIcon(name: string) {
 }
 
 const stripEmoji = (str: string) =>
-  str
-    .replace(
-      /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}]/gu,
-      ''
-    )
-    .trim();
+  str.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F]/gu, '').trim();
 
 export default function ApplyLeaveScreen() {
   const colors = useTheme();
@@ -189,6 +185,8 @@ export default function ApplyLeaveScreen() {
         isDesktop && styles.contentDesktop,
       ]}
       keyboardShouldPersistTaps="handled"
+      bounces={false}
+      showsVerticalScrollIndicator={false}
     >
       {/* Back */}
       <TouchableOpacity
@@ -205,10 +203,20 @@ export default function ApplyLeaveScreen() {
       </TouchableOpacity>
 
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Apply for Leave</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Fill in the details below to submit your request.
-        </Text>
+        <View style={styles.headerTextWrap}>
+          <Text style={[styles.title, { color: colors.text }]}>Apply for Leave</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Fill in the details below to submit your request.
+          </Text>
+        </View>
+        <View style={styles.headerAnimWrap}>
+          <LottieView
+            source={require('../../../../assets/lottie/wired-outline-1725-person-exit-hover-pinch.json')}
+            autoPlay
+            loop
+            style={{ width: 64, height: 64 }}
+          />
+        </View>
       </View>
 
       <View
@@ -281,21 +289,23 @@ export default function ApplyLeaveScreen() {
         <View
           style={[
             styles.switchRow,
-            { borderColor: '#e2e8f0', backgroundColor: '#fafafa' },
+            { borderColor: colors.border, backgroundColor: colors.backgroundElement || '#F8FAFC' },
           ]}
         >
-          <View>
-            <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
               Half Day
             </Text>
-            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
               Applies for only half a working day
             </Text>
           </View>
           <Switch
             value={isHalfDay}
             onValueChange={setIsHalfDay}
-            trackColor={{ true: colors.primary }}
+            trackColor={{ true: colors.primary, false: '#CBD5E1' }}
+            thumbColor={Platform.OS === 'android' ? '#FFFFFF' : undefined}
+            ios_backgroundColor="#CBD5E1"
           />
         </View>
 
@@ -395,8 +405,22 @@ const styles = StyleSheet.create({
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   backText: { fontSize: 14, fontWeight: '500' },
 
-  header: { gap: 4 },
-  title: { fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  headerTextWrap: { flex: 1, gap: 4 },
+  headerAnimWrap: {
+    width: 64, height: 64,
+    backgroundColor: '#F0F7F7',
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 16,
+  },
+  title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 15 },
 
   formCard: {
