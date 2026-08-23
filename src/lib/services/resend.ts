@@ -328,3 +328,65 @@ export async function sendShiftRosterEmail(to: string, name: string, shiftName: 
     `,
   });
 }
+
+/**
+ * 8. Candidate Application Received Confirmation
+ */
+export async function sendApplicationReceivedEmail(to: string, candidateName: string, jobTitle: string) {
+  return sendResendEmail({
+    to,
+    subject: `Application Received: ${jobTitle} — Subedge Technology Pvt Ltd`,
+    category: 'onboarding',
+    htmlContent: `
+      <h2>Thank you for applying, ${candidateName}! 🚀</h2>
+      <p>We have successfully received your direct application for <strong>${jobTitle}</strong> at Subedge Technology Pvt Ltd.</p>
+      <div style="background: #F0F7F7; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #CCECEC;">
+        <p style="margin: 0 0 6px 0;"><strong>Role:</strong> ${jobTitle}</p>
+        <p style="margin: 0 0 6px 0;"><strong>Company:</strong> Subedge Technology Pvt Ltd</p>
+        <p style="margin: 0;"><strong>Status:</strong> Application Ingested into ATS Pipeline</p>
+      </div>
+      <p>Our Talent Acquisition team will evaluate your profile and technical background. If your experience aligns with the role, we will reach out with interview details.</p>
+      <p style="color: #64748B; font-size: 12px; margin-top: 16px;">Subedge Technology · Engineering & Cloud Innovation</p>
+    `,
+  });
+}
+
+/**
+ * 9. Bulk Candidate Status Update Notification
+ */
+export async function sendBulkCandidateUpdateEmail(to: string, candidateName: string, subject: string, messageBody: string) {
+  return sendResendEmail({
+    to,
+    subject,
+    category: 'onboarding',
+    htmlContent: `
+      <h2>Hello ${candidateName},</h2>
+      <div style="background: #F8FAFC; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #E2E8F0;">
+        <p style="margin: 0; line-height: 1.6; color: #1A1A2E;">${messageBody}</p>
+      </div>
+      <p>Please feel free to reply to this email or connect with your recruiter coordinator if you have any questions.</p>
+      <p style="color: #64748B; font-size: 12px; margin-top: 16px;">Oasis Recruitment & ATS · Subedge Technology Pvt Ltd</p>
+    `,
+  });
+}
+
+/**
+ * 10. Candidate Courteous Rejection Notification
+ */
+export async function sendRejectionEmail(to: string, candidateName: string, jobTitle: string, reasonNote?: string) {
+  return sendResendEmail({
+    to,
+    subject: `Application Update: ${jobTitle} — Subedge Technology Pvt Ltd`,
+    category: 'onboarding',
+    htmlContent: `
+      <h2>Dear ${candidateName},</h2>
+      <p>Thank you for taking the time to apply and interview for the <strong>${jobTitle}</strong> position at Subedge Technology Pvt Ltd.</p>
+      <p>While we were impressed with your skills and background, we have decided to proceed with other candidates whose experience more closely matches our immediate project requirements at this time.</p>
+      ${reasonNote ? `<div style="background: #F8FAFC; padding: 12px; border-radius: 8px; margin: 12px 0; border: 1px solid #E2E8F0; font-size: 13px; color: #475569;"><p style="margin: 0;">${reasonNote}</p></div>` : ''}
+      <p>We will keep your profile active in our <strong>Subedge Talent Pool</strong> and will proactively reach out should future openings matching your profile arise.</p>
+      <p>We sincerely appreciate your interest in Subedge and wish you every success in your career endeavors.</p>
+      <p style="color: #64748B; font-size: 12px; margin-top: 16px;">Warm regards,<br/>Subedge Talent Acquisition Team</p>
+    `,
+  });
+}
+

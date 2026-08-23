@@ -326,7 +326,7 @@ export interface Kudos {
 // 1. RECRUITMENT & ATS MODULE
 // ==========================================
 export type JobStatus = 'draft' | 'published' | 'closed';
-export type JobEmploymentType = 'full-time' | 'part-time' | 'contract' | 'remote';
+export type JobEmploymentType = 'full-time' | 'part-time' | 'contract' | 'remote' | 'hybrid';
 export type JobPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type CandidateStage =
   | 'applied'
@@ -338,7 +338,26 @@ export type CandidateStage =
   | 'offer'
   | 'pre_joining'
   | 'hired'
-  | 'rejected';
+  | 'rejected'
+  | 'talent_pool';
+
+export type RejectionReasonCode =
+  | 'skills_mismatch'
+  | 'notice_period_too_long'
+  | 'budget_constraint'
+  | 'position_filled'
+  | 'cultural_fit'
+  | 'knockout_failed'
+  | 'other';
+
+export interface ScreeningQuestion {
+  id: string;
+  question: string;
+  type: 'boolean' | 'choice' | 'text';
+  options?: string[];
+  knockout_answer?: string; // If user's answer matches this, flagged as knockout
+  required?: boolean;
+}
 
 export interface PipelineStageConfig {
   id: string;
@@ -377,12 +396,13 @@ export interface JobOpening {
   applicants_count: number;
   published_portals?: ('careers_page' | 'linkedin' | 'indeed' | 'naukri')[];
   pipeline_id?: string;
+  screening_questions?: ScreeningQuestion[];
   created_at: string;
 }
 
 export interface CandidateTimelineEvent {
   id: string;
-  type: 'applied' | 'stage_change' | 'interview_scheduled' | 'scorecard_added' | 'offer_sent' | 'note';
+  type: 'applied' | 'stage_change' | 'interview_scheduled' | 'scorecard_added' | 'offer_sent' | 'rejected' | 'talent_pool' | 'note';
   title: string;
   description: string;
   created_at: string;
@@ -425,10 +445,19 @@ export interface Candidate {
   expected_salary: string;
   notice_period_days?: number;
   location?: string;
+  current_location?: string;
   education?: string;
   skills?: string[];
   source?: string;
   resume_url?: string;
+  linkedin_url?: string;
+  portfolio_url?: string;
+  screening_answers?: Record<string, string>;
+  knockout_passed?: boolean;
+  rejection_reason?: RejectionReasonCode;
+  rejection_notes?: string;
+  talent_pool_tags?: string[];
+  is_silver_medalist?: boolean;
   scorecard_notes?: string;
   ai_match?: CandidateAIMatch;
   evaluation?: CandidateEvaluation;

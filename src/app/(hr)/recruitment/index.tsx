@@ -10,6 +10,7 @@ import {
   RefreshControl,
   useWindowDimensions,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SidebarLayout } from '@/components/layout/Sidebar';
@@ -30,6 +31,15 @@ import {
   convertCandidateToEmployee,
   getCustomPipelines,
   bulkAdvanceCandidates,
+  bulkRejectCandidates,
+  bulkSendCandidateNotifications,
+  archiveToTalentPool,
+  restoreFromTalentPool,
+  toggleJobPortalPublishing,
+  createCustomPipeline,
+  addStageToPipeline,
+  removeStageFromPipeline,
+  reorderPipelineStages,
 } from '@/lib/services/recruitment';
 import {
   JobOpening,
@@ -39,6 +49,8 @@ import {
   OfferLetter,
   ManpowerPlan,
   CustomPipeline,
+  RejectionReasonCode,
+  PipelineStageConfig,
 } from '@/types/database';
 import { formatCurrency } from '@/utils/format';
 import {
@@ -73,6 +85,15 @@ import {
   CheckSquare,
   Square,
   Share2,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  Archive,
+  RefreshCw,
+  Send,
+  UserX,
+  Tag,
+  Check,
 } from 'lucide-react-native';
 
 const STAGES: { key: CandidateStage; label: string; color: string }[] = [
@@ -84,12 +105,25 @@ const STAGES: { key: CandidateStage; label: string; color: string }[] = [
   { key: 'hired', label: 'Hired 🎉', color: '#10B981' },
 ];
 
+const REJECTION_REASONS: { code: RejectionReasonCode; label: string }[] = [
+  { code: 'skills_mismatch', label: 'Core Technical Skills Mismatch' },
+  { code: 'budget_constraint', label: 'Expected Compensation Outside Budget' },
+  { code: 'notice_period_too_long', label: 'Notice Period Exceeds Project Target' },
+  { code: 'position_filled', label: 'Requisition Filled by Other Candidate' },
+  { code: 'cultural_fit', label: 'Department / Culture Alignment' },
+  { code: 'knockout_failed', label: 'Knockout Screening Criteria Unmet' },
+  { code: 'other', label: 'Other Specified Evaluation Reason' },
+];
+
 export default function RecruitmentWorkspaceScreen() {
   const colors = useTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
-  const [activeTab, setActiveTab] = useState<'command' | 'kanban' | 'jobs' | 'interviews' | 'offers' | 'pipelines' | 'manpower'>('command');
+  const [activeTab, setActiveTab] = useState<
+    'command' | 'kanban' | 'jobs' | 'pipelines' | 'talent_pool' | 'interviews' | 'offers' | 'manpower'
+  >('command');
+
   const [jobs, setJobs] = useState<JobOpening[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
@@ -101,6 +135,17 @@ export default function RecruitmentWorkspaceScreen() {
 
   // Bulk Selection
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
+  const [showBulkRejectModal, setShowBulkRejectModal] = useState(false);
+  const [bulkRejectReason, setBulkRejectReason] = useState<RejectionReasonCode>('skills_mismatch');
+  const [bulkRejectNotes, setBulkRejectNotes] = useState('');
+  const [bulkSendRejectionEmail, setBulkSendRejectionEmail] = useState(true);
+
+  // Bulk Notification Modal
+  const [showBulkNotifyModal, setShowBulkNotifyModal] = useState(false);
+  const [bulkNotifySubject, setBulkNotifySubject] = useState('Recruitment Status Update — Subedge Technology');
+  const [bulkNotifyBody, setBulkNotifyBody] = useState(
+    'Thank you for your patience while our engineering panel reviews active candidate profiles. We will be scheduling the next evaluation rounds shortly.'
+  );
 
   // Filters & Selected Candidate 360
   const [selectedJobFilter, setSelectedJobFilter] = useState<string | null>(null);
@@ -112,13 +157,34 @@ export default function RecruitmentWorkspaceScreen() {
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [showScorecardModal, setShowScorecardModal] = useState(false);
+  const [showPipelineModal, setShowPipelineModal] = useState(false);
+  const [showAddStageModal, setShowAddStageModal] = useState(false);
+  const [showArchivePoolModal, setShowArchivePoolModal] = useState(false);
 
-  // Form States
+  // Form States: Job
   const [newJobTitle, setNewJobTitle] = useState('');
   const [newJobDept, setNewJobDept] = useState('Engineering');
   const [newJobLoc, setNewJobLoc] = useState('Bengaluru / Hybrid');
-  const [newJobSalary, setNewJobSalary] = useState('₹22,00,000 - ₹30,00,000');
+  const [newJobType, setNewJobType] = useState<'full-time' | 'remote' | 'hybrid'>('full-time');
+  const [newJobSalary, setNewJobSalary] = useState('₹24,00,000 - ₹34,00,000');
   const [newJobDesc, setNewJobDesc] = useState('');
+  const [newJobSkills, setNewJobSkills] = useState('React Native, TypeScript, Node.js');
+
+  // Form States: Pipeline
+  const [newPipeName, setNewPipeName] = useState('');
+  const [newPipeDept, setNewPipeDept] = useState('Engineering');
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string>('pipe_it');
+
+  // Form States: Stage
+  const [newStageName, setNewStageName] = useState('');
+  const [newStageKey, setNewStageKey] = useState('screening');
+  const [newStageColor, setNewStageColor] = useState('#0D7377');
+  const [newStageSLA, setNewStageSLA] = useState('3');
+  const [newStageScorecardReq, setNewStageScorecardReq] = useState(false);
+
+  // Form States: Talent Pool Tagging
+  const [talentPoolTagInput, setTalentPoolTagInput] = useState('Silver Medalist, High-Tech Depth');
+  const [isSilverMedalistCheck, setIsSilverMedalistCheck] = useState(true);
 
   // Interview Form
   const [intCandidateId, setIntCandidateId] = useState('');
@@ -156,6 +222,9 @@ export default function RecruitmentWorkspaceScreen() {
       setOffers(o);
       setPipelines(p);
       setManpower(m);
+      if (p.length > 0 && !p.some((pipe) => pipe.id === selectedPipelineId)) {
+        setSelectedPipelineId(p[0].id);
+      }
     } catch (e) {
       console.error('Error loading recruitment workspace:', e);
     } finally {
@@ -184,9 +253,35 @@ export default function RecruitmentWorkspaceScreen() {
     );
   };
 
+  const handleSelectAllInView = () => {
+    const activeIds = filteredCandidates.map((c) => c.id);
+    if (selectedCandidateIds.length === activeIds.length && activeIds.length > 0) {
+      setSelectedCandidateIds([]);
+    } else {
+      setSelectedCandidateIds(activeIds);
+    }
+  };
+
   const handleBulkAdvance = async (stage: CandidateStage) => {
     if (selectedCandidateIds.length === 0) return;
     await bulkAdvanceCandidates(selectedCandidateIds, stage);
+    setSelectedCandidateIds([]);
+    loadAllData();
+  };
+
+  const handleBulkRejectSubmit = async () => {
+    if (selectedCandidateIds.length === 0) return;
+    await bulkRejectCandidates(selectedCandidateIds, bulkRejectReason, bulkRejectNotes, bulkSendRejectionEmail);
+    setShowBulkRejectModal(false);
+    setBulkRejectNotes('');
+    setSelectedCandidateIds([]);
+    loadAllData();
+  };
+
+  const handleBulkNotifySubmit = async () => {
+    if (selectedCandidateIds.length === 0) return;
+    await bulkSendCandidateNotifications(selectedCandidateIds, bulkNotifySubject, bulkNotifyBody);
+    setShowBulkNotifyModal(false);
     setSelectedCandidateIds([]);
     loadAllData();
   };
@@ -198,19 +293,42 @@ export default function RecruitmentWorkspaceScreen() {
       title: newJobTitle,
       department: newJobDept,
       location: newJobLoc,
-      type: 'full-time',
+      type: newJobType,
       priority: 'high',
       experience_level: '3 - 7 Years',
       salary_range: newJobSalary,
       positions_count: 2,
       description: newJobDesc || 'Drive core architectural and functional deliverables.',
       requirements: ['TypeScript', 'Cloud Systems', 'Strong Communication'],
-      published_portals: ['careers_page', 'linkedin', 'indeed'],
+      skills: newJobSkills.split(',').map((s) => s.trim()).filter(Boolean),
+      published_portals: ['careers_page', 'linkedin', 'indeed', 'naukri'],
       status: 'published',
     });
     setNewJobTitle('');
     setNewJobDesc('');
     setShowJobModal(false);
+    loadAllData();
+  };
+
+  const handleTogglePortal = async (jobId: string, portal: 'careers_page' | 'linkedin' | 'indeed' | 'naukri') => {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    const isCurrentlyPublished = job.published_portals?.includes(portal);
+    await toggleJobPortalPublishing(jobId, portal, !isCurrentlyPublished);
+    loadAllData();
+  };
+
+  const handleArchiveToPoolSubmit = async () => {
+    if (!selectedCandidate360) return;
+    const tags = talentPoolTagInput.split(',').map((t) => t.trim()).filter(Boolean);
+    await archiveToTalentPool(selectedCandidate360.id, tags, isSilverMedalistCheck);
+    setShowArchivePoolModal(false);
+    setSelectedCandidate360(null);
+    loadAllData();
+  };
+
+  const handleRestoreFromPool = async (candidateId: string) => {
+    await restoreFromTalentPool(candidateId, 'screening');
     loadAllData();
   };
 
@@ -277,11 +395,60 @@ export default function RecruitmentWorkspaceScreen() {
     }
   };
 
+  const handleCreatePipelineSubmit = async () => {
+    if (!newPipeName.trim()) return;
+    const created = await createCustomPipeline({
+      name: newPipeName.trim(),
+      department: newPipeDept,
+      is_default: false,
+      stages: [
+        { id: `s_${Date.now()}_1`, name: 'Applied', key: 'applied', color: '#64748B', requires_scorecard: false, sla_days: 2 },
+        { id: `s_${Date.now()}_2`, name: 'Screening', key: 'screening', color: '#D97706', requires_scorecard: false, sla_days: 3 },
+        { id: `s_${Date.now()}_3`, name: 'Interview', key: 'interview', color: '#0D7377', requires_scorecard: true, sla_days: 4 },
+        { id: `s_${Date.now()}_4`, name: 'Offer', key: 'offer', color: '#2563EB', requires_scorecard: false, sla_days: 3 },
+        { id: `s_${Date.now()}_5`, name: 'Hired', key: 'hired', color: '#10B981', requires_scorecard: false, sla_days: 1 },
+      ],
+    });
+    setNewPipeName('');
+    setShowPipelineModal(false);
+    setSelectedPipelineId(created.id);
+    loadAllData();
+  };
+
+  const handleAddStageSubmit = async () => {
+    if (!newStageName.trim() || !selectedPipelineId) return;
+    await addStageToPipeline(selectedPipelineId, {
+      name: newStageName.trim(),
+      key: newStageKey,
+      color: newStageColor,
+      sla_days: parseInt(newStageSLA) || 3,
+      requires_scorecard: newStageScorecardReq,
+    });
+    setNewStageName('');
+    setShowAddStageModal(false);
+    loadAllData();
+  };
+
+  const handleRemoveStage = async (pipeId: string, stageId: string) => {
+    await removeStageFromPipeline(pipeId, stageId);
+    loadAllData();
+  };
+
+  const handleReorderStage = async (pipeId: string, fromIdx: number, toIdx: number) => {
+    await reorderPipelineStages(pipeId, fromIdx, toIdx);
+    loadAllData();
+  };
+
   if (loading) return <LoadingState />;
 
+  const activePipeline = pipelines.find((p) => p.id === selectedPipelineId) || pipelines[0];
+  const talentPoolCandidates = candidates.filter((c) => c.stage === 'talent_pool' || c.is_silver_medalist);
+
   const filteredCandidates = candidates.filter((c) => {
+    if (activeTab === 'kanban' && c.stage === 'talent_pool') return false;
     const matchesJob = selectedJobFilter ? c.job_id === selectedJobFilter : true;
     const matchesSearch =
+      searchQuery.trim() === '' ||
       c.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.current_company.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.skills && c.skills.some((s) => s.toLowerCase().includes(searchQuery.toLowerCase())));
@@ -302,7 +469,7 @@ export default function RecruitmentWorkspaceScreen() {
               </View>
             </View>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Subedge Talent Sourcing, Custom Pipelines, Multi-Portal Publishing & Candidate 360°
+              Subedge Talent Sourcing, Custom Multi-Track Pipelines, Multi-Portal Publishing & Talent Archive
             </Text>
           </View>
 
@@ -310,6 +477,7 @@ export default function RecruitmentWorkspaceScreen() {
             <TouchableOpacity
               onPress={() => router.push('/careers' as any)}
               style={styles.careerPageBtn}
+              activeOpacity={0.8}
             >
               <Globe size={14} color="#0D7377" />
               <Text style={styles.careerPageBtnText}>Public Career Portal ↗</Text>
@@ -338,9 +506,10 @@ export default function RecruitmentWorkspaceScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             {[
               { key: 'command', label: 'Command Centre' },
-              { key: 'kanban', label: `Kanban ATS (${candidates.length})` },
+              { key: 'kanban', label: `Kanban ATS (${filteredCandidates.length})` },
               { key: 'jobs', label: `Requisitions (${jobs.length})` },
               { key: 'pipelines', label: `Custom Pipelines (${pipelines.length})` },
+              { key: 'talent_pool', label: `Talent Pool (${talentPoolCandidates.length})` },
               { key: 'interviews', label: `Interviews (${interviews.length})` },
               { key: 'offers', label: `Offers & Joining (${offers.length})` },
               { key: 'manpower', label: 'Manpower Planning' },
@@ -369,7 +538,7 @@ export default function RecruitmentWorkspaceScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAllData(); }} />}
         >
           {/* ======================================================== */}
-          {/* TAB 1: RECRUITMENT COMMAND CENTRE (DASHBOARD & FUNNEL) */}
+          {/* TAB 1: COMMAND CENTRE & ANALYTICS */}
           {/* ======================================================== */}
           {activeTab === 'command' && (
             <View style={{ gap: 20 }}>
@@ -381,14 +550,14 @@ export default function RecruitmentWorkspaceScreen() {
                   <Text style={styles.kpiSub}>Published on Career Portal</Text>
                 </View>
                 <View style={styles.kpiCard}>
-                  <Text style={styles.kpiLabel}>Active Candidates</Text>
+                  <Text style={styles.kpiLabel}>Active Pipeline</Text>
                   <Text style={[styles.kpiVal, { color: '#0D7377' }]}>{candidates.length}</Text>
-                  <Text style={styles.kpiSub}>Across all tracks</Text>
+                  <Text style={styles.kpiSub}>Across all departments</Text>
                 </View>
                 <View style={styles.kpiCard}>
-                  <Text style={styles.kpiLabel}>Interviews Today</Text>
-                  <Text style={[styles.kpiVal, { color: '#6366F1' }]}>{interviews.length}</Text>
-                  <Text style={styles.kpiSub}>Google Meet links active</Text>
+                  <Text style={styles.kpiLabel}>Talent Pool Archive</Text>
+                  <Text style={[styles.kpiVal, { color: '#8B5CF6' }]}>{talentPoolCandidates.length}</Text>
+                  <Text style={styles.kpiSub}>Silver medalists & leads</Text>
                 </View>
                 <View style={styles.kpiCard}>
                   <Text style={styles.kpiLabel}>Offers Pending</Text>
@@ -396,75 +565,157 @@ export default function RecruitmentWorkspaceScreen() {
                   <Text style={styles.kpiSub}>Dispatched via Resend</Text>
                 </View>
                 <View style={styles.kpiCard}>
-                  <Text style={styles.kpiLabel}>Joining Soon</Text>
-                  <Text style={[styles.kpiVal, { color: '#10B981' }]}>1</Text>
-                  <Text style={styles.kpiSub}>BGV Cleared</Text>
+                  <Text style={styles.kpiLabel}>Hired & Joined</Text>
+                  <Text style={[styles.kpiVal, { color: '#10B981' }]}>
+                    {candidates.filter((c) => c.stage === 'hired').length || 1}
+                  </Text>
+                  <Text style={styles.kpiSub}>Converted to Active HCM</Text>
                 </View>
               </View>
 
-              {/* Visual Hiring Funnel */}
-              <View style={styles.sectionCard}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Text style={styles.cardHeaderTitle}>End-to-End Hiring Conversion Funnel</Text>
-                  <Text style={{ fontSize: 12, color: '#64748B' }}>Recruitment SLA Velocity</Text>
+              {/* Conversion Funnel & Source Attribution */}
+              <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 20 }}>
+                {/* Visual Hiring Funnel */}
+                <View style={[styles.sectionCard, { flex: 1.5 }]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <Text style={styles.cardHeaderTitle}>Hiring Conversion Funnel</Text>
+                    <Text style={{ fontSize: 12, color: '#64748B' }}>Recruitment SLA Velocity</Text>
+                  </View>
+
+                  <View style={{ gap: 10 }}>
+                    {[
+                      { stage: '1. Applications Received', count: 124, pct: 100, color: '#64748B' },
+                      { stage: '2. Recruiter Screening', count: 68, pct: 55, color: '#D97706' },
+                      { stage: '3. Technical Assessment', count: 34, pct: 27, color: '#8B5CF6' },
+                      { stage: '4. Panel & Architecture Interviews', count: 18, pct: 15, color: '#0D7377' },
+                      { stage: '5. Official Offers Extended', count: 6, pct: 5, color: '#2563EB' },
+                      { stage: '6. Hired & Onboarded', count: 4, pct: 3.2, color: '#10B981' },
+                    ].map((f, idx) => (
+                      <View key={idx}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A2E' }}>{f.stage}</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '800', color: f.color }}>{f.count} Candidates ({f.pct}%)</Text>
+                        </View>
+                        <View style={styles.funnelBarBg}>
+                          <View style={[styles.funnelBarFill, { width: `${f.pct}%`, backgroundColor: f.color }]} />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
                 </View>
 
-                <View style={{ gap: 10 }}>
-                  {[
-                    { stage: '1. Applications Received', count: 124, pct: 100, color: '#64748B' },
-                    { stage: '2. Recruiter Screening', count: 68, pct: 55, color: '#D97706' },
-                    { stage: '3. Technical Assessment', count: 34, pct: 27, color: '#8B5CF6' },
-                    { stage: '4. Panel & Manager Interviews', count: 18, pct: 15, color: '#0D7377' },
-                    { stage: '5. Official Offers Extended', count: 6, pct: 5, color: '#2563EB' },
-                    { stage: '6. Hired & Onboarded', count: 4, pct: 3.2, color: '#10B981' },
-                  ].map((f, idx) => (
-                    <View key={idx}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A2E' }}>{f.stage}</Text>
-                        <Text style={{ fontSize: 13, fontWeight: '800', color: f.color }}>{f.count} Candidates ({f.pct}%)</Text>
+                {/* Sourcing Channel Attribution */}
+                <View style={[styles.sectionCard, { flex: 1 }]}>
+                  <Text style={styles.cardHeaderTitle}>Candidate Sourcing Channels</Text>
+                  <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2, marginBottom: 16 }}>
+                    Direct applications vs External Multi-Portals
+                  </Text>
+
+                  <View style={{ gap: 12 }}>
+                    {[
+                      { source: 'Subedge Career Portal', count: 52, pct: 42, color: '#0D7377' },
+                      { source: 'LinkedIn Direct & Jobs', count: 38, pct: 30, color: '#0077B5' },
+                      { source: 'Employee Referrals', count: 18, pct: 15, color: '#10B981' },
+                      { source: 'Indeed Sponsored', count: 10, pct: 8, color: '#2563EB' },
+                      { source: 'Naukri Enterprise Sourcing', count: 6, pct: 5, color: '#D97706' },
+                    ].map((s, idx) => (
+                      <View key={idx} style={styles.sourceRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A2E' }}>{s.source}</Text>
+                          <View style={styles.sourceBarBg}>
+                            <View style={[styles.sourceBarFill, { width: `${s.pct}%`, backgroundColor: s.color }]} />
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: s.color, marginLeft: 12 }}>
+                          {s.count} ({s.pct}%)
+                        </Text>
                       </View>
-                      <View style={styles.funnelBarBg}>
-                        <View style={[styles.funnelBarFill, { width: `${f.pct}%`, backgroundColor: f.color }]} />
-                      </View>
-                    </View>
-                  ))}
+                    ))}
+                  </View>
                 </View>
               </View>
             </View>
           )}
 
           {/* ======================================================== */}
-          {/* TAB 2: KANBAN ATS PIPELINE */}
+          {/* TAB 2: KANBAN ATS WITH BULK ACTION TOOLBAR */}
           {/* ======================================================== */}
           {activeTab === 'kanban' && (
             <View style={{ gap: 16 }}>
-              {/* Search Bar & Bulk Actions */}
-              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center', marginBottom: 6 }}>
+              {/* Search Bar, Job Filter & Bulk Action Toolbar */}
+              <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 12, alignItems: 'center' }}>
                 <View style={styles.searchBar}>
                   <Search size={16} color="#64748B" />
                   <TextInput
                     style={styles.searchInput}
-                    placeholder="Search candidates by name, skills, or experience..."
+                    placeholder="Search candidate name, tech skills, or current company..."
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                   />
                 </View>
 
-                {selectedCandidateIds.length > 0 && (
-                  <View style={styles.bulkBar}>
-                    <Text style={styles.bulkText}>{selectedCandidateIds.length} Selected</Text>
-                    <TouchableOpacity onPress={() => handleBulkAdvance('screening')} style={styles.bulkBtn}>
-                      <Text style={styles.bulkBtnText}>→ Screening</Text>
+                {/* Job Requisition Filter */}
+                <TouchableOpacity
+                  onPress={() => setSelectedJobFilter(null)}
+                  style={[styles.filterChip, !selectedJobFilter && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterChipText, !selectedJobFilter && styles.filterChipTextActive]}>
+                    All Requisitions
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={handleSelectAllInView} style={styles.selectAllBtn}>
+                  <Text style={styles.selectAllBtnText}>
+                    {selectedCandidateIds.length === filteredCandidates.length && filteredCandidates.length > 0
+                      ? 'Deselect All'
+                      : 'Select All'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Floating Bulk Actions Toolbar */}
+              {selectedCandidateIds.length > 0 && (
+                <View style={styles.bulkToolbar}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <CheckSquare size={18} color="#FFFFFF" />
+                    <Text style={styles.bulkCountText}>{selectedCandidateIds.length} Candidates Selected</Text>
+                  </View>
+
+                  <View style={styles.bulkActionsGroup}>
+                    {/* Stage Moves */}
+                    <TouchableOpacity onPress={() => handleBulkAdvance('screening')} style={styles.bulkActionBtn}>
+                      <Text style={styles.bulkActionBtnText}>→ Screening</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleBulkAdvance('assessment')} style={styles.bulkBtn}>
-                      <Text style={styles.bulkBtnText}>→ Assessment</Text>
+                    <TouchableOpacity onPress={() => handleBulkAdvance('assessment')} style={styles.bulkActionBtn}>
+                      <Text style={styles.bulkActionBtnText}>→ Assessment</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleBulkAdvance('interview')} style={styles.bulkBtn}>
-                      <Text style={styles.bulkBtnText}>→ Interview</Text>
+                    <TouchableOpacity onPress={() => handleBulkAdvance('interview')} style={styles.bulkActionBtn}>
+                      <Text style={styles.bulkActionBtnText}>→ Interview</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleBulkAdvance('offer')} style={styles.bulkActionBtn}>
+                      <Text style={styles.bulkActionBtnText}>→ Offer</Text>
+                    </TouchableOpacity>
+
+                    {/* Bulk Resend Notification */}
+                    <TouchableOpacity
+                      onPress={() => setShowBulkNotifyModal(true)}
+                      style={[styles.bulkActionBtn, { backgroundColor: '#0284C7' }]}
+                    >
+                      <Send size={13} color="#FFFFFF" />
+                      <Text style={styles.bulkActionBtnText}>Resend Email</Text>
+                    </TouchableOpacity>
+
+                    {/* Bulk Reject */}
+                    <TouchableOpacity
+                      onPress={() => setShowBulkRejectModal(true)}
+                      style={[styles.bulkActionBtn, { backgroundColor: '#DC2626' }]}
+                    >
+                      <UserX size={13} color="#FFFFFF" />
+                      <Text style={styles.bulkActionBtnText}>Bulk Reject</Text>
                     </TouchableOpacity>
                   </View>
-                )}
-              </View>
+                </View>
+              )}
 
               {/* Horizontal Kanban Columns */}
               <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.kanbanTrack}>
@@ -521,6 +772,9 @@ export default function RecruitmentWorkspaceScreen() {
                               </View>
 
                               <Text style={styles.candMeta}>Exp: {c.experience_years}y · {c.expected_salary}</Text>
+                              {c.current_location && (
+                                <Text style={styles.candLocation}>📍 {c.current_location}</Text>
+                              )}
 
                               {/* Skills Cloud */}
                               {c.skills && (
@@ -567,120 +821,189 @@ export default function RecruitmentWorkspaceScreen() {
           {/* TAB 3: CUSTOM PIPELINE BUILDER */}
           {/* ======================================================== */}
           {activeTab === 'pipelines' && (
-            <View style={{ gap: 16 }}>
+            <View style={{ gap: 20 }}>
               <View style={styles.sectionCard}>
-                <Text style={styles.cardHeaderTitle}>Department-Specific Hiring Pipelines</Text>
-                <Text style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
-                  Configure custom hiring stages, mandatory scorecards, and SLA day limits for each department track.
-                </Text>
-              </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View>
+                    <Text style={styles.cardHeaderTitle}>Department-Specific Hiring Pipelines</Text>
+                    <Text style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
+                      Configure multi-track hiring stages, color codes, SLA day limits, and mandatory scorecard requirements.
+                    </Text>
+                  </View>
+                  <Button
+                    title="+ New Pipeline Track"
+                    onPress={() => setShowPipelineModal(true)}
+                    style={{ backgroundColor: '#0D7377' }}
+                    size="sm"
+                  />
+                </View>
 
-              <View style={{ gap: 16 }}>
-                {pipelines.map((pipe) => (
-                  <View key={pipe.id} style={styles.pipeCard}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Sliders size={20} color="#0D7377" />
-                        <Text style={styles.pipeTitle}>{pipe.name}</Text>
+                {/* Track Selector */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, marginTop: 16 }}>
+                  {pipelines.map((pipe) => {
+                    const active = pipe.id === selectedPipelineId;
+                    return (
+                      <TouchableOpacity
+                        key={pipe.id}
+                        onPress={() => setSelectedPipelineId(pipe.id)}
+                        style={[styles.pipeSelectorChip, active && styles.pipeSelectorChipActive]}
+                      >
+                        <Sliders size={14} color={active ? '#FFFFFF' : '#0D7377'} />
+                        <Text style={[styles.pipeSelectorText, active && styles.pipeSelectorTextActive]}>
+                          {pipe.name}
+                        </Text>
                         {pipe.is_default && (
-                          <View style={styles.defaultBadge}>
-                            <Text style={styles.defaultBadgeText}>DEFAULT TRACK</Text>
+                          <View style={styles.defaultPill}>
+                            <Text style={styles.defaultPillText}>DEFAULT</Text>
                           </View>
                         )}
-                      </View>
-                      <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '700' }}>Dept: {pipe.department}</Text>
-                    </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
-                    {/* Pipeline Stage Steps */}
-                    <View style={styles.stagesTrack}>
-                      {pipe.stages.map((st, idx) => (
-                        <View key={st.id} style={styles.stageStepBox}>
-                          <View style={[styles.stepDot, { backgroundColor: st.color }]} />
-                          <Text style={styles.stepName}>{st.name}</Text>
-                          <Text style={styles.stepSla}>SLA: {st.sla_days} Days</Text>
+              {/* Active Pipeline Stage Editor */}
+              {activePipeline && (
+                <View style={styles.sectionCard}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <View>
+                      <Text style={styles.pipeDetailTitle}>{activePipeline.name}</Text>
+                      <Text style={{ fontSize: 12, color: '#64748B' }}>Department: {activePipeline.department} · {activePipeline.stages.length} Configured Stages</Text>
+                    </View>
+                    <Button
+                      title="+ Add Stage"
+                      onPress={() => setShowAddStageModal(true)}
+                      variant="outline"
+                      size="sm"
+                    />
+                  </View>
+
+                  {/* Stage List with Reordering */}
+                  <View style={{ gap: 12 }}>
+                    {activePipeline.stages.map((st, idx) => (
+                      <View key={st.id} style={styles.stageConfigRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                          <View style={[styles.stageConfigDot, { backgroundColor: st.color }]} />
+                          <View>
+                            <Text style={styles.stageConfigName}>{idx + 1}. {st.name}</Text>
+                            <Text style={styles.stageConfigMeta}>
+                              SLA: {st.sla_days} Days · Stage Key: {st.key}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                           {st.requires_scorecard && (
                             <View style={styles.scorecardReqBadge}>
-                              <Text style={styles.scorecardReqText}>Scorecard Req.</Text>
+                              <Text style={styles.scorecardReqText}>Scorecard Required</Text>
                             </View>
                           )}
+
+                          {/* Move Up */}
+                          {idx > 0 && (
+                            <TouchableOpacity
+                              onPress={() => handleReorderStage(activePipeline.id, idx, idx - 1)}
+                              style={styles.reorderBtn}
+                            >
+                              <ArrowUp size={14} color="#64748B" />
+                            </TouchableOpacity>
+                          )}
+
+                          {/* Move Down */}
+                          {idx < activePipeline.stages.length - 1 && (
+                            <TouchableOpacity
+                              onPress={() => handleReorderStage(activePipeline.id, idx, idx + 1)}
+                              style={styles.reorderBtn}
+                            >
+                              <ArrowDown size={14} color="#64748B" />
+                            </TouchableOpacity>
+                          )}
+
+                          {/* Delete Stage */}
+                          <TouchableOpacity
+                            onPress={() => handleRemoveStage(activePipeline.id, st.id)}
+                            style={styles.reorderBtn}
+                          >
+                            <Trash2 size={14} color="#DC2626" />
+                          </TouchableOpacity>
                         </View>
-                      ))}
-                    </View>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
+                </View>
+              )}
             </View>
           )}
 
           {/* ======================================================== */}
-          {/* TAB 4: JOB REQUISITIONS & MULTI-PORTAL PUBLISHING */}
+          {/* TAB 4: TALENT POOL & SILVER-MEDALIST ARCHIVE */}
           {/* ======================================================== */}
-          {activeTab === 'jobs' && (
+          {activeTab === 'talent_pool' && (
             <View style={{ gap: 16 }}>
-              <View style={styles.jobsGrid}>
-                {jobs.map((j) => (
-                  <View key={j.id} style={styles.jobCard}>
+              <View style={styles.sectionCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View>
+                    <Text style={styles.cardHeaderTitle}>Talent Pool & Silver-Medalist Archive</Text>
+                    <Text style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
+                      Preserve high-potential finalists, silver medalists, and niche domain specialists for rapid future re-engagement.
+                    </Text>
+                  </View>
+                  <View style={styles.poolCountBadge}>
+                    <Archive size={14} color="#8B5CF6" />
+                    <Text style={styles.poolCountText}>{talentPoolCandidates.length} Talent Profiles</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Talent Pool Candidates Grid */}
+              <View style={styles.talentPoolGrid}>
+                {talentPoolCandidates.map((c) => (
+                  <View key={c.id} style={styles.talentPoolCard}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <View style={styles.jobIconCircle}>
-                        <Briefcase size={22} color="#0D7377" />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <View style={styles.talentAvatar}>
+                          <Text style={styles.talentAvatarText}>{c.full_name[0]}</Text>
+                        </View>
+                        <View>
+                          <Text style={styles.talentName}>{c.full_name}</Text>
+                          <Text style={styles.talentCompany}>{c.current_company} · {c.experience_years} Years Exp</Text>
+                        </View>
                       </View>
-                      <View
-                        style={[
-                          styles.prioBadge,
-                          j.priority === 'urgent' && { backgroundColor: '#FEE2E2' },
-                          j.priority === 'high' && { backgroundColor: '#FEF3C7' },
-                          j.priority === 'normal' && { backgroundColor: '#F0F7F7' },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.prioBadgeText,
-                            j.priority === 'urgent' && { color: '#DC2626' },
-                            j.priority === 'high' && { color: '#D97706' },
-                            j.priority === 'normal' && { color: '#0D7377' },
-                          ]}
-                        >
-                          {j.priority?.toUpperCase() || 'HIGH'}
-                        </Text>
-                      </View>
+
+                      {c.is_silver_medalist && (
+                        <View style={styles.silverMedalBadge}>
+                          <Award size={12} color="#D97706" />
+                          <Text style={styles.silverMedalText}>SILVER MEDALIST</Text>
+                        </View>
+                      )}
                     </View>
 
-                    <Text style={styles.jobTitle}>{j.title}</Text>
-                    <Text style={styles.jobDept}>{j.department} · {j.location}</Text>
-                    <Text style={styles.jobSalary}>Budget: {j.salary_range}</Text>
-                    <Text style={styles.jobDesc} numberOfLines={2}>{j.description}</Text>
+                    <Text style={styles.talentNotes}>
+                      {c.scorecard_notes || 'High technical potential candidate archived for future high-capacity requisitions.'}
+                    </Text>
 
-                    {/* Published Portals */}
-                    <View style={styles.portalsRow}>
-                      <Text style={styles.portalsLabel}>Published To:</Text>
-                      <View style={styles.portalTag}>
-                        <Globe size={11} color="#0D7377" />
-                        <Text style={styles.portalTagText}>Career Portal</Text>
+                    {/* Tags */}
+                    {c.talent_pool_tags && (
+                      <View style={styles.tagCloudRow}>
+                        {c.talent_pool_tags.map((tg, idx) => (
+                          <View key={idx} style={styles.talentTagPill}>
+                            <Tag size={10} color="#8B5CF6" />
+                            <Text style={styles.talentTagText}>{tg}</Text>
+                          </View>
+                        ))}
                       </View>
-                      <View style={styles.portalTag}>
-                        <Share2 size={11} color="#0D7377" />
-                        <Text style={styles.portalTagText}>LinkedIn</Text>
-                      </View>
-                      <View style={styles.portalTag}>
-                        <CheckCircle2 size={11} color="#0D7377" />
-                        <Text style={styles.portalTagText}>Indeed</Text>
-                      </View>
-                    </View>
+                    )}
 
-                    <View style={styles.jobFooter}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Users size={14} color="#64748B" />
-                        <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '700' }}>{j.applicants_count} Applicants</Text>
-                      </View>
-
+                    <View style={styles.talentFooter}>
+                      <Text style={styles.talentMeta}>Expected: {c.expected_salary}</Text>
                       <TouchableOpacity
-                        onPress={() => {
-                          setSelectedJobFilter(j.id);
-                          setActiveTab('kanban');
-                        }}
-                        style={styles.viewPipeBtn}
+                        onPress={() => handleRestoreFromPool(c.id)}
+                        style={styles.restoreBtn}
+                        activeOpacity={0.8}
                       >
-                        <Text style={styles.viewPipeText}>View ATS Pipeline →</Text>
+                        <RefreshCw size={13} color="#FFFFFF" />
+                        <Text style={styles.restoreBtnText}>Restore to Pipeline</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -690,7 +1013,98 @@ export default function RecruitmentWorkspaceScreen() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 5: INTERVIEWS */}
+          {/* TAB 5: JOB REQUISITIONS & MULTI-PORTAL PUBLISHING */}
+          {/* ======================================================== */}
+          {activeTab === 'jobs' && (
+            <View style={{ gap: 16 }}>
+              <View style={styles.jobsGrid}>
+                {jobs.map((j) => {
+                  const portals = j.published_portals || ['careers_page'];
+                  return (
+                    <View key={j.id} style={styles.jobCard}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <View style={styles.jobIconCircle}>
+                          <Briefcase size={22} color="#0D7377" />
+                        </View>
+                        <View
+                          style={[
+                            styles.prioBadge,
+                            j.priority === 'urgent' && { backgroundColor: '#FEE2E2' },
+                            j.priority === 'high' && { backgroundColor: '#FEF3C7' },
+                            j.priority === 'normal' && { backgroundColor: '#F0F7F7' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.prioBadgeText,
+                              j.priority === 'urgent' && { color: '#DC2626' },
+                              j.priority === 'high' && { color: '#D97706' },
+                              j.priority === 'normal' && { color: '#0D7377' },
+                            ]}
+                          >
+                            {j.priority?.toUpperCase() || 'HIGH'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.jobTitle}>{j.title}</Text>
+                      <Text style={styles.jobDept}>{j.department} · {j.location}</Text>
+                      <Text style={styles.jobSalary}>Budget: {j.salary_range}</Text>
+                      <Text style={styles.jobDesc} numberOfLines={2}>{j.description}</Text>
+
+                      {/* Multi-Portal Publishing 1-Click Toggles */}
+                      <View style={styles.portalsEngineBox}>
+                        <Text style={styles.portalsEngineLabel}>Multi-Portal 1-Click Publishing:</Text>
+                        <View style={styles.portalToggleRow}>
+                          {[
+                            { key: 'careers_page', label: 'Career Portal', icon: Globe },
+                            { key: 'linkedin', label: 'LinkedIn', icon: Share2 },
+                            { key: 'indeed', label: 'Indeed', icon: CheckCircle2 },
+                            { key: 'naukri', label: 'Naukri', icon: ExternalLink },
+                          ].map((port) => {
+                            const isPub = portals.includes(port.key as any);
+                            const IconC = port.icon;
+                            return (
+                              <TouchableOpacity
+                                key={port.key}
+                                onPress={() => handleTogglePortal(j.id, port.key as any)}
+                                style={[styles.portalToggleChip, isPub && styles.portalToggleChipActive]}
+                              >
+                                <IconC size={11} color={isPub ? '#FFFFFF' : '#64748B'} />
+                                <Text style={[styles.portalToggleText, isPub && styles.portalToggleTextActive]}>
+                                  {port.label}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+
+                      <View style={styles.jobFooter}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Users size={14} color="#64748B" />
+                          <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '700' }}>{j.applicants_count} Applicants</Text>
+                        </View>
+
+                        <TouchableOpacity
+                          onPress={() => {
+                            setSelectedJobFilter(j.id);
+                            setActiveTab('kanban');
+                          }}
+                          style={styles.viewPipeBtn}
+                        >
+                          <Text style={styles.viewPipeText}>View ATS Pipeline →</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 6: INTERVIEWS */}
           {/* ======================================================== */}
           {activeTab === 'interviews' && (
             <View style={{ gap: 14 }}>
@@ -730,7 +1144,7 @@ export default function RecruitmentWorkspaceScreen() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 6: OFFERS & PRE-JOINING */}
+          {/* TAB 7: OFFERS & PRE-JOINING */}
           {/* ======================================================== */}
           {activeTab === 'offers' && (
             <View style={{ gap: 14 }}>
@@ -765,7 +1179,7 @@ export default function RecruitmentWorkspaceScreen() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 7: MANPOWER PLANNING */}
+          {/* TAB 8: MANPOWER PLANNING */}
           {/* ======================================================== */}
           {activeTab === 'manpower' && (
             <View style={{ gap: 16 }}>
@@ -798,7 +1212,9 @@ export default function RecruitmentWorkspaceScreen() {
           )}
         </ScrollView>
 
-        {/* Candidate 360 Modal */}
+        {/* ======================================================== */}
+        {/* CANDIDATE 360 MODAL */}
+        {/* ======================================================== */}
         {selectedCandidate360 && (
           <Modal visible={!!selectedCandidate360} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
@@ -821,12 +1237,22 @@ export default function RecruitmentWorkspaceScreen() {
                     </View>
                   </View>
 
-                  <TouchableOpacity onPress={() => setSelectedCandidate360(null)} style={{ padding: 6 }}>
-                    <X size={22} color="#64748B" />
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => setShowArchivePoolModal(true)}
+                      style={styles.archiveToPoolBtn}
+                    >
+                      <Archive size={14} color="#8B5CF6" />
+                      <Text style={styles.archiveToPoolBtnText}>Talent Pool</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setSelectedCandidate360(null)} style={{ padding: 6 }}>
+                      <X size={22} color="#64748B" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <ScrollView style={{ padding: 24 }}>
+                  {/* AI Compatibility Breakdown */}
                   {selectedCandidate360.ai_match && (
                     <View style={styles.aiCard}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -854,45 +1280,43 @@ export default function RecruitmentWorkspaceScreen() {
                           <Text style={styles.aiCritLabel}>Location</Text>
                           <Text style={styles.aiCritVal}>{selectedCandidate360.ai_match.location}%</Text>
                         </View>
-                        <View style={styles.aiCritBox}>
-                          <Text style={styles.aiCritLabel}>Salary Fit</Text>
-                          <Text style={styles.aiCritVal}>{selectedCandidate360.ai_match.salary}%</Text>
-                        </View>
                       </View>
                     </View>
                   )}
 
-                  {/* Skills Cloud */}
-                  <Text style={styles.detailsHeading}>Candidate Skills & Stack</Text>
-                  <View style={styles.skillsTagCloud}>
-                    {selectedCandidate360.skills?.map((sk, i) => (
-                      <View key={i} style={styles.bigSkillTag}>
-                        <Text style={styles.bigSkillText}>{sk}</Text>
-                      </View>
-                    ))}
+                  {/* Candidate Details */}
+                  <View style={styles.c360InfoGrid}>
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoLabel}>Email Address</Text>
+                      <Text style={styles.infoVal}>{selectedCandidate360.email}</Text>
+                    </View>
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoLabel}>Phone Number</Text>
+                      <Text style={styles.infoVal}>{selectedCandidate360.phone}</Text>
+                    </View>
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoLabel}>Expected Compensation</Text>
+                      <Text style={styles.infoVal}>{selectedCandidate360.expected_salary}</Text>
+                    </View>
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoLabel}>Notice Period</Text>
+                      <Text style={styles.infoVal}>{selectedCandidate360.notice_period_days ?? 30} Days</Text>
+                    </View>
                   </View>
 
-                  {/* Bottom Action Row */}
-                  <View style={styles.c360Actions}>
-                    <Button
-                      title="⭐ Submit Scorecard"
-                      onPress={() => setShowScorecardModal(true)}
-                      style={{ backgroundColor: '#0D7377', flex: 1 }}
-                    />
-                    <Button
-                      title="✉️ Generate Offer"
-                      onPress={() => {
-                        setOfferCandidateId(selectedCandidate360.id);
-                        setOfferDesignation(selectedCandidate360.job?.title || 'Specialist');
-                        setShowOfferModal(true);
-                      }}
-                      style={{ backgroundColor: '#2563EB', flex: 1 }}
-                    />
-                    <Button
-                      title="👤 Convert to Employee"
-                      onPress={() => handleConvertToEmployee(selectedCandidate360.id)}
-                      style={{ backgroundColor: '#10B981', flex: 1 }}
-                    />
+                  {/* Timeline History */}
+                  <Text style={[styles.cardHeaderTitle, { marginTop: 24, marginBottom: 12 }]}>Recruitment SLA Timeline</Text>
+                  <View style={{ gap: 10 }}>
+                    {(selectedCandidate360.timeline || []).map((tl) => (
+                      <View key={tl.id} style={styles.timelineRow}>
+                        <View style={styles.timelineDot} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.tlTitle}>{tl.title}</Text>
+                          <Text style={styles.tlDesc}>{tl.description}</Text>
+                        </View>
+                        <Text style={styles.tlDate}>{tl.created_at.split('T')[0]}</Text>
+                      </View>
+                    ))}
                   </View>
                 </ScrollView>
               </View>
@@ -900,137 +1324,295 @@ export default function RecruitmentWorkspaceScreen() {
           </Modal>
         )}
 
-        {/* Scorecard Modal */}
-        <Modal visible={showScorecardModal} animationType="slide" transparent>
+        {/* ======================================================== */}
+        {/* BULK REJECTION MODAL */}
+        {/* ======================================================== */}
+        <Modal visible={showBulkRejectModal} animationType="fade" transparent>
           <View style={styles.modalOverlay}>
-            <View style={styles.scorecardModal}>
+            <View style={styles.modalSmallCard}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Submit Interview Scorecard</Text>
-                <TouchableOpacity onPress={() => setShowScorecardModal(false)}>
+                <Text style={styles.modalTitle}>Bulk Reject Candidates</Text>
+                <TouchableOpacity onPress={() => setShowBulkRejectModal(false)}>
                   <X size={20} color="#64748B" />
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={{ padding: 20 }}>
-                <Text style={styles.label}>Technical Skills (1-5)</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <TouchableOpacity key={n} onPress={() => setEvalTech(n)} style={[styles.ratingBtn, evalTech === n && styles.ratingBtnActive]}>
-                      <Text style={[styles.ratingBtnText, evalTech === n && { color: '#FFF' }]}>{n}★</Text>
+              <View style={{ padding: 20 }}>
+                <Text style={styles.label}>Select Official Reason Code</Text>
+                <ScrollView style={{ maxHeight: 150 }} showsVerticalScrollIndicator={false}>
+                  {REJECTION_REASONS.map((r) => (
+                    <TouchableOpacity
+                      key={r.code}
+                      onPress={() => setBulkRejectReason(r.code)}
+                      style={[styles.reasonOption, bulkRejectReason === r.code && styles.reasonOptionActive]}
+                    >
+                      <Text style={[styles.reasonText, bulkRejectReason === r.code && styles.reasonTextActive]}>
+                        {r.label}
+                      </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
 
-                <Text style={styles.label}>Problem Solving (1-5)</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <TouchableOpacity key={n} onPress={() => setEvalProblem(n)} style={[styles.ratingBtn, evalProblem === n && styles.ratingBtnActive]}>
-                      <Text style={[styles.ratingBtnText, evalProblem === n && { color: '#FFF' }]}>{n}★</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <Text style={[styles.label, { marginTop: 12 }]}>Custom Feedback Note (Optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Profile will be maintained in Talent Pool for future roles."
+                  value={bulkRejectNotes}
+                  onChangeText={setBulkRejectNotes}
+                />
 
-                <Text style={styles.label}>Recommendation</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {(['strong_hire', 'hire', 'hold', 'reject'] as const).map((r) => (
-                    <TouchableOpacity key={r} onPress={() => setEvalRec(r)} style={[styles.recBtn, evalRec === r && styles.recBtnActive]}>
-                      <Text style={[styles.recBtnText, evalRec === r && { color: '#FFF' }]}>{r.replace('_', ' ').toUpperCase()}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <TouchableOpacity
+                  onPress={() => setBulkSendRejectionEmail(!bulkSendRejectionEmail)}
+                  style={styles.checkboxRow}
+                >
+                  {bulkSendRejectionEmail ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
+                  <Text style={styles.checkboxLabel}>Dispatch courteous rejection email via Resend</Text>
+                </TouchableOpacity>
 
-                <Text style={styles.label}>Detailed Justification *</Text>
-                <TextInput style={[styles.input, { height: 80 }]} multiline value={evalNotes} onChangeText={setEvalNotes} />
-
-                <Button title="Submit Scorecard" onPress={handleSubmitScorecard} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
-              </ScrollView>
+                <TouchableOpacity
+                  onPress={handleBulkRejectSubmit}
+                  style={[styles.modalSubmitBtn, { backgroundColor: '#DC2626', marginTop: 16 }]}
+                >
+                  <Text style={styles.modalSubmitText}>Confirm Rejection ({selectedCandidateIds.length} Candidates)</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
 
-        {/* Generate Offer Modal */}
-        <Modal visible={showOfferModal} animationType="slide" transparent>
+        {/* ======================================================== */}
+        {/* BULK NOTIFY MODAL */}
+        {/* ======================================================== */}
+        <Modal visible={showBulkNotifyModal} animationType="fade" transparent>
           <View style={styles.modalOverlay}>
-            <View style={styles.scorecardModal}>
+            <View style={styles.modalSmallCard}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Generate Official Offer Letter</Text>
-                <TouchableOpacity onPress={() => setShowOfferModal(false)}>
+                <Text style={styles.modalTitle}>Batch Resend Email Notification</Text>
+                <TouchableOpacity onPress={() => setShowBulkNotifyModal(false)}>
                   <X size={20} color="#64748B" />
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={{ padding: 20 }}>
-                <Text style={styles.label}>Designation Title *</Text>
-                <TextInput style={styles.input} value={offerDesignation} onChangeText={setOfferDesignation} />
+              <View style={{ padding: 20 }}>
+                <Text style={styles.label}>Email Subject</Text>
+                <TextInput
+                  style={styles.input}
+                  value={bulkNotifySubject}
+                  onChangeText={setBulkNotifySubject}
+                />
 
-                <Text style={styles.label}>Annual CTC (INR) *</Text>
-                <TextInput style={styles.input} value={offerCTC} onChangeText={setOfferCTC} keyboardType="numeric" />
+                <Text style={[styles.label, { marginTop: 12 }]}>Notification Body Message</Text>
+                <TextInput
+                  style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+                  multiline
+                  value={bulkNotifyBody}
+                  onChangeText={setBulkNotifyBody}
+                />
 
-                <Text style={styles.label}>Target Joining Date (YYYY-MM-DD) *</Text>
-                <TextInput style={styles.input} value={offerJoiningDate} onChangeText={setOfferJoiningDate} />
-
-                <Button title="Generate & Dispatch Offer via Resend" onPress={handleGenerateOfferSubmit} style={{ backgroundColor: '#2563EB', marginTop: 16 }} />
-              </ScrollView>
+                <TouchableOpacity
+                  onPress={handleBulkNotifySubmit}
+                  style={[styles.modalSubmitBtn, { marginTop: 16 }]}
+                >
+                  <Send size={14} color="#FFFFFF" />
+                  <Text style={styles.modalSubmitText}>Dispatch to {selectedCandidateIds.length} Candidates</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
 
-        {/* Schedule Interview Modal */}
-        <Modal visible={showInterviewModal} animationType="slide" transparent>
+        {/* ======================================================== */}
+        {/* ARCHIVE TO TALENT POOL MODAL */}
+        {/* ======================================================== */}
+        <Modal visible={showArchivePoolModal} animationType="fade" transparent>
           <View style={styles.modalOverlay}>
-            <View style={styles.scorecardModal}>
+            <View style={styles.modalSmallCard}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Schedule Candidate Interview</Text>
-                <TouchableOpacity onPress={() => setShowInterviewModal(false)}>
+                <Text style={styles.modalTitle}>Archive Candidate to Talent Pool</Text>
+                <TouchableOpacity onPress={() => setShowArchivePoolModal(false)}>
                   <X size={20} color="#64748B" />
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={{ padding: 20 }}>
-                <Text style={styles.label}>Interview Round *</Text>
-                <TextInput style={styles.input} value={intRoundName} onChangeText={setIntRoundName} />
+              <View style={{ padding: 20 }}>
+                <Text style={styles.label}>Skill & Domain Tags (Comma Separated)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={talentPoolTagInput}
+                  onChangeText={setTalentPoolTagInput}
+                  placeholder="e.g. Silver Medalist, Distributed Systems, Tech Lead"
+                />
 
-                <Text style={styles.label}>Interviewer Name *</Text>
-                <TextInput style={styles.input} value={intInterviewer} onChangeText={setIntInterviewer} />
+                <TouchableOpacity
+                  onPress={() => setIsSilverMedalistCheck(!isSilverMedalistCheck)}
+                  style={styles.checkboxRow}
+                >
+                  {isSilverMedalistCheck ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
+                  <Text style={styles.checkboxLabel}>Mark as High-Priority "Silver Medalist"</Text>
+                </TouchableOpacity>
 
-                <Text style={styles.label}>Date & Time (ISO) *</Text>
-                <TextInput style={styles.input} value={intTime} onChangeText={setIntTime} />
-
-                <Button title="Schedule & Send Resend Invite" onPress={handleScheduleInterviewSubmit} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
-              </ScrollView>
+                <TouchableOpacity
+                  onPress={handleArchiveToPoolSubmit}
+                  style={[styles.modalSubmitBtn, { backgroundColor: '#8B5CF6', marginTop: 16 }]}
+                >
+                  <Archive size={14} color="#FFFFFF" />
+                  <Text style={styles.modalSubmitText}>Save to Talent Pool</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
 
-        {/* Post Job Modal */}
+        {/* ======================================================== */}
+        {/* POST REQUISITION MODAL */}
+        {/* ======================================================== */}
         <Modal visible={showJobModal} animationType="slide" transparent>
           <View style={styles.modalOverlay}>
-            <View style={styles.scorecardModal}>
+            <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Post New Job Requisition</Text>
+                <Text style={styles.modalTitle}>Create New Job Requisition</Text>
                 <TouchableOpacity onPress={() => setShowJobModal(false)}>
                   <X size={20} color="#64748B" />
                 </TouchableOpacity>
               </View>
 
               <ScrollView style={{ padding: 20 }}>
-                <Text style={styles.label}>Job Title *</Text>
-                <TextInput style={styles.input} placeholder="e.g. Lead SRE Engineer" value={newJobTitle} onChangeText={setNewJobTitle} />
+                <Text style={styles.label}>Position Title *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Lead Distributed Backend Engineer"
+                  value={newJobTitle}
+                  onChangeText={setNewJobTitle}
+                />
 
-                <Text style={styles.label}>Department</Text>
-                <TextInput style={styles.input} value={newJobDept} onChangeText={setNewJobDept} />
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Department</Text>
+                    <TextInput style={styles.input} value={newJobDept} onChangeText={setNewJobDept} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Location / Work Mode</Text>
+                    <TextInput style={styles.input} value={newJobLoc} onChangeText={setNewJobLoc} />
+                  </View>
+                </View>
 
-                <Text style={styles.label}>Location</Text>
-                <TextInput style={styles.input} value={newJobLoc} onChangeText={setNewJobLoc} />
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Employment Type</Text>
+                    <TextInput style={styles.input} value={newJobType} onChangeText={(t: any) => setNewJobType(t)} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Annual Budget CTC</Text>
+                    <TextInput style={styles.input} value={newJobSalary} onChangeText={setNewJobSalary} />
+                  </View>
+                </View>
 
-                <Text style={styles.label}>Salary Budget (INR)</Text>
-                <TextInput style={styles.input} value={newJobSalary} onChangeText={setNewJobSalary} />
+                <Text style={[styles.label, { marginTop: 10 }]}>Required Skills (Comma separated)</Text>
+                <TextInput style={styles.input} value={newJobSkills} onChangeText={setNewJobSkills} />
 
-                <Text style={styles.label}>Role Description</Text>
-                <TextInput style={[styles.input, { height: 80 }]} multiline value={newJobDesc} onChangeText={setNewJobDesc} />
+                <Text style={[styles.label, { marginTop: 10 }]}>Job Description & Scope</Text>
+                <TextInput
+                  style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                  multiline
+                  value={newJobDesc}
+                  onChangeText={setNewJobDesc}
+                />
 
-                <Button title="Publish to Career Portal & Job Boards" onPress={handlePostJob} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
+                <TouchableOpacity onPress={handlePostJob} style={[styles.modalSubmitBtn, { marginTop: 20 }]}>
+                  <Text style={styles.modalSubmitText}>Publish Requisition to All Portals</Text>
+                </TouchableOpacity>
               </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ======================================================== */}
+        {/* NEW CUSTOM PIPELINE MODAL */}
+        {/* ======================================================== */}
+        <Modal visible={showPipelineModal} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalSmallCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Create New Custom Pipeline</Text>
+                <TouchableOpacity onPress={() => setShowPipelineModal(false)}>
+                  <X size={20} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ padding: 20 }}>
+                <Text style={styles.label}>Pipeline Track Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Executive & Leadership Track"
+                  value={newPipeName}
+                  onChangeText={setNewPipeName}
+                />
+
+                <Text style={[styles.label, { marginTop: 12 }]}>Department</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newPipeDept}
+                  onChangeText={setNewPipeDept}
+                />
+
+                <TouchableOpacity onPress={handleCreatePipelineSubmit} style={[styles.modalSubmitBtn, { marginTop: 20 }]}>
+                  <Text style={styles.modalSubmitText}>Create Custom Track</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ======================================================== */}
+        {/* ADD STAGE MODAL */}
+        {/* ======================================================== */}
+        <Modal visible={showAddStageModal} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalSmallCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add Custom Stage to Track</Text>
+                <TouchableOpacity onPress={() => setShowAddStageModal(false)}>
+                  <X size={20} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ padding: 20 }}>
+                <Text style={styles.label}>Stage Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Live Coding Concurrency Test"
+                  value={newStageName}
+                  onChangeText={setNewStageName}
+                />
+
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>SLA Target (Days)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={newStageSLA}
+                      onChangeText={setNewStageSLA}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Stage Color Hex</Text>
+                    <TextInput style={styles.input} value={newStageColor} onChangeText={setNewStageColor} />
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => setNewStageScorecardReq(!newStageScorecardReq)}
+                  style={styles.checkboxRow}
+                >
+                  {newStageScorecardReq ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
+                  <Text style={styles.checkboxLabel}>Require Mandatory Interview Scorecard</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={handleAddStageSubmit} style={[styles.modalSubmitBtn, { marginTop: 20 }]}>
+                  <Text style={styles.modalSubmitText}>Add Stage</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -1043,140 +1625,369 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   topBar: {
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderBottomWidth: 1,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
   },
-  title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  title: { fontSize: 20, fontWeight: '900', letterSpacing: -0.3 },
   subtitle: { fontSize: 13, marginTop: 2 },
-  proBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0F7F7', borderWidth: 1, borderColor: '#CCECEC', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  proBadgeText: { color: '#0D7377', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  careerPageBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0F7F7', borderWidth: 1, borderColor: '#CCECEC', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  careerPageBtnText: { color: '#0D7377', fontSize: 12, fontWeight: '700' },
+  proBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F0F7F7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CCECEC',
+  },
+  proBadgeText: { fontSize: 10, fontWeight: '800', color: '#0D7377' },
+  careerPageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0F7F7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CCECEC',
+  },
+  careerPageBtnText: { fontSize: 12, fontWeight: '800', color: '#0D7377' },
+
+  // Tabs
   navTabsBar: { paddingHorizontal: 24, borderBottomWidth: 1 },
-  tabItem: { paddingVertical: 14, paddingHorizontal: 12, marginRight: 8 },
-  tabItemText: { fontSize: 13, color: '#64748B', fontWeight: '600' },
-  kpiRow: { flexDirection: 'row', gap: 14 },
-  kpiCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  kpiLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
-  kpiVal: { fontSize: 26, fontWeight: '800', marginVertical: 4, color: '#1A1A2E' },
-  kpiSub: { fontSize: 11, color: '#94A3B8' },
-  sectionCard: { backgroundColor: '#FFFFFF', padding: 22, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  cardHeaderTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
-  funnelBarBg: { height: 10, backgroundColor: '#F1F5F9', borderRadius: 5, overflow: 'hidden' },
+  tabItem: { paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  tabItemText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+
+  // KPIs
+  kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  kpiCard: {
+    flex: 1,
+    minWidth: 150,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  kpiLabel: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  kpiVal: { fontSize: 24, fontWeight: '900', color: '#1A1A2E', marginTop: 4 },
+  kpiSub: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+
+  // Sections
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  cardHeaderTitle: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
+
+  // Funnel
+  funnelBarBg: { height: 10, backgroundColor: '#F1F5F9', borderRadius: 5, overflow: 'hidden', marginTop: 4 },
   funnelBarFill: { height: '100%', borderRadius: 5 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, gap: 8, flex: 1 },
+
+  // Sourcing
+  sourceRow: { marginBottom: 6 },
+  sourceBarBg: { height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden', marginTop: 4 },
+  sourceBarFill: { height: '100%', borderRadius: 4 },
+
+  // Search & Filters
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
   searchInput: { flex: 1, fontSize: 13, color: '#1A1A2E' },
-  bulkBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F0F7F7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  bulkText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
-  bulkBtn: { backgroundColor: '#0D7377', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  bulkBtnText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
-  kanbanTrack: { flexDirection: 'row', gap: 14, paddingBottom: 24 },
-  kanbanCol: { width: 280, backgroundColor: '#F1F5F9', borderRadius: 14, padding: 14, maxHeight: 680 },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+  filterChipActive: { backgroundColor: '#0D7377', borderColor: '#0D7377' },
+  filterChipText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  filterChipTextActive: { color: '#FFFFFF' },
+  selectAllBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#F1F5F9' },
+  selectAllBtnText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+
+  // Bulk Toolbar
+  bulkToolbar: {
+    backgroundColor: '#1E293B',
+    padding: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  bulkCountText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  bulkActionsGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
+  bulkActionBtn: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  bulkActionBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+
+  // Kanban
+  kanbanTrack: { flexDirection: 'row', gap: 16, paddingBottom: 20 },
+  kanbanCol: { width: 310, backgroundColor: '#F8FAFC', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', padding: 14, height: 620 },
   colHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  colDot: { width: 8, height: 8, borderRadius: 4 },
-  colTitle: { fontSize: 13, fontWeight: '800', color: '#1A1A2E' },
-  badgeCount: { backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  badgeCountText: { fontSize: 11, fontWeight: '700', color: '#64748B' },
-  candCard: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 10 },
-  candName: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
-  aiPill: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#F0F7F7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  colDot: { width: 10, height: 10, borderRadius: 5 },
+  colTitle: { fontSize: 14, fontWeight: '800', color: '#1A1A2E' },
+  badgeCount: { backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  badgeCountText: { fontSize: 11, fontWeight: '800', color: '#475569' },
+
+  candCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 10,
+  },
+  candName: { fontSize: 14, fontWeight: '800', color: '#1A1A2E' },
+  candCompany: { fontSize: 11, color: '#64748B', marginTop: 1 },
+  aiPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F0F7F7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
   aiPillText: { fontSize: 10, fontWeight: '800', color: '#0D7377' },
-  candCompany: { fontSize: 12, color: '#0D7377', fontWeight: '600', marginTop: 1 },
-  candMeta: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  candMeta: { fontSize: 11, color: '#475569', marginTop: 6, fontWeight: '600' },
+  candLocation: { fontSize: 11, color: '#64748B', marginTop: 2 },
   skillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
   skillTag: { backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  skillTagText: { fontSize: 10, color: '#475569', fontWeight: '600' },
-  candFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+  skillTagText: { fontSize: 10, fontWeight: '600', color: '#475569' },
+  candFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   ratingBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   ratingText: { fontSize: 11, fontWeight: '700', color: '#D97706' },
   advancePill: { backgroundColor: '#F0F7F7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  advancePillText: { fontSize: 10, fontWeight: '700', color: '#0D7377' },
-  pipeCard: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  pipeTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
-  defaultBadge: { backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  defaultBadgeText: { fontSize: 10, fontWeight: '800', color: '#059669' },
-  stagesTrack: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
-  stageStepBox: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', minWidth: 150 },
-  stepDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 6 },
-  stepName: { fontSize: 13, fontWeight: '700', color: '#1A1A2E' },
-  stepSla: { fontSize: 11, color: '#64748B', marginTop: 2 },
-  scorecardReqBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 6, alignSelf: 'flex-start' },
-  scorecardReqText: { fontSize: 9, fontWeight: '800', color: '#D97706' },
+  advancePillText: { fontSize: 11, fontWeight: '700', color: '#0D7377' },
+
+  // Pipelines Tab
+  pipeSelectorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  pipeSelectorChipActive: { backgroundColor: '#0D7377', borderColor: '#0D7377' },
+  pipeSelectorText: { fontSize: 12, fontWeight: '700', color: '#1A1A2E' },
+  pipeSelectorTextActive: { color: '#FFFFFF' },
+  defaultPill: { backgroundColor: '#CCECEC', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  defaultPillText: { fontSize: 9, fontWeight: '800', color: '#0D7377' },
+  pipeDetailTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
+  stageConfigRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  stageConfigDot: { width: 12, height: 12, borderRadius: 6 },
+  stageConfigName: { fontSize: 13, fontWeight: '800', color: '#1A1A2E' },
+  stageConfigMeta: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  scorecardReqBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  scorecardReqText: { fontSize: 10, fontWeight: '800', color: '#D97706' },
+  reorderBtn: { padding: 6, borderRadius: 6, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+
+  // Talent Pool Tab
+  poolCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  poolCountText: { fontSize: 12, fontWeight: '800', color: '#8B5CF6' },
+  talentPoolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  talentPoolCard: {
+    flex: 1,
+    minWidth: 320,
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  talentAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' },
+  talentAvatarText: { fontSize: 16, fontWeight: '900', color: '#8B5CF6' },
+  talentName: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
+  talentCompany: { fontSize: 12, color: '#64748B' },
+  silverMedalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  silverMedalText: { fontSize: 10, fontWeight: '800', color: '#D97706' },
+  talentNotes: { fontSize: 12, color: '#475569', marginTop: 10, lineHeight: 18 },
+  tagCloudRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  talentTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  talentTagText: { fontSize: 10, fontWeight: '700', color: '#8B5CF6' },
+  talentFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 },
+  talentMeta: { fontSize: 11, fontWeight: '700', color: '#64748B' },
+  restoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#0D7377',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  restoreBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+
+  // Jobs Grid
   jobsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  jobCard: { width: '48%', minWidth: 320, backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  jobIconCircle: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
+  jobCard: { flex: 1, minWidth: 320, backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
+  jobIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
   prioBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   prioBadgeText: { fontSize: 10, fontWeight: '800' },
   jobTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E', marginTop: 12 },
-  jobDept: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  jobSalary: { fontSize: 13, fontWeight: '700', color: '#0D7377', marginTop: 4 },
-  jobDesc: { fontSize: 12, color: '#475569', marginTop: 4, lineHeight: 18 },
-  portalsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  portalsLabel: { fontSize: 11, fontWeight: '700', color: '#64748B' },
-  portalTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0F7F7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  portalTagText: { fontSize: 10, fontWeight: '700', color: '#0D7377' },
-  jobFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
-  viewPipeBtn: { backgroundColor: '#F0F7F7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  viewPipeText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
+  jobDept: { fontSize: 12, color: '#0D7377', fontWeight: '700', marginTop: 2 },
+  jobSalary: { fontSize: 12, color: '#1A1A2E', fontWeight: '700', marginTop: 2 },
+  jobDesc: { fontSize: 12, color: '#64748B', marginTop: 6, lineHeight: 18 },
+  portalsEngineBox: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10, marginTop: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  portalsEngineLabel: { fontSize: 10, fontWeight: '800', color: '#64748B', marginBottom: 8, letterSpacing: 0.5 },
+  portalToggleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  portalToggleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  portalToggleChipActive: { backgroundColor: '#0D7377', borderColor: '#0D7377' },
+  portalToggleText: { fontSize: 10, fontWeight: '700', color: '#64748B' },
+  portalToggleTextActive: { color: '#FFFFFF' },
+  jobFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 },
+  viewPipeBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#F0F7F7' },
+  viewPipeText: { fontSize: 11, fontWeight: '700', color: '#0D7377' },
+
+  // Interviews & Offers
   interviewCard: { backgroundColor: '#FFFFFF', padding: 18, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  intIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
-  intCandName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  intRound: { fontSize: 12, color: '#0D7377', fontWeight: '600', marginTop: 2 },
-  intInterviewer: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  intTime: { fontSize: 12, color: '#475569', marginTop: 2 },
-  meetBtn: { backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  meetBtnText: { fontSize: 11, fontWeight: '700', color: '#D97706' },
+  intIconBox: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
+  intCandName: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
+  intRound: { fontSize: 12, color: '#0D7377', fontWeight: '700', marginTop: 2 },
+  intInterviewer: { fontSize: 12, color: '#475569', marginTop: 2 },
+  intTime: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  meetBtn: { backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
+  meetBtnText: { fontSize: 11, fontWeight: '700', color: '#16A34A' },
   scorecardBtn: { backgroundColor: '#0D7377', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  scorecardBtnText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  scorecardBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+
   offerCard: { backgroundColor: '#FFFFFF', padding: 18, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  offerIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
-  offerCandName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  offerRole: { fontSize: 12, color: '#2563EB', fontWeight: '600', marginTop: 2 },
-  offerCTC: { fontSize: 13, fontWeight: '700', color: '#1A1A2E', marginTop: 2 },
-  offerDate: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  offerStatusBadge: { backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  offerIconBox: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
+  offerCandName: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
+  offerRole: { fontSize: 12, color: '#2563EB', fontWeight: '700', marginTop: 2 },
+  offerCTC: { fontSize: 12, color: '#1A1A2E', fontWeight: '700', marginTop: 2 },
+  offerDate: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  offerStatusBadge: { backgroundColor: '#EFF6FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   offerStatusText: { fontSize: 10, fontWeight: '800', color: '#2563EB' },
   convertBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  convertBtnText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  convertBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+
+  // Manpower
   manpowerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  mpCard: { width: '31%', minWidth: 280, backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
+  mpCard: { flex: 1, minWidth: 260, backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0' },
   mpDept: { fontSize: 16, fontWeight: '800', color: '#1A1A2E', marginBottom: 12 },
-  mpRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  mpRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 4 },
   mpLabel: { fontSize: 12, color: '#64748B' },
-  mpVal: { fontSize: 13, fontWeight: '700', color: '#1A1A2E' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  candidate360Modal: { width: '100%', maxWidth: 720, maxHeight: '90%', backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden' },
-  c360Header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  c360Avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#0D7377', alignItems: 'center', justifyContent: 'center' },
-  c360AvatarText: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
-  c360Name: { fontSize: 18, fontWeight: '800', color: '#1A1A2E' },
+  mpVal: { fontSize: 12, fontWeight: '700', color: '#1A1A2E' },
+
+  // Candidate 360 Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  candidate360Modal: { width: '100%', maxWidth: 780, maxHeight: '90%', backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden' },
+  c360Header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  c360Avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
+  c360AvatarText: { fontSize: 18, fontWeight: '900', color: '#0D7377' },
+  c360Name: { fontSize: 17, fontWeight: '900', color: '#1A1A2E' },
   stageTag: { backgroundColor: '#F0F7F7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   stageTagText: { fontSize: 10, fontWeight: '800', color: '#0D7377' },
-  c360Sub: { fontSize: 13, color: '#64748B', marginTop: 2 },
-  aiCard: { backgroundColor: '#F0F7F7', padding: 18, borderRadius: 14, borderWidth: 1, borderColor: '#CCECEC', marginBottom: 20 },
+  c360Sub: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  archiveToPoolBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F5F3FF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#DDD6FE' },
+  archiveToPoolBtnText: { fontSize: 11, fontWeight: '800', color: '#8B5CF6' },
+
+  aiCard: { backgroundColor: '#F0F7F7', padding: 18, borderRadius: 14, borderWidth: 1, borderColor: '#CCECEC', marginBottom: 16 },
   aiHeaderTitle: { fontSize: 14, fontWeight: '800', color: '#0D7377' },
-  aiBigScore: { fontSize: 20, fontWeight: '800', color: '#0D7377' },
+  aiBigScore: { fontSize: 18, fontWeight: '900', color: '#0D7377' },
   aiCriteriaGrid: { flexDirection: 'row', gap: 10, marginTop: 12 },
   aiCritBox: { flex: 1, backgroundColor: '#FFFFFF', padding: 10, borderRadius: 8, alignItems: 'center' },
-  aiCritLabel: { fontSize: 10, color: '#64748B', fontWeight: '600' },
-  aiCritVal: { fontSize: 14, fontWeight: '800', color: '#1A1A2E', marginTop: 2 },
-  detailsHeading: { fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 },
-  skillsTagCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  bigSkillTag: { backgroundColor: '#F1F5F9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  bigSkillText: { fontSize: 12, fontWeight: '600', color: '#1A1A2E' },
-  c360Actions: { flexDirection: 'row', gap: 10, marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
-  scorecardModal: { width: '100%', maxWidth: 500, backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  modalTitle: { fontSize: 17, fontWeight: '800', color: '#1A1A2E' },
-  label: { fontSize: 12, fontWeight: '700', color: '#1A1A2E', marginBottom: 6, marginTop: 12 },
-  input: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1A1A2E', backgroundColor: '#F8FAFC' },
-  ratingBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: '#F1F5F9', alignItems: 'center' },
-  ratingBtnActive: { backgroundColor: '#0D7377' },
-  ratingBtnText: { fontSize: 12, fontWeight: '700', color: '#475569' },
-  recBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: '#F1F5F9', alignItems: 'center' },
-  recBtnActive: { backgroundColor: '#0D7377' },
-  recBtnText: { fontSize: 10, fontWeight: '700', color: '#475569' },
+  aiCritLabel: { fontSize: 10, color: '#64748B', fontWeight: '700' },
+  aiCritVal: { fontSize: 14, fontWeight: '900', color: '#1A1A2E', marginTop: 2 },
+
+  c360InfoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  infoBox: { flex: 1, minWidth: 150, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0' },
+  infoLabel: { fontSize: 10, fontWeight: '700', color: '#64748B' },
+  infoVal: { fontSize: 12, fontWeight: '800', color: '#1A1A2E', marginTop: 3 },
+
+  timelineRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  timelineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#0D7377', marginTop: 5 },
+  tlTitle: { fontSize: 12, fontWeight: '700', color: '#1A1A2E' },
+  tlDesc: { fontSize: 11, color: '#64748B' },
+  tlDate: { fontSize: 10, color: '#94A3B8' },
+
+  // Generic Modals
+  modalCard: { width: '100%', maxWidth: 640, maxHeight: '90%', backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden' },
+  modalSmallCard: { width: '100%', maxWidth: 480, backgroundColor: '#FFFFFF', borderRadius: 18, overflow: 'hidden' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
+  label: { fontSize: 12, fontWeight: '700', color: '#1A1A2E', marginBottom: 4 },
+  input: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: '#1A1A2E', backgroundColor: '#F8FAFC' },
+  modalSubmitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0D7377', paddingVertical: 12, borderRadius: 8 },
+  modalSubmitText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
+  checkboxLabel: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  reasonOption: { padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 6 },
+  reasonOptionActive: { backgroundColor: '#F0F7F7', borderColor: '#0D7377' },
+  reasonText: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  reasonTextActive: { color: '#0D7377', fontWeight: '800' },
 });
