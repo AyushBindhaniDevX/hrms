@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS public.organizations (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ensure package_type exists if table was already created
+ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS package_type TEXT DEFAULT 'basic';
+
 -- 3.2 Workplaces (Offices / Branches with Geofences)
 CREATE TABLE IF NOT EXISTS public.workplaces (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
