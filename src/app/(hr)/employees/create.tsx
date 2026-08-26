@@ -11,7 +11,8 @@ import { DatePicker } from '@/components/ui/DatePicker';
 import { Button } from '@/components/ui/Button';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getDepartments, createEmployee, getEmployees } from '@/lib/services/employee';
-import type { Department, Employee } from '@/types';
+import { getShifts } from '@/lib/services/shifts';
+import type { Department, Employee, WorkShift } from '@/types';
 import { RefreshCw, Sparkles } from 'lucide-react-native';
 
 export default function CreateEmployeeScreen() {
@@ -21,6 +22,7 @@ export default function CreateEmployeeScreen() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [managers, setManagers] = useState<Employee[]>([]);
+  const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -30,6 +32,7 @@ export default function CreateEmployeeScreen() {
   const [empCode, setEmpCode] = useState('');
   const [deptId, setDeptId] = useState<string | null>(null);
   const [managerId, setManagerId] = useState<string | null>(null);
+  const [shiftId, setShiftId] = useState<string | null>(null);
   const [role, setRole] = useState<string>('employee');
   const [designation, setDesignation] = useState('');
   const [basicSalary, setBasicSalary] = useState('');
@@ -49,12 +52,14 @@ export default function CreateEmployeeScreen() {
   useEffect(() => {
     (async () => {
       const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
-      const [d, m] = await Promise.all([
+      const [d, m, s] = await Promise.all([
         getDepartments(orgId),
         getEmployees({ organization_id: orgId }),
+        getShifts(orgId)
       ]);
       setDepartments(d);
       setManagers(m);
+      setShifts(s);
     })();
   }, [profile, tenantOrg]);
 
@@ -89,6 +94,7 @@ export default function CreateEmployeeScreen() {
         employee_code: empCode.trim(),
         department_id: deptId || undefined,
         manager_id: managerId || undefined,
+        default_shift_id: shiftId || undefined,
         role: role,
         designation: designation.trim() || undefined,
         basic_salary: parseFloat(basicSalary) || 0,
@@ -169,6 +175,13 @@ export default function CreateEmployeeScreen() {
             options={managers.map((m) => ({ label: m.profile?.full_name || m.employee_code || 'Unknown', value: m.id }))}
             value={managerId}
             onValueChange={setManagerId}
+          />
+
+          <Select
+            label="Default Shift (For Attendance)"
+            options={shifts.map((s) => ({ label: `${s.name} (${s.start_time} - ${s.end_time})`, value: s.id }))}
+            value={shiftId}
+            onValueChange={setShiftId}
           />
 
           <Select

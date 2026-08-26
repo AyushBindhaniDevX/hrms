@@ -114,6 +114,7 @@ export async function createEmployee(params: {
   designation?: string;
   basic_salary?: number;
   workplace_id?: string;
+  default_shift_id?: string;
 }): Promise<void> {
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: params.email,
@@ -150,6 +151,7 @@ export async function createEmployee(params: {
     department_id: params.department_id || null,
     manager_id: params.manager_id || null,
     workplace_id: params.workplace_id || null,
+    default_shift_id: params.default_shift_id || null,
     employment_status: 'active',
     designation: params.designation || null,
     basic_salary: params.basic_salary || 0,

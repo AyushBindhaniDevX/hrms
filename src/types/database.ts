@@ -54,6 +54,7 @@ export interface Employee {
   joining_date: string | null;
   workplace_id: string | null;
   manager_id?: string | null;
+  default_shift_id?: string | null;
   basic_salary: number;
   employment_status: EmploymentStatus;
   onboarding_completed: boolean;
@@ -75,6 +76,7 @@ export interface Employee {
   department?: Department;
   workplace?: Workplace;
   manager?: Employee;
+  shift?: WorkShift;
   direct_reports?: Employee[];
 }
 

@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS public.employees (
   department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
   workplace_id UUID REFERENCES public.workplaces(id) ON DELETE SET NULL,
   manager_id UUID REFERENCES public.employees(id) ON DELETE SET NULL,
+  default_shift_id UUID REFERENCES public.shifts(id) ON DELETE SET NULL,
   designation TEXT,
   joining_date DATE DEFAULT CURRENT_DATE,
   basic_salary NUMERIC(12, 2) DEFAULT 0.00,

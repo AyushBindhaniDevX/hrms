@@ -76,16 +76,31 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
   if (employees && employees.length > 0) {
     const entries = employees.map((emp) => {
       const basic = emp.basic_salary || 0;
+      
+      // Statutory Calculations
+      const epf = Math.round(basic * 0.12); // 12% of basic
+      const pt = basic > 15000 ? 200 : 0; // standard slab
+      
+      // TDS approximation: Assuming 10% on basic above 50,000 as a simple placeholder
+      const tds = basic > 50000 ? Math.round((basic - 50000) * 0.10) : 0;
+      
+      const totalDeductions = epf + pt + tds;
+      const netSalary = basic - totalDeductions;
+
       return {
         payroll_period_id: period.id,
         employee_id: emp.id,
         basic_salary: basic,
         allowances: {},
-        deductions: {},
+        deductions: {
+          'EPF (12%)': epf,
+          'Professional Tax (PT)': pt,
+          'TDS': tds
+        },
         lop_days: 0,
         lop_amount: 0,
         gross_salary: basic,
-        net_salary: basic,
+        net_salary: netSalary > 0 ? netSalary : 0,
         status: 'draft',
         created_at: now,
         updated_at: now,
