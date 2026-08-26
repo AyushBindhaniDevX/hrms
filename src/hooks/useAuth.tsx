@@ -12,7 +12,7 @@ interface AuthState {
   role: UserRole | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, fallbackOrgId?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchProfile]);
 
-  const handleSignIn = useCallback(async (email: string, password: string) => {
+  const handleSignIn = useCallback(async (email: string, password: string, fallbackOrgId?: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
@@ -127,19 +127,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!existingProfile) {
         // Find a fallback organization if none exists in user_metadata
-        let fallbackOrgId = data.user.user_metadata?.organization_id;
+        let orgId = data.user.user_metadata?.organization_id || fallbackOrgId;
         
-        if (!fallbackOrgId) {
+        if (!orgId) {
           const { data: firstOrg } = await supabase
             .from('organizations')
             .select('id')
             .limit(1)
             .maybeSingle();
             
-          fallbackOrgId = firstOrg?.id;
+          orgId = firstOrg?.id;
         }
 
-        if (!fallbackOrgId) {
+        if (!orgId) {
            console.error('No organization found in database to link the new profile.');
            throw new Error('System error: No organizations exist in the database to link to your profile.');
         }
@@ -150,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: data.user.user_metadata?.full_name || 'HRMS User',
           email: data.user.email,
           role: data.user.user_metadata?.role || 'employee',
-          organization_id: fallbackOrgId,
+          organization_id: orgId,
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
