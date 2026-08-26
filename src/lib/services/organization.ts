@@ -144,7 +144,15 @@ export async function createSystemUser(params: {
     },
   });
 
-  const uid = authData.user?.id || 'usr_' + Date.now();
+  if (authError) {
+    throw new Error(`Authentication Error: ${authError.message}`);
+  }
+
+  if (!authData.user?.id) {
+    throw new Error('Failed to create user account. No ID returned from Auth.');
+  }
+
+  const uid = authData.user.id;
 
   // 2. Insert Profile
   const now = new Date().toISOString();

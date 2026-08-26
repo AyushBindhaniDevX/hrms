@@ -128,7 +128,15 @@ export async function createEmployee(params: {
     },
   });
 
-  const uid = authData.user?.id || 'usr_' + Date.now();
+  if (authError) {
+    throw new Error(`Authentication Error: ${authError.message}`);
+  }
+
+  if (!authData.user?.id) {
+    throw new Error('Failed to create user account. No ID returned from Auth.');
+  }
+
+  const uid = authData.user.id;
   const now = new Date().toISOString();
 
   // Create profile
