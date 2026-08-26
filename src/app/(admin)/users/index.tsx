@@ -185,6 +185,16 @@ export default function UserManagementScreen() {
     }
   };
 
+  const handleDeptChange = (val: string | null) => {
+    setNewDeptId(val);
+    if (val) {
+      const dept = departments.find(d => d.id === val);
+      if (dept && dept.manager_id) {
+        setNewManagerId(dept.manager_id);
+      }
+    }
+  };
+
   const handleCreateUser = async () => {
     if (!newFullName.trim()) {
       setFormError('Please enter a full name');
@@ -789,7 +799,7 @@ export default function UserManagementScreen() {
                       label="Department"
                       options={departments.map((d) => ({ label: d.name, value: d.id }))}
                       value={newDeptId}
-                      onValueChange={setNewDeptId}
+                      onValueChange={handleDeptChange}
                     />
 
                     <Select

@@ -84,6 +84,16 @@ export default function CreateEmployeeScreen() {
     }
   };
 
+  const handleDeptChange = (val: string | null) => {
+    setDeptId(val);
+    if (val) {
+      const dept = departments.find(d => d.id === val);
+      if (dept && dept.manager_id) {
+        setManagerId(dept.manager_id);
+      }
+    }
+  };
+
   const handleCreate = async () => {
     if (!fullName || !username || !empCode || !phone) {
       setError('Name, username, phone, and employee code are required');
@@ -182,7 +192,7 @@ export default function CreateEmployeeScreen() {
             label="Department"
             options={departments.map((d) => ({ label: d.name, value: d.id }))}
             value={deptId}
-            onValueChange={setDeptId}
+            onValueChange={handleDeptChange}
           />
 
           <Select
