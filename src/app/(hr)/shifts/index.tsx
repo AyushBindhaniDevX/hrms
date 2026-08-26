@@ -62,8 +62,9 @@ export default function ShiftsScreen() {
     currentShiftId?: string | null;
   }>({ open: false, employee: null, date: '', dayLabel: '' });
 
-  // Add Shift Modal
+  // Add/Edit Shift Modal
   const [addShiftOpen, setAddShiftOpen] = useState(false);
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [newShiftName, setNewShiftName] = useState('');
   const [newShiftStart, setNewShiftStart] = useState('09:00');
   const [newShiftEnd, setNewShiftEnd] = useState('17:00');
@@ -137,29 +138,52 @@ export default function ShiftsScreen() {
     await assignEmployeeShift(assignModal.employee.id, assignModal.date, shiftId, orgId);
   };
 
-  const handleCreateShift = async () => {
+  const handleCreateOrUpdateShift = async () => {
     if (!newShiftName.trim()) return;
     setSavingShift(true);
     try {
       const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
-      const created = await createShift({
-        organization_id: orgId,
+      const shiftPayload = {
         name: newShiftName.trim(),
         start_time: newShiftStart.trim(),
         end_time: newShiftEnd.trim(),
         color: newShiftColor,
-        allowance_per_day: parseFloat(newShiftAllowance) || 0,
-        is_night_shift: newShiftStart > newShiftEnd || newShiftStart >= '20:00',
-      });
-      setShifts((prev) => [...prev, created]);
+        allowance_per_day: Number(newShiftAllowance) || 0,
+        is_night_shift: newShiftStart.trim() > newShiftEnd.trim(), // simple check for night shift
+      };
+
+      if (editingShiftId) {
+        await updateShift(editingShiftId, shiftPayload);
+        setShifts((prev) => prev.map(s => s.id === editingShiftId ? { ...s, ...shiftPayload } : s));
+      } else {
+        const created = await createShift({
+          organization_id: orgId,
+          ...shiftPayload
+        });
+        setShifts((prev) => [...prev, created]);
+      }
+
       setAddShiftOpen(false);
       setNewShiftName('');
+      setNewShiftStart('09:00');
+      setNewShiftEnd('17:00');
       setNewShiftAllowance('0');
+      setEditingShiftId(null);
     } catch (e) {
-      console.error('Error creating shift:', e);
+      console.error('Error saving shift:', e);
     } finally {
       setSavingShift(false);
     }
+  };
+
+  const openEditShift = (s: WorkShift) => {
+    setEditingShiftId(s.id);
+    setNewShiftName(s.name);
+    setNewShiftStart(s.start_time);
+    setNewShiftEnd(s.end_time);
+    setNewShiftColor(s.color);
+    setNewShiftAllowance(s.allowance_per_day?.toString() || '0');
+    setAddShiftOpen(true);
   };
 
   if (loading) return <LoadingState />;
@@ -177,7 +201,17 @@ export default function ShiftsScreen() {
           </View>
 
           {selectedView === 'master' && (
-            <TouchableOpacity onPress={() => setAddShiftOpen(true)} style={[styles.addBtn, { backgroundColor: colors.primary }]}>
+            <TouchableOpacity
+            onPress={() => {
+              setEditingShiftId(null);
+              setNewShiftName('');
+              setNewShiftStart('09:00');
+              setNewShiftEnd('17:00');
+              setNewShiftColor('#0D7377');
+              setNewShiftAllowance('0');
+              setAddShiftOpen(true);
+            }}
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}>
               <Plus size={16} color="#FFF" />
               <Text style={styles.addBtnText}>New Shift Type</Text>
             </TouchableOpacity>
@@ -338,7 +372,12 @@ export default function ShiftsScreen() {
                     )}
                   </View>
 
-                  <Text style={styles.shiftName}>{s.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={styles.shiftName}>{s.name}</Text>
+                    <TouchableOpacity onPress={() => openEditShift(s)}>
+                      <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>Edit</Text>
+                    </TouchableOpacity>
+                  </View>
                   <View style={styles.timeBox}>
                     <Clock size={16} color="#0D7377" />
                     <Text style={styles.timeText}>
@@ -415,7 +454,7 @@ export default function ShiftsScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.modalBox}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Create Shift Type</Text>
+                <Text style={styles.modalTitle}>{editingShiftId ? 'Edit Shift' : 'Create Shift Type'}</Text>
                 <TouchableOpacity onPress={() => setAddShiftOpen(false)}>
                   <X size={20} color="#64748B" />
                 </TouchableOpacity>
@@ -465,11 +504,11 @@ export default function ShiftsScreen() {
                 </View>
 
                 <TouchableOpacity
-                  onPress={handleCreateShift}
+                  onPress={handleCreateOrUpdateShift}
                   disabled={savingShift}
                   style={[styles.saveBtn, { backgroundColor: colors.primary }]}
                 >
-                  {savingShift ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Create Shift</Text>}
+                  {savingShift ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{editingShiftId ? 'Save Changes' : 'Create Shift'}</Text>}
                 </TouchableOpacity>
               </View>
             </View>

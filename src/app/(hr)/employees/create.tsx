@@ -1,7 +1,7 @@
 import { HR_NAV } from '@/constants/navigation';
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
@@ -49,19 +49,25 @@ export default function CreateEmployeeScreen() {
     setEmpCode(generateRandomCode());
   }, [tenantDomain]);
 
-  useEffect(() => {
-    (async () => {
-      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
-      const [d, m, s] = await Promise.all([
-        getDepartments(orgId),
-        getEmployees({ organization_id: orgId }),
-        getShifts(orgId)
-      ]);
-      setDepartments(d);
-      setManagers(m);
-      setShifts(s);
-    })();
-  }, [profile, tenantOrg]);
+    useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      (async () => {
+        const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
+        const [d, m, s] = await Promise.all([
+          getDepartments(orgId),
+          getEmployees({ organization_id: orgId }),
+          getShifts(orgId)
+        ]);
+        if (isActive) {
+          setDepartments(d || []);
+          setManagers(m || []);
+          setShifts(s || []);
+        }
+      })();
+      return () => { isActive = false; };
+    }, [profile, tenantOrg])
+  );
 
   const handleNameChange = (name: string) => {
     setFullName(name);
