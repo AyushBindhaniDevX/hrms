@@ -31,7 +31,7 @@ export function useTenantBranding() {
             .from('organizations')
             .select('*')
             .eq('slug', slug)
-            .single();
+            .maybeSingle();
 
           if (data && !error) {
             setTenant(data as Organization);
