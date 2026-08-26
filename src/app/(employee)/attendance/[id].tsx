@@ -6,8 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/States';
-import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { formatDate, formatTime, formatMinutes } from '@/utils/format';
 import type { Attendance } from '@/types';
 
@@ -20,9 +19,14 @@ export default function AttendanceDetail() {
 
   useEffect(() => {
     (async () => {
-      const attDoc = await getDoc(doc(db, 'attendance', id!));
-      const data = attDoc.exists() ? { id: attDoc.id, ...attDoc.data() } : null;
-      setRecord(data as Attendance);
+      if (!id) return;
+      const { data } = await supabase
+        .from('attendance')
+        .select('*, workplace:workplaces(*)')
+        .eq('id', id)
+        .maybeSingle();
+
+      setRecord((data || null) as Attendance | null);
       setLoading(false);
     })();
   }, [id]);

@@ -10,13 +10,10 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
-import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { updateEmployee } from '@/lib/services/employee';
 import { formatDate, formatCurrency } from '@/utils/format';
 import type { Employee } from '@/types';
-
-
 
 export default function EmployeeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,9 +26,14 @@ export default function EmployeeDetailScreen() {
 
   useEffect(() => {
     (async () => {
-      const empDoc = await getDoc(doc(db, 'employees', id!));
-      const data = empDoc.exists() ? { id: empDoc.id, ...empDoc.data() } : null;
-      setEmp(data as Employee);
+      if (!id) return;
+      const { data } = await supabase
+        .from('employees')
+        .select('*, profile:profiles(*), department:departments(*), workplace:workplaces(*)')
+        .eq('id', id)
+        .maybeSingle();
+
+      setEmp((data || null) as Employee | null);
       setLoading(false);
     })();
   }, [id]);

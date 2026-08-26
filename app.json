@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Oasis Platform: Oasis HRMS",
+    "name": "Oasis",
     "slug": "oasis-hrms",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "oasis-hrms",
+    "scheme": "oasis",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
@@ -14,6 +14,8 @@
       }
     },
     "android": {
+      "package": "com.oasis.hrms",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#111827",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -22,7 +24,9 @@
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -35,8 +39,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#111827",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "image": "./assets/images/icon.png",
+          "imageWidth": 128
         }
       ],
       [
@@ -50,6 +54,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "318b86e9-280c-4720-8f7a-b50335f5c7c8"
+      }
     }
   }
 }

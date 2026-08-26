@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Lock, Bell, Monitor, Link2, Smartphone, XCircle, AlertCircle, CheckCircle2 } from 'lucide-react-native';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 
 export default function SettingsScreen() {
   const colors = useTheme();
@@ -50,27 +49,15 @@ export default function SettingsScreen() {
       setPwError('New passwords do not match.');
       return;
     }
-    if (!currentPw) {
-      setPwError('Please enter your current password to confirm.');
-      return;
-    }
     setPwError('');
     setSavingPw(true);
     try {
-      const user = auth.currentUser;
-      if (!user || !user.email) throw new Error('No user found');
-      // Re-authenticate first
-      const cred = EmailAuthProvider.credential(user.email, currentPw);
-      await reauthenticateWithCredential(user, cred);
-      await updatePassword(user, newPw);
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) throw error;
       setPwSuccess(true);
       setTimeout(() => setPwModalOpen(false), 2000);
     } catch (err: any) {
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setPwError('Current password is incorrect.');
-      } else {
-        setPwError(err.message || 'Failed to update password.');
-      }
+      setPwError(err.message || 'Failed to update password.');
     } finally {
       setSavingPw(false);
     }

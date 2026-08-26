@@ -6,9 +6,10 @@ interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
   icon?: React.ReactNode;
+  rightElement?: React.ReactNode;
 }
 
-export function Input({ label, error, icon, style, onFocus, onBlur, ...props }: InputProps) {
+export function Input({ label, error, icon, rightElement, style, onFocus, onBlur, ...props }: InputProps) {
   const colors = useTheme();
   const [isFocused, setIsFocused] = useState(false);
 
@@ -22,7 +23,9 @@ export function Input({ label, error, icon, style, onFocus, onBlur, ...props }: 
             backgroundColor: colors.surface,
             borderColor: error ? colors.danger : (isFocused ? colors.primary : colors.border),
             borderWidth: isFocused || error ? 2 : 1,
-            paddingHorizontal: isFocused || error ? 11 : 12, // adjust for border width change
+            paddingLeft: isFocused || error ? 11 : 12,
+            paddingRight: rightElement ? 0 : (isFocused || error ? 11 : 12),
+            overflow: 'hidden',
           },
         ]}
       >
@@ -45,6 +48,7 @@ export function Input({ label, error, icon, style, onFocus, onBlur, ...props }: 
           }}
           {...props}
         />
+        {rightElement}
       </View>
       {error && <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>}
     </View>

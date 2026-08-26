@@ -1,72 +1,44 @@
-import { db, auth } from '@/lib/firebase';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  serverTimestamp,
-  getCountFromServer,
-  writeBatch
-} from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import type { Employee, Profile, Department, Workplace } from '@/types';
 
-async function fetchEmployeeJoins(empData: any): Promise<Employee> {
-  const emp = { ...empData } as Employee;
-
-  if (empData.profile_id) {
-    const profSnap = await getDoc(doc(db, 'profiles', empData.profile_id));
-    if (profSnap.exists()) emp.profile = { id: profSnap.id, ...profSnap.data() } as Profile;
-  }
-
-  if (empData.department_id) {
-    const deptSnap = await getDoc(doc(db, 'departments', empData.department_id));
-    if (deptSnap.exists()) emp.department = { id: deptSnap.id, ...deptSnap.data() } as Department;
-  }
-
-  if (empData.workplace_id) {
-    const wpSnap = await getDoc(doc(db, 'workplaces', empData.workplace_id));
-    if (wpSnap.exists()) emp.workplace = { id: wpSnap.id, ...wpSnap.data() } as Workplace;
-  }
-
-  if (empData.manager_id) {
-    const mgrSnap = await getDoc(doc(db, 'employees', empData.manager_id));
-    if (mgrSnap.exists()) {
-      const mgrData = { id: mgrSnap.id, ...mgrSnap.data() };
-      if ((mgrData as any).profile_id) {
-        const mgrProfSnap = await getDoc(doc(db, 'profiles', (mgrData as any).profile_id));
-        if (mgrProfSnap.exists()) {
-          (mgrData as any).profile = { id: mgrProfSnap.id, ...mgrProfSnap.data() };
-        }
-      }
-      emp.manager = mgrData as Employee;
-    }
-  }
-
-  return emp;
-}
-
 export async function getEmployeeByProfileId(profileId: string): Promise<Employee | null> {
-  const q = query(collection(db, 'employees'), where('profile_id', '==', profileId));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
+  const { data, error } = await supabase
+    .from('employees')
+    .select(`
+      *,
+      profile:profiles(*),
+      department:departments(*),
+      workplace:workplaces(*),
+      manager:employees!employees_manager_id_fkey(*, profile:profiles(*))
+    `)
+    .eq('profile_id', profileId)
+    .maybeSingle();
 
-  const empData = { id: snap.docs[0].id, ...snap.docs[0].data() };
-  return fetchEmployeeJoins(empData);
-}
+  if (error || !data) {
+    // Fallback if join syntax differs
+    const { data: simpleEmp } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('profile_id', profileId)
+      .maybeSingle();
 
-function getTimestampMillis(val: any): number {
-  if (!val) return 0;
-  if (typeof val === 'string') return new Date(val).getTime() || 0;
-  if (typeof val?.toDate === 'function') return val.toDate().getTime();
-  if (typeof val?.seconds === 'number') return val.seconds * 1000;
-  if (val instanceof Date) return val.getTime();
-  return 0;
+    if (!simpleEmp) return null;
+
+    const [profRes, deptRes, wpRes] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', profileId).maybeSingle(),
+      simpleEmp.department_id ? supabase.from('departments').select('*').eq('id', simpleEmp.department_id).maybeSingle() : Promise.resolve({ data: null }),
+      simpleEmp.workplace_id ? supabase.from('workplaces').select('*').eq('id', simpleEmp.workplace_id).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+
+    return {
+      ...simpleEmp,
+      profile: profRes.data as Profile,
+      department: deptRes.data as Department,
+      workplace: wpRes.data as Workplace,
+    } as Employee;
+  }
+
+  return data as Employee;
 }
 
 export async function getEmployees(params?: {
@@ -74,22 +46,35 @@ export async function getEmployees(params?: {
   workplace_id?: string;
   employment_status?: string;
   search?: string;
+  organization_id?: string;
 }): Promise<Employee[]> {
-  const { department_id, workplace_id, employment_status, search } = params || {};
-  let q: any = collection(db, 'employees');
+  const { department_id, workplace_id, employment_status, search, organization_id } = params || {};
+  let query = supabase
+    .from('employees')
+    .select(`
+      *,
+      profile:profiles(*),
+      department:departments(*),
+      workplace:workplaces(*)
+    `);
 
-  if (department_id) {
-    q = query(q, where('department_id', '==', department_id));
-  }
-  if (workplace_id) {
-    q = query(q, where('workplace_id', '==', workplace_id));
-  }
-  if (employment_status) {
-    q = query(q, where('employment_status', '==', employment_status));
-  }
+  if (department_id) query = query.eq('department_id', department_id);
+  if (workplace_id) query = query.eq('workplace_id', workplace_id);
+  if (employment_status) query = query.eq('employment_status', employment_status);
 
-  const snap = await getDocs(q);
-  let results = await Promise.all(snap.docs.map((d) => fetchEmployeeJoins({ id: d.id, ...(d.data() as any) })));
+  const { data, error } = await query.order('created_at', { ascending: false });
+  if (error || !data) return [];
+
+  let results = data as Employee[];
+
+  if (organization_id) {
+    results = results.filter(
+      (e) =>
+        e.profile?.organization_id === organization_id ||
+        e.workplace?.organization_id === organization_id ||
+        e.department?.organization_id === organization_id
+    );
+  }
 
   if (search) {
     const s = search.toLowerCase();
@@ -101,39 +86,19 @@ export async function getEmployees(params?: {
     );
   }
 
-  return results.sort((a, b) => getTimestampMillis(b.created_at) - getTimestampMillis(a.created_at));
+  return results;
 }
 
 export async function getDirectory(search?: string, departmentId?: string): Promise<Employee[]> {
-  let q = query(
-    collection(db, 'employees'),
-    where('employment_status', '==', 'active')
-  );
-
-  if (departmentId) {
-    q = query(q, where('department_id', '==', departmentId));
-  }
-
-  const snap = await getDocs(q);
-  let results = await Promise.all(snap.docs.map((d) => fetchEmployeeJoins({ id: d.id, ...(d.data() as any) })));
-
-  if (search) {
-    const s = search.toLowerCase();
-    results = results.filter(
-      (e) =>
-        e.profile?.full_name?.toLowerCase().includes(s) ||
-        e.designation?.toLowerCase().includes(s) ||
-        e.employee_code?.toLowerCase().includes(s)
-    );
-  }
-
-  return results.sort((a, b) => getTimestampMillis(b.created_at) - getTimestampMillis(a.created_at));
+  return getEmployees({
+    employment_status: 'active',
+    department_id: departmentId,
+    search,
+  });
 }
 
 export async function getAllEmployees(): Promise<Employee[]> {
-  const snap = await getDocs(collection(db, 'employees'));
-  const results = await Promise.all(snap.docs.map((d) => fetchEmployeeJoins({ id: d.id, ...(d.data() as any) })));
-  return results.sort((a, b) => getTimestampMillis(b.created_at) - getTimestampMillis(a.created_at));
+  return getEmployees();
 }
 
 export async function createEmployee(params: {
@@ -148,71 +113,62 @@ export async function createEmployee(params: {
   manager_id?: string;
   designation?: string;
   basic_salary?: number;
+  workplace_id?: string;
 }): Promise<void> {
-  const { initializeApp, deleteApp } = await import('firebase/app');
-  const { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } = await import('firebase/auth');
-  const { firebaseConfig } = await import('@/lib/firebase');
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: params.email,
+    password: params.password,
+    options: {
+      data: {
+        full_name: params.full_name,
+        role: params.role || 'employee',
+        organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
+      },
+    },
+  });
 
-  const tempAppName = `emp-creator-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-  const tempApp = initializeApp(firebaseConfig, tempAppName);
+  const uid = authData.user?.id || 'usr_' + Date.now();
+  const now = new Date().toISOString();
+
+  // Create profile
+  await supabase.from('profiles').upsert({
+    id: uid,
+    full_name: params.full_name,
+    email: params.email,
+    role: params.role || 'employee',
+    organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
+    phone: params.phone || null,
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+  });
+
+  // Create employee
+  await supabase.from('employees').insert({
+    profile_id: uid,
+    employee_code: params.employee_code,
+    department_id: params.department_id || null,
+    manager_id: params.manager_id || null,
+    workplace_id: params.workplace_id || null,
+    employment_status: 'active',
+    designation: params.designation || null,
+    basic_salary: params.basic_salary || 0,
+    onboarding_completed: false,
+    created_at: now,
+    updated_at: now,
+  });
+
+  // Send Resend Welcome Notification
   try {
-    const tempAuth = getAuth(tempApp);
-    const userCredential = await createUserWithEmailAndPassword(tempAuth, params.email, params.password);
-    const user = userCredential.user;
-
-    if (params.full_name) {
-      await updateProfile(user, { displayName: params.full_name });
-    }
-
-    // Create profile
-    await setDoc(doc(db, 'profiles', user.uid), {
-      id: user.uid,
-      full_name: params.full_name,
-      email: params.email,
-      role: params.role || 'employee',
-      organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
-      phone: params.phone || null,
-      is_active: true,
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-    });
-
-    // Create employee
-    const newEmpRef = doc(collection(db, 'employees'));
-    await setDoc(newEmpRef, {
-      id: newEmpRef.id,
-      profile_id: user.uid,
-      employee_code: params.employee_code,
-      department_id: params.department_id || null,
-      manager_id: params.manager_id || null,
-      employment_status: 'active',
-      designation: params.designation || null,
-      basic_salary: params.basic_salary || 0,
-      onboarding_completed: false,
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-    });
-
-    await signOut(tempAuth);
-    await deleteApp(tempApp);
-
-    // Send Resend Welcome Notification
-    try {
-      const { sendWelcomeEmail } = await import('./resend');
-      await sendWelcomeEmail(
-        params.email,
-        params.full_name || 'Team Member',
-        params.employee_code,
-        params.designation || 'Engineer'
-      );
-    } catch (mailErr) {
-      console.warn('Resend welcome notification dispatch warning:', mailErr);
-    }
-  } catch (error) {
-    try {
-      await deleteApp(tempApp);
-    } catch {}
-    throw error;
+    const { sendWelcomeEmail } = await import('./resend');
+    await sendWelcomeEmail(
+      params.email,
+      params.full_name || 'Team Member',
+      params.employee_code,
+      params.designation || 'Staff'
+    );
+  } catch (mailErr) {
+    console.warn('Resend welcome notification dispatch warning:', mailErr);
   }
 }
 
@@ -220,67 +176,76 @@ export async function updateEmployee(
   id: string,
   updates: Partial<Pick<Employee, 'department_id' | 'designation' | 'workplace_id' | 'basic_salary' | 'employment_status' | 'employee_code' | 'manager_id'>>
 ): Promise<void> {
-  await updateDoc(doc(db, 'employees', id), {
-    ...updates,
-    updated_at: serverTimestamp(),
-  });
-}
+  const { error } = await supabase
+    .from('employees')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
 
-// ── Department Management ──────────────────────────────────────────────────
-
-export async function getDepartments(): Promise<Department[]> {
-  const snap = await getDocs(collection(db, 'departments'));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Department);
+  if (error) throw error;
 }
 
 export async function completeOnboarding(
-  employeeId: string, 
+  employeeId: string,
   profileId: string,
-  data: { 
+  data: {
     home_address: string;
     bank_details: { bank_name: string; account_number: string; routing_number: string };
     emergency_contact: { name: string; phone: string; relationship: string };
   },
   avatarUrl?: string
 ) {
-  const batch = writeBatch(db);
-  
-  const empRef = doc(db, 'employees', employeeId);
-  batch.update(empRef, {
-    ...data,
-    onboarding_completed: true,
-    updated_at: serverTimestamp()
-  });
+  const now = new Date().toISOString();
+
+  await supabase
+    .from('employees')
+    .update({
+      ...data,
+      onboarding_completed: true,
+      updated_at: now,
+    })
+    .eq('id', employeeId);
 
   if (avatarUrl) {
-    const profRef = doc(db, 'profiles', profileId);
-    batch.update(profRef, {
-      avatar_url: avatarUrl,
-      updated_at: serverTimestamp()
-    });
+    await supabase
+      .from('profiles')
+      .update({
+        avatar_url: avatarUrl,
+        updated_at: now,
+      })
+      .eq('id', profileId);
   }
-
-  await batch.commit();
 }
 
-export async function getDepartmentsWithStats(): Promise<Department[]> {
-  const [deptSnap, empSnap] = await Promise.all([
-    getDocs(query(collection(db, 'departments'), orderBy('name'))),
-    getDocs(collection(db, 'employees')),
+export async function getDepartments(): Promise<Department[]> {
+  const { data, error } = await supabase
+    .from('departments')
+    .select('*')
+    .order('name', { ascending: true });
+
+  if (error || !data) return [];
+  return data as Department[];
+}
+
+export async function getDepartmentsWithStats(organizationId?: string): Promise<Department[]> {
+  let deptQuery = supabase.from('departments').select('*').order('name', { ascending: true });
+  if (organizationId) {
+    deptQuery = deptQuery.eq('organization_id', organizationId);
+  }
+
+  const [deptRes, empRes] = await Promise.all([
+    deptQuery,
+    getEmployees(organizationId ? { organization_id: organizationId } : undefined),
   ]);
 
-  const employees = await Promise.all(
-    empSnap.docs.map((d) => fetchEmployeeJoins({ id: d.id, ...d.data() }))
-  );
-
-  const departments = deptSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Department));
+  const departments = (deptRes.data || []) as Department[];
+  const employees = (empRes || []) as Employee[];
 
   for (const dept of departments) {
     const deptEmps = employees.filter((e) => e.department_id === dept.id);
     dept.employee_count = deptEmps.length;
 
     if (dept.manager_id) {
-      dept.manager = employees.find((e) => e.id === dept.manager_id) || undefined;
+      dept.manager = employees.find((e) => e.id === dept.manager_id);
     }
   }
 
@@ -293,47 +258,55 @@ export async function createDepartment(params: {
   description?: string;
   manager_id?: string | null;
 }): Promise<Department> {
-  const newDeptRef = doc(collection(db, 'departments'));
-  const deptData: Department = {
-    id: newDeptRef.id,
-    organization_id: params.organization_id,
-    name: params.name,
-    description: params.description || null,
-    manager_id: params.manager_id || null,
-    created_at: new Date().toISOString(),
-  };
-  await setDoc(newDeptRef, {
-    ...deptData,
-    created_at: serverTimestamp(),
-  });
-  return deptData;
+  const { data, error } = await supabase
+    .from('departments')
+    .insert({
+      organization_id: params.organization_id,
+      name: params.name,
+      description: params.description || null,
+      manager_id: params.manager_id || null,
+      created_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data as Department;
 }
 
 export async function updateDepartment(
   id: string,
   updates: Partial<Pick<Department, 'name' | 'description' | 'manager_id'>>
 ): Promise<void> {
-  await updateDoc(doc(db, 'departments', id), {
-    ...updates,
-    updated_at: serverTimestamp(),
-  });
+  const { error } = await supabase
+    .from('departments')
+    .update(updates)
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 export async function deleteDepartment(id: string): Promise<void> {
-  await deleteDoc(doc(db, 'departments', id));
+  const { error } = await supabase
+    .from('departments')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 export async function updateReportingManager(employeeId: string, managerId: string | null): Promise<void> {
-  await updateDoc(doc(db, 'employees', employeeId), {
-    manager_id: managerId,
-    updated_at: serverTimestamp(),
-  });
+  const { error } = await supabase
+    .from('employees')
+    .update({ manager_id: managerId, updated_at: new Date().toISOString() })
+    .eq('id', employeeId);
+
+  if (error) throw error;
 }
 
-export async function getOrgHierarchy(): Promise<Employee[]> {
-  const allEmployees = await getAllEmployees();
+export async function getOrgHierarchy(organizationId?: string): Promise<Employee[]> {
+  const allEmployees = await getEmployees(organizationId ? { organization_id: organizationId } : undefined);
 
-  // Populate direct reports on every manager
   const empMap = new Map<string, Employee>();
   for (const e of allEmployees) {
     e.direct_reports = [];
@@ -353,11 +326,20 @@ export async function getOrgHierarchy(): Promise<Employee[]> {
   return allEmployees;
 }
 
-// ── Workplaces ─────────────────────────────────────────────────────────────
+export async function getWorkplaces(organizationId?: string): Promise<Workplace[]> {
+  let query = supabase
+    .from('workplaces')
+    .select('*')
+    .order('name', { ascending: true });
 
-export async function getWorkplaces(): Promise<Workplace[]> {
-  const snap = await getDocs(query(collection(db, 'workplaces'), orderBy('name')));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Workplace));
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) return [];
+  return data as Workplace[];
 }
 
 export async function createWorkplace(params: {
@@ -368,27 +350,30 @@ export async function createWorkplace(params: {
   longitude: number;
   radius_meters: number;
 }): Promise<Workplace> {
-  const newWpRef = doc(collection(db, 'workplaces'));
-  const wpData = {
-    id: newWpRef.id,
-    ...params,
-    is_active: true,
-    created_at: serverTimestamp(),
-    updated_at: serverTimestamp(),
-  };
-  await setDoc(newWpRef, wpData);
-  return wpData as unknown as Workplace;
+  const { data, error } = await supabase
+    .from('workplaces')
+    .insert({
+      ...params,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data as Workplace;
 }
 
 export async function updateWorkplace(id: string, updates: Partial<Workplace>): Promise<void> {
-  await updateDoc(doc(db, 'workplaces', id), {
-    ...updates,
-    updated_at: serverTimestamp(),
-  });
+  const { error } = await supabase
+    .from('workplaces')
+    .update(updates)
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
-export async function getEmployeeCount(): Promise<number> {
-  const q = query(collection(db, 'employees'), where('employment_status', '==', 'active'));
-  const snapshot = await getCountFromServer(q);
-  return snapshot.data().count;
+export async function getEmployeeCount(organizationId?: string): Promise<number> {
+  const emps = await getEmployees(organizationId ? { organization_id: organizationId, employment_status: 'active' } : { employment_status: 'active' });
+  return emps.length;
 }

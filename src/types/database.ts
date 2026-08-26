@@ -10,6 +10,8 @@ export type PayrollPeriodStatus = 'open' | 'processing' | 'closed';
 export interface Organization {
   id: string;
   name: string;
+  slug?: string | null;
+  logo_url?: string | null;
   settings: Record<string, unknown>;
   created_at: string;
 }
@@ -100,13 +102,17 @@ export interface Attendance {
   clock_out_longitude: number | null;
   clock_in_verified: boolean;
   clock_out_verified: boolean;
+  face_verified?: boolean;
+  face_snapshot_url?: string | null;
   working_minutes: number;
   status: AttendanceStatus;
   breaks?: { start: string; end: string | null; reason: string }[];
+  overtime_minutes?: number;
   created_at: string;
   updated_at: string;
   // Joined
   employee?: Employee;
+  workplace?: Workplace;
 }
 
 export interface LeaveType {
@@ -761,6 +767,32 @@ export interface AutomationRule {
   template_subject: string;
   executions_count: number;
   last_executed_at?: string | null;
+}
+
+// ==========================================
+// 11. SHIFTS & ROSTERS
+// ==========================================
+export interface WorkShift {
+  id: string;
+  organization_id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  color: string;
+  allowance_per_day: number;
+  is_night_shift?: boolean;
+  created_at?: string;
+}
+
+export interface EmployeeShift {
+  id: string;
+  employee_id: string;
+  shift_id: string | null;
+  date: string;
+  organization_id: string;
+  created_at?: string;
+  shift?: WorkShift | null;
+  employee?: Employee | null;
 }
 
 

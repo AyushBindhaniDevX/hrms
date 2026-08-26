@@ -15,6 +15,7 @@ import {
   Easing,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { isWebCameraAvailable } from '@/utils/mediaDevicesPolyfill';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { LoadingState } from '@/components/ui/States';
@@ -90,10 +91,25 @@ export default function HRAssetsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Camera & Permissions
+  const isCameraSupported = isWebCameraAvailable();
   const [permission, requestPermission] = useCameraPermissions();
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [enableTorch, setEnableTorch] = useState(false);
   const [isScanningActive, setIsScanningActive] = useState(true);
+
+  const handleRequestCameraPermission = async () => {
+    setCameraError(null);
+    try {
+      const res = await requestPermission();
+      if (!res?.granted) {
+        setCameraError('Camera permission was not granted. Please allow camera access in browser/device settings.');
+      }
+    } catch (err: any) {
+      console.warn('Camera permission request error:', err);
+      setCameraError(err?.message || 'Camera is not accessible in this environment. Please use HTTPS or localhost.');
+    }
+  };
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -623,15 +639,31 @@ export default function HRAssetsScreen() {
 
                 <ScrollView style={{ padding: isMobile ? 14 : 20 }} showsVerticalScrollIndicator={false}>
                   {/* Camera View / Permission Request */}
-                  {!permission?.granted ? (
+                  {!isCameraSupported ? (
+                    <View style={[styles.cameraPermissionBox, { borderColor: '#F59E0B' }]}>
+                      <AlertTriangle size={44} color="#D97706" />
+                      <Text style={[styles.cameraPermHeading, { color: '#B45309' }]}>Camera Unavailable on Insecure Origin</Text>
+                      <Text style={styles.cameraPermSub}>
+                        Web browsers disable camera hardware over plain HTTP network addresses. To enable live camera scanning, access this app via <Text style={{ fontWeight: '700' }}>http://localhost</Text> or <Text style={{ fontWeight: '700' }}>HTTPS</Text>.
+                      </Text>
+                      <Text style={[styles.cameraPermSub, { marginTop: 6, color: '#0D7377', fontWeight: '600' }]}>
+                        You can still search or scan using the manual Tag / Serial input below.
+                      </Text>
+                    </View>
+                  ) : !permission?.granted ? (
                     <View style={styles.cameraPermissionBox}>
                       <Camera size={48} color="#0D7377" />
                       <Text style={styles.cameraPermHeading}>Camera Access Required</Text>
                       <Text style={styles.cameraPermSub}>
                         Grant camera permission to scan physical QR codes and barcode stickers attached to company devices.
                       </Text>
+                      {cameraError && (
+                        <Text style={[styles.cameraPermSub, { color: '#DC2626', marginTop: 4, fontWeight: '600' }]}>
+                          ⚠️ {cameraError}
+                        </Text>
+                      )}
                       <TouchableOpacity
-                        onPress={requestPermission}
+                        onPress={handleRequestCameraPermission}
                         style={styles.grantPermBtn}
                         activeOpacity={0.85}
                       >

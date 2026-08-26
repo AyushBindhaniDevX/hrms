@@ -1,204 +1,208 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, Text } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  ActivityIndicator,
+  Text,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { PhoneOff } from 'lucide-react-native';
-import { WebView } from 'react-native-webview';
+import { Send, Bot, Sparkles, User, ChevronLeft } from 'lucide-react-native';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
+import { getAIResponse } from '@/lib/services/ai';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
-import { applyLeave, getLeaveTypes } from '@/lib/services/leave';
-import { createTicket } from '@/lib/services/helpdesk';
 
-const BASE_AGENT_URL = 'https://elevenlabs.io/app/talk-to?agent_id=agent_2901m0q73yb8ej3asxjysw74styg&branch_id=agtbrch_8201m0q73zvhfgb8x4gmdxt24bjv';
+interface Message {
+  id: string;
+  sender: 'ovi' | 'user';
+  text: string;
+  timestamp: string;
+}
 
 export default function CallOviScreen() {
   const router = useRouter();
+  const colors = useTheme();
   const { profile } = useAuth();
-  const [employee, setEmployee] = useState<any>(null);
-  const [agentUrl, setAgentUrl] = useState<string | null>(null);
-  
-  const webviewRef = useRef<WebView>(null);
+  const { companyName, officeName } = useTenant();
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      sender: 'ovi',
+      text: `Hello ${profile?.full_name || 'there'}! I'm Ovi, your AI HR assistant for ${companyName}. How can I assist you with your leave, policies, or workplace questions today?`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    },
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
-    const loadContext = async () => {
-      if (profile) {
-        const emp = await getEmployeeByProfileId(profile.id);
-        setEmployee(emp);
-        const name = encodeURIComponent(profile.full_name || 'Employee');
-        const dept = encodeURIComponent(emp?.department?.name || 'Unknown');
-        const role = encodeURIComponent(emp?.designation || 'Staff');
-        
-        const urlWithContext = `${BASE_AGENT_URL}&var_name=${name}&var_department=${dept}&var_role=${role}`;
-        setAgentUrl(urlWithContext);
-      } else {
-        setAgentUrl(BASE_AGENT_URL);
-      }
+  const handleSend = async () => {
+    if (!inputText.trim() || isTyping) return;
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      sender: 'user',
+      text: inputText.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
-    loadContext();
-  }, [profile]);
 
-  // INJECTED JAVASCRIPT: Listens to ElevenLabs Client Tools
-  const injectedJS = `
-    document.addEventListener("DOMContentLoaded", () => {
-      const widget = document.querySelector("elevenlabs-convai");
-      
-      if (widget) {
-        widget.addEventListener("elevenlabs-convai:call", (event) => {
-          
-          const createTool = (toolName) => {
-            return async (args) => {
-              return new Promise((resolve, reject) => {
-                const reqId = Math.random().toString();
-                
-                // Send the tool call request to React Native
-                window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                  type: 'TOOL_CALL', 
-                  tool: toolName, 
-                  args, 
-                  reqId 
-                }));
-                
-                // Listen for the result from React Native
-                const listener = (e) => {
-                  try {
-                    const data = JSON.parse(e.data);
-                    if (data.type === 'TOOL_RESULT' && data.reqId === reqId) {
-                      window.removeEventListener('message', listener);
-                      document.removeEventListener('message', listener);
-                      if (data.error) reject(data.error);
-                      else resolve(data.result);
-                    }
-                  } catch (err) {}
-                };
-                
-                // React Native WebView uses document or window depending on the platform for return messages
-                document.addEventListener('message', listener);
-                window.addEventListener('message', listener);
-              });
-            };
-          };
+    setMessages((prev) => [...prev, userMsg]);
+    setInputText('');
+    setIsTyping(true);
 
-          // Register our three tools
-          event.detail.config.clientTools = {
-            apply_for_leave: createTool('apply_for_leave'),
-            create_helpdesk_ticket: createTool('create_helpdesk_ticket'),
-            regularize_attendance: createTool('regularize_attendance')
-          };
-          
-        });
-      }
-    });
-    true;
-  `;
-
-  const handleMessage = async (event: any) => {
     try {
-      const data = JSON.parse(event.nativeEvent.data);
-      
-      if (data.type === 'TOOL_CALL' && employee) {
-        const { tool, args, reqId } = data;
-        let result = null;
+      const prompt = `You are Ovi, the smart HR and workplace assistant for ${companyName} (${officeName}).
+Employee Name: ${profile?.full_name || 'Staff Member'}
+User Question: "${userMsg.text}"
 
-        try {
-          if (tool === 'apply_for_leave') {
-            const types = await getLeaveTypes();
-            const typeName = args.leave_type || 'Annual Leave';
-            const matchedType = types.find(x => x.name.toLowerCase().includes(typeName.toLowerCase())) || types[0];
-            
-            // Calculate days roughly
-            const start = new Date(args.start_date);
-            const end = new Date(args.end_date);
-            const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
+Provide a friendly, professional, concise response (2-4 sentences max).`;
 
-            result = await applyLeave({
-              employee_id: employee.id,
-              leave_type_id: matchedType.id,
-              start_date: args.start_date,
-              end_date: args.end_date,
-              days: days,
-              is_half_day: false,
-              reason: args.reason || 'Requested via Ovi AI'
-            });
-          } 
-          else if (tool === 'create_helpdesk_ticket') {
-            result = await createTicket({
-              employee_id: employee.id,
-              category: (args.category || 'other').toLowerCase() as any,
-              title: args.title,
-              description: args.description,
-              priority: 'medium'
-            });
-          }
-          else if (tool === 'regularize_attendance') {
-            // We use the helpdesk system for attendance regularization
-            result = await createTicket({
-              employee_id: employee.id,
-              category: 'hr',
-              title: \`Attendance Regularization: \${args.date}\`,
-              description: args.reason,
-              priority: 'medium'
-            });
-          }
+      const res = await getAIResponse(prompt);
+      const botReply = res.answer || "I'm looking into that for you. Please let me know if you need anything else!";
 
-          // Return success
-          webviewRef.current?.injectJavaScript(\`
-            window.postMessage(JSON.stringify({ type: 'TOOL_RESULT', reqId: '\${reqId}', result: \${JSON.stringify(result || { success: true })} }), '*');
-            true;
-          \`);
+      const oviMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ovi',
+        text: botReply,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
 
-        } catch (e: any) {
-          // Return error
-          webviewRef.current?.injectJavaScript(\`
-            window.postMessage(JSON.stringify({ type: 'TOOL_RESULT', reqId: '\${reqId}', error: '\${e.message}' }), '*');
-            true;
-          \`);
-        }
-      }
-    } catch (e) {
-      console.error("Message parsing error:", e);
+      setMessages((prev) => [...prev, oviMsg]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          sender: 'ovi',
+          text: "I'm currently unable to connect to the assistant server. Please check your network or try again shortly.",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    } finally {
+      setIsTyping(false);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
     }
   };
 
-  if (!agentUrl) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#0D7377" />
-        <Text style={{ color: '#94A3B8', marginTop: 16 }}>Loading Secure Channel...</Text>
-      </View>
-    );
-  }
-
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.encryptedText}>🔒 End-to-end encrypted AI Call</Text>
-      </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Top Header */}
+        <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ChevronLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerTitleRow}>
+            <View style={[styles.botIconBadge, { backgroundColor: colors.primary + '20' }]}>
+              <Bot size={20} color={colors.primary} />
+            </View>
+            <View>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>Ovi AI Assistant</Text>
+              <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
+                {companyName} • {officeName}
+              </Text>
+            </View>
+          </View>
+        </View>
 
-      <View style={styles.webviewContainer}>
-        <WebView 
-          ref={webviewRef}
-          source={{ uri: agentUrl }}
-          style={styles.webview}
-          allowsInlineMediaPlayback={true}
-          mediaPlaybackRequiresUserAction={false}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          geolocationEnabled={true}
-          mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
-          injectedJavaScript={injectedJS}
-          onMessage={handleMessage}
-        />
-      </View>
+        {/* Message Stream */}
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.chatArea}
+          contentContainerStyle={styles.chatContent}
+          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        >
+          {messages.map((m) => {
+            const isMe = m.sender === 'user';
+            return (
+              <View
+                key={m.id}
+                style={[
+                  styles.bubbleRow,
+                  isMe ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' },
+                ]}
+              >
+                {!isMe && (
+                  <View style={[styles.avatarBox, { backgroundColor: colors.primary + '18' }]}>
+                    <Sparkles size={14} color={colors.primary} />
+                  </View>
+                )}
+                <View
+                  style={[
+                    styles.bubble,
+                    isMe
+                      ? [styles.userBubble, { backgroundColor: colors.primary }]
+                      : [styles.botBubble, { backgroundColor: colors.surface, borderColor: colors.border }],
+                  ]}
+                >
+                  <Text style={[styles.msgText, { color: isMe ? '#FFFFFF' : colors.text }]}>
+                    {m.text}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.timestampText,
+                      { color: isMe ? 'rgba(255,255,255,0.7)' : colors.textSecondary },
+                    ]}
+                  >
+                    {m.timestamp}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
 
-      <View style={styles.controlsContainer}>
-        <View style={styles.endCallRow}>
-          <TouchableOpacity 
-            style={styles.endCallBtn} 
-            onPress={() => router.back()}
+          {isTyping && (
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
+              <View style={[styles.avatarBox, { backgroundColor: colors.primary + '18' }]}>
+                <Sparkles size={14} color={colors.primary} />
+              </View>
+              <View style={[styles.bubble, styles.botBubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Bottom Input Area */}
+        <View style={[styles.inputRow, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                color: colors.text,
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
+            ]}
+            placeholder="Ask Ovi about leave, payroll, benefits..."
+            placeholderTextColor={colors.textSecondary}
+            value={inputText}
+            onChangeText={setInputText}
+            onSubmitEditing={handleSend}
+            returnKeyType="send"
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendBtn,
+              { backgroundColor: inputText.trim() ? colors.primary : colors.border },
+            ]}
+            onPress={handleSend}
+            disabled={!inputText.trim() || isTyping}
           >
-            <PhoneOff color="#FFF" size={32} />
+            <Send size={18} color="#FFF" />
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -206,57 +210,97 @@ export default function CallOviScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
   },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 12,
   },
-  encryptedText: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '500',
+  backBtn: {
+    padding: 4,
   },
-  webviewContainer: {
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  botIconBadge: {
+    padding: 8,
+    borderRadius: 20,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  headerSub: {
+    fontSize: 11,
+  },
+  chatArea: {
     flex: 1,
-    marginHorizontal: 16,
-    marginBottom: 120, 
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: '#1E293B',
+  },
+  chatContent: {
+    padding: 16,
+    gap: 12,
+  },
+  bubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  avatarBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  bubble: {
+    maxWidth: '80%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+  },
+  botBubble: {
+    borderBottomLeftRadius: 4,
     borderWidth: 1,
-    borderColor: '#334155',
   },
-  webview: {
+  userBubble: {
+    borderBottomRightRadius: 4,
+  },
+  msgText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  timestampText: {
+    fontSize: 10,
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    gap: 8,
+  },
+  input: {
     flex: 1,
-    backgroundColor: 'transparent',
+    height: 44,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    borderWidth: 1,
   },
-  controlsContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingBottom: 40,
-    paddingHorizontal: 40,
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    pointerEvents: 'box-none',
-  },
-  endCallRow: {
-    alignItems: 'center',
-  },
-  endCallBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
   },
 });

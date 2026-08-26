@@ -8,13 +8,29 @@ import {
   Switch,
   RefreshControl,
   TextInput,
+  useWindowDimensions,
 } from 'react-native';
+import { ADMIN_NAV } from '@/constants/navigation';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { LoadingState } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
-import { getAutomationRules, toggleAutomationRule } from '@/lib/services/automations';
-import { getEmailDeliveryLogs, sendResendEmail, EmailLog } from '@/lib/services/resend';
+import { Modal } from '@/components/ui/Modal';
+import { Select } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
+import {
+  getAutomationRules,
+  toggleAutomationRule,
+} from '@/lib/services/automations';
+import {
+  getEmailDeliveryLogs,
+  sendResendEmail,
+  sendWelcomeEmail,
+  sendLeaveStatusEmail,
+  sendTicketStatusEmail,
+  sendOfferLetterEmail,
+  EmailLog,
+} from '@/lib/services/resend';
 import { AutomationRule } from '@/types/database';
 import {
   Workflow,
@@ -25,16 +41,34 @@ import {
   Play,
   Send,
   Sparkles,
+  Plus,
+  ArrowRight,
+  ShieldCheck,
+  AlertCircle,
+  FileText,
 } from 'lucide-react-native';
 
 export default function AutomationsScreen() {
   const colors = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Test Dispatch state
   const [testEmail, setTestEmail] = useState('demo@subedge.com');
   const [sendingTest, setSendingTest] = useState(false);
+  const [testSuccess, setTestSuccess] = useState<string | null>(null);
+
+  // Add Rule Modal State
+  const [addRuleModal, setAddRuleModal] = useState(false);
+  const [ruleName, setRuleName] = useState('');
+  const [ruleTrigger, setRuleTrigger] = useState('on_employee_created');
+  const [ruleSubject, setRuleSubject] = useState('');
+  const [ruleRecipient, setRuleRecipient] = useState<'employee' | 'manager' | 'admin'>('employee');
 
   const loadData = async () => {
     try {
@@ -58,45 +92,89 @@ export default function AutomationsScreen() {
     loadData();
   };
 
-  const handleSendTestEmail = async () => {
+  const handleSendTestEmail = async (type: 'general' | 'onboarding' | 'leave' | 'ticket' | 'offer') => {
     if (!testEmail.trim()) return;
     setSendingTest(true);
+    setTestSuccess(null);
     try {
-      await sendResendEmail({
-        to: testEmail,
-        subject: '🧪 Resend Gateway Test from Oasis HRMS Engine',
-        htmlContent: `<div style="font-family: sans-serif; padding: 20px; background: #F8FAFC;">
-          <h2>Oasis Automated Notification Test</h2>
-          <p>This email confirms that the Subedge Resend transactional pipeline is healthy and active.</p>
-        </div>`,
-        category: 'general',
-      });
-      alert(`Test notification dispatched to ${testEmail}!`);
+      if (type === 'onboarding') {
+        await sendWelcomeEmail(testEmail, 'Alex Morgan', 'SUB-EMP-9021', 'Senior Full Stack Engineer');
+        setTestSuccess(`✓ Onboarding welcome email dispatched to ${testEmail}!`);
+      } else if (type === 'leave') {
+        await sendLeaveStatusEmail(testEmail, 'Alex Morgan', 'approved', 'Annual Paid Leave', 'Aug 25 - Aug 28, 2026', 'HR Operations Lead');
+        setTestSuccess(`✓ Leave status notification dispatched to ${testEmail}!`);
+      } else if (type === 'ticket') {
+        await sendTicketStatusEmail(testEmail, 'TKT-8842', 'VPN / Subedge Network Gateway Access', 'Configured access keys and verified tunnel connectivity.');
+        setTestSuccess(`✓ Ticket resolution email dispatched to ${testEmail}!`);
+      } else if (type === 'offer') {
+        await sendOfferLetterEmail(testEmail, 'Alex Morgan', 'Lead Cloud Architect', 2400000, 'Sept 1, 2026');
+        setTestSuccess(`✓ Official Offer Letter email dispatched to ${testEmail}!`);
+      } else {
+        await sendResendEmail({
+          to: testEmail,
+          subject: '🧪 Resend Gateway Test from Oasis HRMS Engine',
+          htmlContent: `<div style="font-family: sans-serif; padding: 20px; background: #F8FAFC;">
+            <h2>Oasis Automated Notification Test</h2>
+            <p>This email confirms that the Subedge Resend transactional pipeline is healthy and active.</p>
+          </div>`,
+          category: 'general',
+        });
+        setTestSuccess(`✓ Gateway diagnostic ping sent to ${testEmail}!`);
+      }
       loadData();
+      setTimeout(() => setTestSuccess(null), 4000);
     } finally {
       setSendingTest(false);
     }
   };
 
+  const handleCreateRule = () => {
+    if (!ruleName.trim() || !ruleSubject.trim()) return;
+    const newRule: AutomationRule = {
+      id: `rule_${Date.now()}`,
+      organization_id: 'subedge_org',
+      name: ruleName.trim(),
+      trigger: ruleTrigger as any,
+      action_type: 'send_resend_email',
+      is_active: true,
+      target_recipient: ruleRecipient,
+      template_subject: ruleSubject.trim(),
+      executions_count: 0,
+      last_executed_at: null,
+    };
+
+    setRules((prev) => [newRule, ...prev]);
+    setAddRuleModal(false);
+    setRuleName('');
+    setRuleSubject('');
+  };
+
   if (loading) return <LoadingState />;
 
-  const totalExecutions = rules.reduce((s, r) => s + r.executions_count, 0);
+  const totalExecutions = rules.reduce((s, r) => s + (r.executions_count || 0), 0);
 
   return (
-    <SidebarLayout>
+    <SidebarLayout items={ADMIN_NAV}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={[styles.title, { color: colors.text }]}>Workflow Automations & Resend Engine</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Event-Driven Workflows, Email Triggers & System Health
+              Event-Driven Workflows, Automated Email Triggers & System Health
             </Text>
           </View>
+          <Button
+            title="+ New Workflow Rule"
+            onPress={() => setAddRuleModal(true)}
+            style={{ backgroundColor: '#0D7377', borderRadius: 8 }}
+            size="sm"
+          />
         </View>
 
         <ScrollView
-          style={{ flex: 1, padding: 24 }}
+          style={{ flex: 1, padding: isDesktop ? 28 : 16 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
+          showsVerticalScrollIndicator={false}
         >
           {/* Stats */}
           <View style={styles.statsRow}>
@@ -113,46 +191,87 @@ export default function AutomationsScreen() {
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>Resend Gateway Status</Text>
               <Text style={[styles.statNumber, { color: '#10B981' }]}>Connected</Text>
-              <Text style={styles.statSub}>notifications@subedge.com</Text>
+              <Text style={styles.statSub}>Oasis HRMS Resend API</Text>
             </View>
           </View>
 
           {/* Test Dispatch Bar */}
           <View style={styles.testBar}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.testTitle}>Trigger Instant Resend Test Dispatch</Text>
-              <Text style={styles.testSub}>Verify email delivery template and SMTP / API gateway status</Text>
+            <View style={{ flex: 1, minWidth: 260 }}>
+              <Text style={styles.testTitle}>Trigger Instant Resend Dispatch Test</Text>
+              <Text style={styles.testSub}>Verify transactional email delivery and template styling</Text>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 10 }}>
+                <TextInput
+                  style={styles.testInput}
+                  value={testEmail}
+                  onChangeText={setTestEmail}
+                  placeholder="recipient@subedge.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
             </View>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <TextInput
-                style={styles.testInput}
-                value={testEmail}
-                onChangeText={setTestEmail}
-                placeholder="recipient@subedge.com"
-              />
-              <Button
-                title={sendingTest ? 'Sending...' : 'Send Test'}
-                onPress={handleSendTestEmail}
-                style={{ backgroundColor: '#0D7377' }}
-              />
+
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <TouchableOpacity
+                onPress={() => handleSendTestEmail('onboarding')}
+                style={styles.quickTestBtn}
+                disabled={sendingTest}
+              >
+                <Sparkles size={14} color="#0D7377" />
+                <Text style={styles.quickTestText}>Welcome Email</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleSendTestEmail('leave')}
+                style={styles.quickTestBtn}
+                disabled={sendingTest}
+              >
+                <CheckCircle2 size={14} color="#059669" />
+                <Text style={styles.quickTestText}>Leave Status</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleSendTestEmail('offer')}
+                style={styles.quickTestBtn}
+                disabled={sendingTest}
+              >
+                <FileText size={14} color="#7C3AED" />
+                <Text style={styles.quickTestText}>Offer Letter</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
+          {testSuccess && (
+            <View style={styles.successBanner}>
+              <CheckCircle2 size={16} color="#059669" />
+              <Text style={styles.successBannerText}>{testSuccess}</Text>
+            </View>
+          )}
+
           {/* Automation Rules List */}
-          <Text style={styles.sectionTitle}>Event-Driven Workflow Rules</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={styles.sectionTitle}>Event-Driven Workflow Rules ({rules.length})</Text>
+          </View>
+
           <View style={{ gap: 14, marginBottom: 28 }}>
             {rules.map((rule) => (
               <View key={rule.id} style={styles.ruleCard}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
                   <View style={styles.iconCircle}>
                     <Workflow size={22} color="#0D7377" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.ruleName}>{rule.name}</Text>
                     <Text style={styles.ruleSub}>
-                      Trigger: <Text style={{ fontWeight: '700', color: '#0D7377' }}>{rule.trigger}</Text> · Action: {rule.action_type.replace('_', ' ')}
+                      Trigger: <Text style={{ fontWeight: '700', color: '#0D7377' }}>{rule.trigger}</Text> · Action: {rule.action_type.replace(/_/g, ' ')}
                     </Text>
                     <Text style={styles.ruleTemplate}>Subject: "{rule.template_subject}"</Text>
+                    {rule.last_executed_at && (
+                      <Text style={styles.lastExecText}>
+                        Last Executed: {new Date(rule.last_executed_at).toLocaleString()}
+                      </Text>
+                    )}
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 6 }}>
                     <Switch
@@ -160,7 +279,7 @@ export default function AutomationsScreen() {
                       onValueChange={() => handleToggle(rule.id, rule.is_active)}
                       trackColor={{ true: '#0D7377', false: '#CBD5E1' }}
                     />
-                    <Text style={styles.execCount}>{rule.executions_count} Executions</Text>
+                    <Text style={styles.execCount}>{rule.executions_count || 0} Executions</Text>
                   </View>
                 </View>
               </View>
@@ -176,17 +295,74 @@ export default function AutomationsScreen() {
                   <Mail size={16} color="#0D7377" />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.logSubject}>{log.subject}</Text>
-                    <Text style={styles.logTo}>To: {log.to} · Category: {log.category}</Text>
+                    <Text style={styles.logTo}>To: {log.to} · Category: {log.category} · {new Date(log.timestamp).toLocaleTimeString()}</Text>
                   </View>
                   <View style={styles.deliveredTag}>
                     <CheckCircle2 size={12} color="#059669" />
-                    <Text style={styles.deliveredText}>Delivered</Text>
+                    <Text style={styles.deliveredText}>{log.status.toUpperCase()}</Text>
                   </View>
                 </View>
               </View>
             ))}
           </View>
         </ScrollView>
+
+        {/* Modal: Create New Workflow Rule */}
+        <Modal visible={addRuleModal} onClose={() => setAddRuleModal(false)} title="Create Workflow Automation Rule">
+          <View style={{ gap: 14 }}>
+            <Input
+              label="Rule Name *"
+              placeholder="e.g. Employee Birthday Congratulatory Email"
+              value={ruleName}
+              onChangeText={setRuleName}
+            />
+
+            <Select
+              label="Event Trigger *"
+              options={[
+                { label: 'On Employee Profile Created (on_employee_created)', value: 'on_employee_created' },
+                { label: 'On Leave Request Approved (on_leave_approved)', value: 'on_leave_approved' },
+                { label: 'On Support Ticket Resolved (on_ticket_resolved)', value: 'on_ticket_resolved' },
+                { label: 'On Appraisal Submitted (on_appraisal_submitted)', value: 'on_appraisal_submitted' },
+                { label: 'On Offer Letter Generated (on_offer_generated)', value: 'on_offer_generated' },
+              ]}
+              value={ruleTrigger}
+              onValueChange={setRuleTrigger}
+            />
+
+            <Input
+              label="Email Subject Template *"
+              placeholder="e.g. Important Notification Regarding Your Account"
+              value={ruleSubject}
+              onChangeText={setRuleSubject}
+            />
+
+            <Select
+              label="Target Recipient *"
+              options={[
+                { label: 'Employee Profile Owner', value: 'employee' },
+                { label: 'Reporting Manager / HR Approver', value: 'manager' },
+                { label: 'System Administrator', value: 'admin' },
+              ]}
+              value={ruleRecipient}
+              onValueChange={(val) => setRuleRecipient(val as any)}
+            />
+
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+              <Button
+                title="Cancel"
+                onPress={() => setAddRuleModal(false)}
+                variant="outline"
+                style={{ flex: 1, borderRadius: 8 }}
+              />
+              <Button
+                title="Save Rule"
+                onPress={handleCreateRule}
+                style={{ flex: 1, backgroundColor: '#0D7377', borderRadius: 8 }}
+              />
+            </View>
+          </View>
+        </Modal>
       </View>
     </SidebarLayout>
   );
@@ -194,17 +370,34 @@ export default function AutomationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topBar: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1 },
-  title: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { fontSize: 12, marginTop: 2 },
+  topBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, marginTop: 2 },
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
-  statCard: { flex: 1, minWidth: 150, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
+  statCard: {
+    flex: 1,
+    minWidth: 160,
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
   statLabel: { fontSize: 11, color: '#64748B', fontWeight: '700' },
-  statNumber: { fontSize: 20, fontWeight: '800', marginVertical: 4 },
+  statNumber: { fontSize: 22, fontWeight: '800', marginVertical: 4 },
   statSub: { fontSize: 11, color: '#94A3B8' },
   testBar: {
     backgroundColor: '#FFFFFF',
-    padding: 16,
+    padding: 18,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -212,22 +405,84 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
+    gap: 14,
+    marginBottom: 16,
   },
-  testTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
+  testTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
   testSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  testInput: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: '#1A1A2E', minWidth: 180, flex: 1, backgroundColor: '#F8FAFC' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E', marginBottom: 12 },
-  ruleCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  iconCircle: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
-  ruleName: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
+  testInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#1A1A2E',
+    minWidth: 220,
+    backgroundColor: '#F8FAFC',
+  },
+  quickTestBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0F7F7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CCECEC',
+  },
+  quickTestText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  successBannerText: { fontSize: 13, color: '#065F46', fontWeight: '600' },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E', marginBottom: 12 },
+  ruleCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  iconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#F0F7F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ruleName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
   ruleSub: { fontSize: 12, color: '#475569', marginTop: 3 },
-  ruleTemplate: { fontSize: 11, color: '#64748B', fontStyle: 'italic', marginTop: 2 },
+  ruleTemplate: { fontSize: 12, color: '#64748B', fontStyle: 'italic', marginTop: 2 },
+  lastExecText: { fontSize: 11, color: '#94A3B8', marginTop: 4 },
   execCount: { fontSize: 11, color: '#0D7377', fontWeight: '700' },
-  logCard: { backgroundColor: '#FFFFFF', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0' },
+  logCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
   logSubject: { fontSize: 13, fontWeight: '600', color: '#1A1A2E' },
   logTo: { fontSize: 11, color: '#64748B', marginTop: 2 },
-  deliveredTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  deliveredTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
   deliveredText: { fontSize: 10, fontWeight: '700', color: '#059669' },
 });

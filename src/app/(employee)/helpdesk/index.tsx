@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   Platform,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useTheme } from '@/hooks/use-theme';
 import { LoadingState } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
@@ -62,9 +63,11 @@ export default function EmployeeHelpdeskScreen() {
       setRefreshing(false);
     }
   };
-
-  useEffect(() => { loadData(); }, []);
-
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
   const handleSubmit = async () => {
     if (!title.trim() || !desc.trim()) return;
     await createTicket({

@@ -1,36 +1,31 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  useWindowDimensions,
-  Image,
-  TouchableOpacity,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import LottieView from 'lottie-react-native';
-import { useAuth } from '@/hooks/useAuth';
-import { useTheme } from '@/hooks/use-theme';
-import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
 import {
   COMPANY_NAME,
-  PRODUCT_NAME,
-  APP_NAME,
-  TAGLINE,
+  PRODUCT_NAME
 } from '@/constants/config';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenantBranding } from '@/hooks/useTenantBranding';
+import { useRouter } from 'expo-router';
+import LottieView from 'lottie-react-native';
 import {
-  ShieldCheck,
-  MapPin,
-  Award,
-  CreditCard,
-  Zap,
+  Zap
 } from 'lucide-react-native';
+import React, { useState } from 'react';
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SUBEDGE_LOGO = require('../../../assets/images/subedge-logo.png');
 
@@ -40,6 +35,8 @@ export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
+  const { tenant, loading: tenantLoading } = useTenantBranding();
+
   const { signIn } = useAuth();
   const router = useRouter();
 
@@ -48,15 +45,18 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const tenantDomain = tenant?.settings?.domain as string | undefined;
+
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('Please enter email and password');
+      setError(tenantDomain ? 'Please enter username and password' : 'Please enter email and password');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      await signIn(email, password);
+      const finalEmail = tenantDomain && !email.includes('@') ? `${email}@${tenantDomain}` : email;
+      await signIn(finalEmail, password);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
@@ -85,12 +85,21 @@ export default function LoginScreen() {
           >
             {/* Mobile Hero */}
             <View style={styles.mobileHero}>
-              <Image
-                source={SUBEDGE_LOGO}
-                style={styles.mobileLogo}
-                resizeMode="contain"
-              />
-              
+              {tenant ? (
+                <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                  {tenant.logo_url ? (
+                    <Image source={{ uri: tenant.logo_url }} style={{ width: 120, height: 120, borderRadius: 12 }} resizeMode="contain" />
+                  ) : null}
+                  <Text style={[styles.mobileHeroTitle, { marginTop: 16, fontSize: 24, textAlign: 'center' }]}>{tenant.name}</Text>
+                </View>
+              ) : (
+                <Image
+                  source={SUBEDGE_LOGO}
+                  style={styles.mobileLogo}
+                  resizeMode="contain"
+                />
+              )}
+
               <View style={styles.mobileLottieContainer}>
                 <LottieView
                   source={require('../../../assets/lottie/wired-outline-187-briefcase-hover-pinch.json')}
@@ -115,13 +124,18 @@ export default function LoginScreen() {
               ) : null}
 
               <Input
-                label="Work Email"
-                placeholder="name@subedge.com"
+                label={tenantDomain ? "Username" : "Work Email"}
+                placeholder={tenantDomain ? "username" : "name@subedge.com"}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                rightElement={tenantDomain ? (
+                  <View style={{ backgroundColor: '#F1F5F9', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', paddingHorizontal: 12, height: '100%', justifyContent: 'center' }}>
+                    <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>@{tenantDomain}</Text>
+                  </View>
+                ) : undefined}
               />
 
               <Input
@@ -152,9 +166,7 @@ export default function LoginScreen() {
               onPress={() => router.push('/careers' as any)}
               style={styles.mobileCareersBtn}
             >
-              <Text style={styles.mobileCareersText}>
-                Looking for opportunities? Explore Careers →
-              </Text>
+
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -277,7 +289,21 @@ export default function LoginScreen() {
           <View style={[styles.formSection, isDesktop && styles.formDesktop]}>
             <View style={styles.formWrapper}>
               <View style={styles.formHeader}>
-                <SubedgeBrand size="md" subtitle="Sign in to your workplace account" />
+                {tenant ? (
+                  <View style={{ alignItems: 'flex-start', marginBottom: 24 }}>
+                    {tenant.logo_url ? (
+                      <Image source={{ uri: tenant.logo_url }} style={{ width: 140, height: 140, borderRadius: 16 }} resizeMode="contain" />
+                    ) : null}
+                    <Text style={{ fontSize: 28, fontWeight: '800', color: '#1E293B', marginTop: 16 }}>
+                      {tenant.name}
+                    </Text>
+                    <Text style={{ fontSize: 15, color: '#64748B', marginTop: 8 }}>
+                      Sign in to your workplace account
+                    </Text>
+                  </View>
+                ) : (
+                  <SubedgeBrand size="md" subtitle="Sign in to your workplace account" />
+                )}
               </View>
 
               <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }]}>
@@ -288,13 +314,18 @@ export default function LoginScreen() {
                 ) : null}
 
                 <Input
-                  label="Work Email"
-                  placeholder="name@subedge.com"
+                  label={tenantDomain ? "Username" : "Work Email"}
+                  placeholder={tenantDomain ? "username" : "name@subedge.com"}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  rightElement={tenantDomain ? (
+                    <View style={{ backgroundColor: '#F1F5F9', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', paddingHorizontal: 12, height: '100%', justifyContent: 'center' }}>
+                      <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>@{tenantDomain}</Text>
+                    </View>
+                  ) : undefined}
                 />
 
                 <Input
@@ -332,9 +363,7 @@ export default function LoginScreen() {
                 onPress={() => router.push('/careers' as any)}
                 style={{ marginTop: 16, alignItems: 'center' }}
               >
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>
-                  Looking for opportunities? Explore Careers →
-                </Text>
+
               </TouchableOpacity>
 
               <Text style={styles.copyrightText}>

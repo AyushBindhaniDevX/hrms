@@ -7,8 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingState } from '@/components/ui/States';
-import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { cancelLeave } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
 import type { LeaveRequest } from '@/types';
@@ -24,9 +23,14 @@ export default function LeaveDetailScreen() {
 
   useEffect(() => {
     (async () => {
-      const leaveDoc = await getDoc(doc(db, 'leave_requests', id!));
-      const data = leaveDoc.exists() ? { id: leaveDoc.id, ...leaveDoc.data() } : null;
-      setRequest(data as LeaveRequest);
+      if (!id) return;
+      const { data } = await supabase
+        .from('leave_requests')
+        .select('*, leave_type:leave_types(*)')
+        .eq('id', id)
+        .maybeSingle();
+
+      setRequest((data || null) as LeaveRequest | null);
       setLoading(false);
     })();
   }, [id]);

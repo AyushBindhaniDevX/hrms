@@ -12,16 +12,13 @@ import { Input } from '@/components/ui/Input';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import {
-  getPayrollEntries, createPayrollEntry, processPayrollPeriod, generatePayslip, distributePayroll, updatePayrollEntry
+  getPayrollEntries, createPayrollEntry, processPayrollPeriod, distributePayroll, updatePayrollEntry
 } from '@/lib/services/payroll';
 import { getAllEmployees } from '@/lib/services/employee';
-import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { formatCurrency } from '@/utils/format';
 import { MONTHS } from '@/constants/config';
 import type { Payroll, PayrollPeriod, Employee } from '@/types';
-
-
 
 export default function PayrollDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -92,16 +89,16 @@ export default function PayrollDetailScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [periodData, entriesData, emps] = await Promise.all([
-        getDoc(doc(db, 'payroll_periods', id!)).then(res => ({ data: { id: res.id, ...res.data() } })),
+      const [periodRes, entriesData, emps] = await Promise.all([
+        supabase.from('payroll_periods').select('*').eq('id', id!).single(),
         getPayrollEntries(id!),
         getAllEmployees(),
       ]);
-      setPeriod(periodData.data as PayrollPeriod);
+      setPeriod(periodRes.data as PayrollPeriod);
       setEntries(entriesData);
       setEmployees(emps);
     } catch (err: any) {
-      setError(err.message || 'Failed to load payroll details. Please check your network connection or disable your adblocker.');
+      setError(err.message || 'Failed to load payroll details. Please check your network connection.');
     } finally {
       setLoading(false);
     }

@@ -1,84 +1,69 @@
-import { db } from '@/lib/firebase';
-import { collection, doc, getDoc, getDocs, query, where, orderBy, limit as limitDocs, setDoc, updateDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import type { LeaveType, LeaveBalance, LeaveRequest, LeaveProcessResponse, Employee } from '@/types';
 
 const DEFAULT_LEAVE_TYPES = [
-  { name: 'Annual Leave',       annual_days: 18, is_paid: true  },
-  { name: 'Sick Leave',         annual_days: 12, is_paid: true  },
-  { name: 'Casual Leave',       annual_days: 7,  is_paid: true  },
-  { name: 'Maternity Leave',    annual_days: 90, is_paid: true  },
-  { name: 'Paternity Leave',    annual_days: 7,  is_paid: true  },
-  { name: 'Compensatory Leave', annual_days: 5,  is_paid: true  },
-  { name: 'Unpaid Leave',       annual_days: 30, is_paid: false },
+  { name: 'Annual Leave', annual_days: 18, is_paid: true },
+  { name: 'Sick Leave', annual_days: 12, is_paid: true },
+  { name: 'Casual Leave', annual_days: 7, is_paid: true },
+  { name: 'Maternity Leave', annual_days: 90, is_paid: true },
+  { name: 'Paternity Leave', annual_days: 7, is_paid: true },
+  { name: 'Compensatory Leave', annual_days: 5, is_paid: true },
+  { name: 'Unpaid Leave', annual_days: 30, is_paid: false },
 ];
 
 export async function getLeaveTypes(): Promise<LeaveType[]> {
-  const q = query(collection(db, 'leave_types'), orderBy('name'));
-  const snap = await getDocs(q);
+  const { data, error } = await supabase
+    .from('leave_types')
+    .select('*')
+    .order('name', { ascending: true });
 
-  if (!snap.empty) {
-    const types = snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveType));
-    // Deduplicate by name
-    const unique = Array.from(new Map(types.map(item => [item.name, item])).values());
+  if (!error && data && data.length > 0) {
+    const unique = Array.from(new Map((data as LeaveType[]).map((item) => [item.name, item])).values());
     return unique;
   }
 
-  // Auto-seed default leave types for new organisations
+  // Seed default if empty
   const defaultOrgId = '00000000-0000-0000-0000-000000000001';
   const seeded: LeaveType[] = [];
   for (const lt of DEFAULT_LEAVE_TYPES) {
-    const newRef = doc(collection(db, 'leave_types'));
-    const data: LeaveType = {
-      id: newRef.id,
-      organization_id: defaultOrgId,
-      name: lt.name,
-      annual_days: lt.annual_days,
-      is_paid: lt.is_paid,
-      created_at: new Date().toISOString(),
-    };
-    await setDoc(newRef, data);
-    seeded.push(data);
+    const { data: newType } = await supabase
+      .from('leave_types')
+      .insert({
+        organization_id: defaultOrgId,
+        name: lt.name,
+        annual_days: lt.annual_days,
+        is_paid: lt.is_paid,
+        created_at: new Date().toISOString(),
+      })
+      .select('*')
+      .single();
+
+    if (newType) seeded.push(newType as LeaveType);
   }
   return seeded.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function getLeaveBalances(employeeId: string, year?: number): Promise<LeaveBalance[]> {
   const y = year ?? new Date().getFullYear();
-  const q = query(
-    collection(db, 'leave_balances'),
-    where('employee_id', '==', employeeId),
-    where('year', '==', y)
-  );
-  const snap = await getDocs(q);
-  const balances = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-  
-  for (const b of balances) {
-    if (b.leave_type_id) {
-      const ltDoc = await getDoc(doc(db, 'leave_types', b.leave_type_id));
-      if (ltDoc.exists()) b.leave_type = { id: ltDoc.id, ...ltDoc.data() };
-    }
-  }
-  
-  return balances as LeaveBalance[];
+  const { data, error } = await supabase
+    .from('leave_balances')
+    .select('*, leave_type:leave_types(*)')
+    .eq('employee_id', employeeId)
+    .eq('year', y);
+
+  if (error || !data) return [];
+  return data as LeaveBalance[];
 }
 
 export async function getLeaveRequests(employeeId: string): Promise<LeaveRequest[]> {
-  const q = query(
-    collection(db, 'leave_requests'),
-    where('employee_id', '==', employeeId),
-    orderBy('created_at', 'desc')
-  );
-  const snap = await getDocs(q);
-  const requests = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-  
-  for (const req of requests) {
-    if (req.leave_type_id) {
-      const ltDoc = await getDoc(doc(db, 'leave_types', req.leave_type_id));
-      if (ltDoc.exists()) req.leave_type = { id: ltDoc.id, ...ltDoc.data() };
-    }
-  }
-  
-  return requests as LeaveRequest[];
+  const { data, error } = await supabase
+    .from('leave_requests')
+    .select('*, leave_type:leave_types(*)')
+    .eq('employee_id', employeeId)
+    .order('created_at', { ascending: false });
+
+  if (error || !data) return [];
+  return data as LeaveRequest[];
 }
 
 export async function applyLeave(params: {
@@ -90,141 +75,138 @@ export async function applyLeave(params: {
   is_half_day: boolean;
   reason: string;
 }): Promise<LeaveRequest> {
-  const newReqRef = doc(collection(db, 'leave_requests'));
-  const data = {
-    id: newReqRef.id,
-    ...params,
-    status: 'pending',
-    created_at: serverTimestamp(),
-    updated_at: serverTimestamp(),
-  };
-  await setDoc(newReqRef, data);
-  return data as unknown as LeaveRequest;
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('leave_requests')
+    .insert({
+      ...params,
+      status: 'pending',
+      created_at: now,
+      updated_at: now,
+    })
+    .select('*, leave_type:leave_types(*)')
+    .single();
+
+  if (error) throw error;
+  return data as LeaveRequest;
 }
 
 export async function cancelLeave(requestId: string): Promise<void> {
-  await updateDoc(doc(db, 'leave_requests', requestId), {
-    status: 'cancelled',
-    updated_at: serverTimestamp(),
-  });
+  const { error } = await supabase
+    .from('leave_requests')
+    .update({
+      status: 'cancelled',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', requestId);
+
+  if (error) throw error;
 }
 
-async function fetchLeaveJoins(reqData: any): Promise<LeaveRequest> {
-  const req = { ...reqData };
-  if (req.leave_type_id) {
-    const ltDoc = await getDoc(doc(db, 'leave_types', req.leave_type_id));
-    if (ltDoc.exists()) req.leave_type = { id: ltDoc.id, ...(ltDoc.data() as any) };
+export async function getPendingLeaveRequests(organizationId?: string): Promise<LeaveRequest[]> {
+  let query = supabase
+    .from('leave_requests')
+    .select(`
+      *,
+      leave_type:leave_types(*),
+      employee:employees!inner(*, profile:profiles!inner(*), department:departments(*))
+    `)
+    .eq('status', 'pending');
+
+  if (organizationId) {
+    query = query.eq('employee.profile.organization_id', organizationId);
   }
-  if (req.employee_id) {
-    const empDoc = await getDoc(doc(db, 'employees', req.employee_id));
-    if (empDoc.exists()) {
-      const emp = { id: empDoc.id, ...(empDoc.data() as any) };
-      if (emp.profile_id) {
-        const profDoc = await getDoc(doc(db, 'profiles', emp.profile_id));
-        if (profDoc.exists()) {
-          emp.profile = { id: profDoc.id, ...(profDoc.data() as any) };
-        }
-      }
-      if (emp.department_id) {
-        const deptDoc = await getDoc(doc(db, 'departments', emp.department_id));
-        if (deptDoc.exists()) {
-          emp.department = { id: deptDoc.id, ...(deptDoc.data() as any) };
-        }
-      }
-      req.employee = emp;
-    }
+
+  const { data, error } = await query.order('created_at', { ascending: true });
+
+  if (error || !data) return [];
+  return data as LeaveRequest[];
+}
+
+export async function getAllLeaveRequests(organizationId?: string): Promise<LeaveRequest[]> {
+  let query = supabase
+    .from('leave_requests')
+    .select(`
+      *,
+      leave_type:leave_types(*),
+      employee:employees!inner(*, profile:profiles!inner(*), department:departments(*))
+    `);
+
+  if (organizationId) {
+    query = query.eq('employee.profile.organization_id', organizationId);
   }
-  return req as LeaveRequest;
-}
 
-// HR Functions
-export async function getPendingLeaveRequests(): Promise<LeaveRequest[]> {
-  const q = query(
-    collection(db, 'leave_requests'),
-    where('status', '==', 'pending'),
-    orderBy('created_at', 'asc')
-  );
-  const snap = await getDocs(q);
-  return Promise.all(snap.docs.map(d => fetchLeaveJoins({ id: d.id, ...(d.data() as any) })));
-}
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
 
-export async function getAllLeaveRequests(): Promise<LeaveRequest[]> {
-  const q = query(
-    collection(db, 'leave_requests'),
-    orderBy('created_at', 'desc'),
-    limitDocs(100)
-  );
-  const snap = await getDocs(q);
-  return Promise.all(snap.docs.map(d => fetchLeaveJoins({ id: d.id, ...(d.data() as any) })));
+  if (error || !data) return [];
+  return data as LeaveRequest[];
 }
 
 export async function processLeaveRequest(
   requestId: string,
-  action: 'approve' | 'reject'
+  action: 'approve' | 'reject',
+  approverName?: string
 ): Promise<LeaveProcessResponse> {
-  let success = false;
-  let message = '';
-  
-  try {
-    await runTransaction(db, async (transaction) => {
-      const reqRef = doc(db, 'leave_requests', requestId);
-      const reqDoc = await transaction.get(reqRef);
-      if (!reqDoc.exists()) throw new Error('Request not found');
-      
-      const reqData = reqDoc.data();
-      if (reqData.status !== 'pending') throw new Error('Request is not pending');
-      
-      if (action === 'approve') {
-        // Find the leave balance
-        const y = new Date(reqData.start_date).getFullYear();
-        const balQuery = query(
-          collection(db, 'leave_balances'),
-          where('employee_id', '==', reqData.employee_id),
-          where('leave_type_id', '==', reqData.leave_type_id),
-          where('year', '==', y)
-        );
-        const balSnap = await getDocs(balQuery); // Note: getDocs inside transaction is not fully atomic in client SDK without special care, but good enough for MVP
-        
-        if (!balSnap.empty) {
-           const balDoc = balSnap.docs[0];
-           const balData = balDoc.data();
-           const newUsed = balData.used_days + reqData.days;
-           const newRem = balData.allocated_days - newUsed;
-           transaction.update(balDoc.ref, {
-             used_days: newUsed,
-             remaining_days: newRem,
-           });
-        }
-      }
-      
-      transaction.update(reqRef, {
-        status: action === 'approve' ? 'approved' : 'rejected',
-        updated_at: serverTimestamp()
-      });
-      
-      success = true;
-      message = `Leave request ${action}d successfully.`;
-    });
+  const now = new Date().toISOString();
 
-    if (success) {
-      try {
-        const { sendLeaveStatusEmail } = await import('./resend');
-        await sendLeaveStatusEmail(
-          'employee@subedge.com',
-          'Team Member',
-          action === 'approve' ? 'approved' : 'rejected',
-          'Paid Time Off',
-          'Upcoming Dates',
-          'HR Approver'
-        );
-      } catch (mailErr) {
-        console.warn('Resend leave notification warning:', mailErr);
-      }
+  // 1. Fetch request details
+  const { data: reqData, error: reqErr } = await supabase
+    .from('leave_requests')
+    .select('*, employee:employees(*, profile:profiles(*))')
+    .eq('id', requestId)
+    .single();
+
+  if (reqErr || !reqData) throw new Error('Leave request not found');
+
+  if (action === 'approve') {
+    const y = new Date(reqData.start_date).getFullYear();
+    const { data: balData } = await supabase
+      .from('leave_balances')
+      .select('*')
+      .eq('employee_id', reqData.employee_id)
+      .eq('leave_type_id', reqData.leave_type_id)
+      .eq('year', y)
+      .maybeSingle();
+
+    if (balData) {
+      const newUsed = (balData.used_days || 0) + reqData.days;
+      const newRem = (balData.allocated_days || 0) - newUsed;
+      await supabase
+        .from('leave_balances')
+        .update({ used_days: newUsed, remaining_days: newRem, updated_at: now })
+        .eq('id', balData.id);
     }
-  } catch (err: any) {
-    success = false;
-    message = err.message;
   }
-  
-  return { success, message };
+
+  // 2. Update status
+  const { error: updateErr } = await supabase
+    .from('leave_requests')
+    .update({
+      status: action === 'approve' ? 'approved' : 'rejected',
+      approved_by: approverName || 'HR Management',
+      updated_at: now,
+    })
+    .eq('id', requestId);
+
+  if (updateErr) throw updateErr;
+
+  // 3. Trigger Notification
+  if (reqData.employee?.profile_id) {
+    try {
+      const { createNotification } = await import('./notifications');
+      await createNotification(
+        reqData.employee.profile_id,
+        'leave_status',
+        `Leave Request ${action === 'approve' ? 'Approved' : 'Rejected'}`,
+        `Your leave request from ${reqData.start_date} to ${reqData.end_date} has been ${action}d.`
+      );
+    } catch (e) {}
+  }
+
+  return {
+    success: true,
+    message: `Leave request ${action}d successfully.`,
+    request_id: requestId,
+    new_status: action === 'approve' ? 'approved' : 'rejected',
+  };
 }

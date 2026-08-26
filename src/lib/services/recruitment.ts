@@ -17,19 +17,7 @@ import {
 } from '@/types/database';
 import { createEmployee } from './employee';
 import { sendApplicationReceivedEmail, sendBulkCandidateUpdateEmail, sendRejectionEmail, sendResendEmail } from './resend';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  setDoc,
-  updateDoc,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 
 // ----------------------------------------------------
 // SEED JOBS REQUISITIONS

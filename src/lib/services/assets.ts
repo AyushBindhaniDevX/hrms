@@ -1,166 +1,91 @@
 /**
- * Real-Time Asset & IT Hardware Inventory Service
- * Subedge Technology Pvt Ltd — Oasis Platform
+ * Real-Time Asset & IT Hardware Inventory Service (Supabase)
+ * Oasis HRMS Multi-Tenant Platform
  */
 
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  doc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { CompanyAsset, AssetStatus } from '@/types/database';
 
 export async function getAssets(): Promise<CompanyAsset[]> {
-  try {
-    const assetsRef = collection(db, 'assets');
-    const q = query(assetsRef, orderBy('created_at', 'desc'));
-    const snapshot = await getDocs(q);
-    const results: CompanyAsset[] = [];
-    snapshot.forEach((d) => {
-      results.push({ id: d.id, ...d.data() } as CompanyAsset);
-    });
-    return results;
-  } catch (error) {
-    console.error('Error fetching assets from Firestore:', error);
-    // Fallback if index on created_at not present
-    try {
-      const snap = await getDocs(collection(db, 'assets'));
-      const fallback: CompanyAsset[] = [];
-      snap.forEach((d) => fallback.push({ id: d.id, ...d.data() } as CompanyAsset));
-      return fallback.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    } catch {
-      return [];
-    }
-  }
+  const { data, error } = await supabase
+    .from('assets')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error || !data) return [];
+  return data as CompanyAsset[];
 }
 
-/**
- * Real-time Live Firestore Listener for Assets
- */
 export function subscribeToAssets(
   onUpdate: (assets: CompanyAsset[]) => void,
   onError?: (err: any) => void
 ): () => void {
-  try {
-    const assetsRef = collection(db, 'assets');
-    const unsubscribe = onSnapshot(
-      assetsRef,
-      (snapshot) => {
-        const results: CompanyAsset[] = [];
-        snapshot.forEach((d) => {
-          results.push({ id: d.id, ...d.data() } as CompanyAsset);
-        });
-        results.sort(
-          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-        );
-        onUpdate(results);
+  // Initial fetch
+  getAssets().then(onUpdate).catch(onError);
+
+  const channel = supabase
+    .channel('public:assets')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'assets',
       },
-      (err) => {
-        console.error('Real-time assets subscription error:', err);
-        if (onError) onError(err);
+      () => {
+        getAssets().then(onUpdate).catch(onError);
       }
-    );
-    return unsubscribe;
-  } catch (err) {
-    console.error('Failed to attach real-time assets listener:', err);
-    return () => {};
-  }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 export async function createAsset(asset: Omit<CompanyAsset, 'id' | 'created_at'>): Promise<CompanyAsset> {
-  const newId = `asset_${Date.now()}`;
-  const newAsset: CompanyAsset = {
-    ...asset,
-    id: newId,
-    created_at: new Date().toISOString(),
-  };
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('assets')
+    .insert({
+      ...asset,
+      created_at: now,
+      updated_at: now,
+    })
+    .select('*')
+    .single();
 
-  try {
-    await setDoc(doc(db, 'assets', newId), {
-      ...newAsset,
-      created_at: new Date().toISOString(),
-      updated_at: serverTimestamp(),
-    });
-  } catch (error) {
-    console.error('Error creating asset in Firestore:', error);
+  if (error) {
+    console.error('Error creating asset in Supabase:', error);
+    throw error;
   }
 
-  return newAsset;
+  return data as CompanyAsset;
 }
 
 export async function updateAssetStatus(
   assetId: string,
   status: AssetStatus,
-  assignedToId?: string | null,
-  assignedEmployeeName?: string | null
+  assignedTo?: string | null
 ): Promise<void> {
-  try {
-    const assetRef = doc(db, 'assets', assetId);
-    await updateDoc(assetRef, {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('assets')
+    .update({
       status,
-      assigned_to_id: assignedToId !== undefined ? assignedToId : null,
-      assigned_employee_name: assignedToId ? (assignedEmployeeName || null) : null,
-      updated_at: serverTimestamp(),
-    });
-  } catch (error) {
-    console.error('Error updating asset in Firestore:', error);
-  }
-}
+      assigned_to: assignedTo !== undefined ? assignedTo : null,
+      updated_at: now,
+    })
+    .eq('id', assetId);
 
-export async function verifyAndAuditAsset(
-  assetId: string,
-  auditorName: string
-): Promise<CompanyAsset | null> {
-  try {
-    const assetRef = doc(db, 'assets', assetId);
-    const auditTime = new Date().toISOString();
-    await updateDoc(assetRef, {
-      last_audited_at: auditTime,
-      last_auditor_name: auditorName,
-      updated_at: serverTimestamp(),
-    });
-    const updated = await getAssets();
-    return updated.find((a) => a.id === assetId) || null;
-  } catch (error) {
-    console.error('Error auditing asset in Firestore:', error);
-    return null;
-  }
-}
-
-export async function disposeAsset(
-  assetId: string,
-  salvageValue: number,
-  reason: string
-): Promise<void> {
-  try {
-    const assetRef = doc(db, 'assets', assetId);
-    await updateDoc(assetRef, {
-      status: 'retired',
-      salvage_value: salvageValue,
-      disposal_reason: reason,
-      disposed_at: new Date().toISOString(),
-      assigned_to_id: null,
-      assigned_employee_name: null,
-      updated_at: serverTimestamp(),
-    });
-  } catch (error) {
-    console.error('Error disposing asset in Firestore:', error);
-  }
+  if (error) throw error;
 }
 
 export async function deleteAsset(assetId: string): Promise<void> {
-  try {
-    const assetRef = doc(db, 'assets', assetId);
-    await deleteDoc(assetRef);
-  } catch (error) {
-    console.error('Error deleting asset from Firestore:', error);
-  }
+  const { error } = await supabase
+    .from('assets')
+    .delete()
+    .eq('id', assetId);
+
+  if (error) throw error;
 }

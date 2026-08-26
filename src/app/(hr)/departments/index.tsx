@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -65,6 +66,7 @@ type StudioMode = 'departments' | 'workplaces' | 'roles' | 'org-chart';
 export default function DepartmentsAndHierarchyScreen() {
   const colors = useTheme();
   const { profile, role } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
@@ -88,20 +90,27 @@ export default function DepartmentsAndHierarchyScreen() {
 
   // Modals state
   const [createDeptModalOpen, setCreateDeptModalOpen] = useState(false);
-  const [editDept, setEditDept] = useState<Department | null>(null);
-  const [deleteDept, setDeleteDept] = useState<Department | null>(null);
-  const [assignManagerModalOpen, setAssignManagerModalOpen] = useState(false);
-  const [quickMoveModalEmp, setQuickMoveModalEmp] = useState<Employee | null>(null);
-
-  // Form states - Create / Edit Dept
-  const [deptName, setDeptName] = useState('');
-  const [deptDesc, setDeptDesc] = useState('');
-  const [deptManagerId, setDeptManagerId] = useState<string | null>(null);
+  const [newDeptName, setNewDeptName] = useState('');
+  const [newDeptDesc, setNewDeptDesc] = useState('');
+  const [newDeptManagerId, setNewDeptManagerId] = useState<string | null>(null);
   const [savingDept, setSavingDept] = useState(false);
-  const [formError, setFormError] = useState('');
+  const [deptFormError, setDeptFormError] = useState('');
 
-  // Form states - Assign Reporting Manager
-  const [selectedEmpId, setSelectedEmpId] = useState<string | null>(null);
+  const [createWpModalOpen, setCreateWpModalOpen] = useState(false);
+  const [newWpName, setNewWpName] = useState('');
+  const [newWpAddress, setNewWpAddress] = useState('');
+  const [newWpLat, setNewWpLat] = useState('12.9716');
+  const [newWpLng, setNewWpLng] = useState('77.5946');
+  const [newWpRadius, setNewWpRadius] = useState('150');
+  const [savingWp, setSavingWp] = useState(false);
+  const [wpFormError, setWpFormError] = useState('');
+
+  const [editRoleUser, setEditRoleUser] = useState<Profile | null>(null);
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'hr' | 'employee'>('employee');
+  const [savingRole, setSavingRole] = useState(false);
+  const [roleFormError, setRoleFormError] = useState('');
+
+  const [editReportingEmp, setEditReportingEmp] = useState<Employee | null>(null);
   const [selectedMgrId, setSelectedMgrId] = useState<string | null>(null);
   const [savingReporting, setSavingReporting] = useState(false);
   const [reportingError, setReportingError] = useState('');
@@ -111,11 +120,12 @@ export default function DepartmentsAndHierarchyScreen() {
 
   const load = useCallback(async () => {
     try {
+      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
       const [deptData, wpData, empData, profData] = await Promise.all([
-        getDepartmentsWithStats(),
-        getWorkplaces(),
-        getOrgHierarchy(),
-        getOrgUsers(),
+        getDepartmentsWithStats(orgId),
+        getWorkplaces(orgId),
+        getOrgHierarchy(orgId),
+        getOrgUsers(orgId),
       ]);
       setDepartments(deptData);
       setWorkplaces(wpData);
@@ -126,7 +136,7 @@ export default function DepartmentsAndHierarchyScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile, tenantOrg]);
 
   useEffect(() => {
     load();

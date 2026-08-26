@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   useWindowDimensions, RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
 import { Badge } from '@/components/ui/Badge';
@@ -60,7 +60,11 @@ export default function LeaveScreen() {
     setLoading(false);
   }, [profile]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
 

@@ -16,6 +16,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
+import { useAuth } from '@/hooks/useAuth';
 import { getAllLeaveRequests, processLeaveRequest } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
 import type { LeaveRequest } from '@/types';
@@ -38,6 +39,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 export default function HRLeaveWorkflowScreen() {
   const colors = useTheme();
+  const { profile } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
@@ -78,7 +80,7 @@ export default function HRLeaveWorkflowScreen() {
   const handleAction = async (id: string, action: 'approve' | 'reject') => {
     setProcessingId(id);
     try {
-      await processLeaveRequest(id, action);
+      await processLeaveRequest(id, action, profile?.full_name || 'HR Operations');
       await load();
     } catch (err) {
       console.error('Action error:', err);

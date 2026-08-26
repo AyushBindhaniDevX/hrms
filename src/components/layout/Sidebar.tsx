@@ -9,11 +9,13 @@ import {
   TextInput,
   Modal,
   Platform,
+  Image,
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { Avatar } from '@/components/ui/Avatar';
 import {
   LogOut,
@@ -49,8 +51,8 @@ import {
   X,
   ChevronRight,
 } from 'lucide-react-native';
-import { OasisAssistant } from '@/components/ai/OasisAssistant';
 import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
+import { useNotifications } from '@/context/NotificationContext';
 import { getNavForRole, ADMIN_NAV, HR_NAV, EMPLOYEE_NAV, NavItem } from '@/constants/navigation';
 
 interface SidebarProps {
@@ -64,6 +66,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { profile, role, signOut } = useAuth();
+  const { companyName, companyLogoUrl, organization } = useTenant();
+  const { unreadCount } = useNotifications();
   const [showAssistant, setShowAssistant] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -108,7 +112,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
         { label: 'Users', href: '/(admin)/users', icon: Key },
         { label: 'Employees', href: '/(hr)/employees', icon: Users },
-        { label: 'Automations', href: '/(admin)/automations', icon: Workflow },
+        { label: 'Shifts', href: '/(hr)/shifts', icon: Clock },
       ];
     }
     if (effectiveRole === 'hr') {
@@ -413,8 +417,6 @@ export function SidebarLayout({ items, children }: SidebarProps) {
           </View>
         </Modal>
 
-        {/* Oasis AI Copilot Modal */}
-        <OasisAssistant visible={showAssistant} onClose={() => setShowAssistant(false)} />
       </View>
     );
   }
@@ -436,7 +438,27 @@ export function SidebarLayout({ items, children }: SidebarProps) {
       >
         <View style={styles.brandContainer}>
           <TouchableOpacity onPress={handleDashboardPress}>
-            <SubedgeBrand size="md" subtitle={`${effectiveRole.toUpperCase()} SUITE`} />
+            {companyName ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {companyLogoUrl ? (
+                  <Image
+                    source={{ uri: companyLogoUrl }}
+                    style={{ width: 44, height: 44, borderRadius: 8 }}
+                    resizeMode="contain"
+                  />
+                ) : null}
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }} numberOfLines={1}>
+                    {companyName}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '600', letterSpacing: 0.5, marginTop: 2 }}>
+                    {`${effectiveRole.toUpperCase()} SUITE`}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <SubedgeBrand size="md" subtitle={`${effectiveRole.toUpperCase()} SUITE`} />
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -537,7 +559,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               style={{ position: 'relative', padding: 4 }}
             >
               <Bell size={20} color={colors.textSecondary} />
-              <View style={styles.notificationDot} />
+              {unreadCount > 0 && <View style={styles.notificationDot} />}
             </TouchableOpacity>
             <TouchableOpacity onPress={handleSettingsPress} style={{ padding: 4 }}>
               <Settings size={20} color={colors.textSecondary} />
@@ -554,13 +576,6 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         </View>
 
         <View style={styles.mainContentScroll}>{children}</View>
-
-        {/* Desktop AI Assistant FAB */}
-        <TouchableOpacity style={styles.fab} onPress={() => setShowAssistant(true)}>
-          <Bot color="#FFF" size={24} />
-        </TouchableOpacity>
-
-        <OasisAssistant visible={showAssistant} onClose={() => setShowAssistant(false)} />
       </View>
     </SafeAreaView>
   );

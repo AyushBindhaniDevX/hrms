@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
@@ -39,12 +40,14 @@ import {
   Workflow,
   CheckCircle2,
   AlertTriangle,
+  Clock,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 export default function AdminDashboard() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -62,17 +65,19 @@ export default function AdminDashboard() {
     if (!profile) return;
     try {
       const today = new Date().toISOString().split('T')[0];
+      const orgId = tenantOrg?.id || profile.organization_id || '00000000-0000-0000-0000-000000000001';
+
       const [count, attStats, orgUsers, orgData, logs] = await Promise.all([
-        getEmployeeCount(),
-        getAttendanceStats(today),
-        getOrgUsers(),
-        getOrganization(profile.organization_id || '00000000-0000-0000-0000-000000000001'),
-        getAuditLogs(5),
+        getEmployeeCount(orgId),
+        getAttendanceStats(today, orgId),
+        getOrgUsers(orgId),
+        getOrganization(orgId),
+        getAuditLogs(5, orgId),
       ]);
       setEmpCount(count);
       setAttendanceStats(attStats);
       setUsers(orgUsers);
-      setOrganization(orgData);
+      setOrganization(orgData || tenantOrg);
       setRecentLogs(logs);
 
       if (orgData && (!orgData.name || orgData.name.includes('Default') || orgData.name === 'New Organization')) {
@@ -83,7 +88,7 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [profile]);
+  }, [profile, tenantOrg]);
 
   useEffect(() => {
     load();
@@ -139,9 +144,10 @@ export default function AdminDashboard() {
   const quickActions = [
     { label: 'Add New User', sub: 'Create login & role', href: '/(admin)/users', icon: UserPlus, color: colors.primary, bg: colors.background },
     { label: 'User Management', sub: `${users.length} registered accounts`, href: '/(admin)/users', icon: Key, color: colors.primary, bg: colors.background },
+    { label: 'Shifts & Rosters', sub: 'Weekly roster matrix & night allowance', href: '/(hr)/shifts', icon: Clock, color: colors.primary, bg: colors.background },
+    { label: 'Security Audit Logs', sub: 'Compliance & access history', href: '/(admin)/audit-logs', icon: Shield, color: colors.primary, bg: colors.background },
     { label: 'Workplace Locations', sub: 'Geofences & office radius', href: '/(hr)/locations', icon: MapPin, color: colors.primary, bg: colors.background },
-    { label: 'Performance & OKRs', sub: 'Goals & 360 Appraisals', href: '/(hr)/performance', icon: Award, color: colors.primary, bg: colors.background },
-    { label: 'Organization Settings', sub: 'Company name & hours', href: '/(admin)/settings', icon: Settings, color: colors.primary, bg: colors.background },
+    { label: 'Organization Settings', sub: 'Company identity & rules', href: '/(admin)/settings', icon: Settings, color: colors.primary, bg: colors.background },
   ];
 
   const actionColor = (action: string): 'successLight' | 'warningLight' | 'dangerLight' | 'neutral' => {
@@ -165,7 +171,7 @@ export default function AdminDashboard() {
     { label: 'All Users', icon: Key, href: '/(admin)/users', color: '#7C3AED', bg: '#EDE9FE' },
     { label: 'Employees', icon: Users, href: '/(hr)/employees', color: '#0369A1', bg: '#E0F2FE' },
     { label: 'Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
-    { label: 'Automations', icon: Workflow, href: '/(admin)/automations', color: '#D97706', bg: '#FEF3C7' },
+    { label: 'Shifts', icon: Clock, href: '/(hr)/shifts', color: '#D97706', bg: '#FEF3C7' },
     { label: 'Audit Logs', icon: Shield, href: '/(admin)/audit-logs', color: '#DC2626', bg: '#FEE2E2' },
     { label: 'Performance', icon: Award, href: '/(hr)/performance', color: '#7C3AED', bg: '#EDE9FE' },
     { label: 'Settings', icon: Settings, href: '/(admin)/settings', color: '#475569', bg: '#F1F5F9' },

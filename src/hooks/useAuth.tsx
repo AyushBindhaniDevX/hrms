@@ -1,20 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signInWithCredential } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { Session, User } from '@supabase/supabase-js';
 import * as AuthSession from 'expo-auth-session';
-import { auth, db } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import type { Profile, UserRole } from '@/types';
 
-// Google OAuth Discovery
-const discovery = {
-  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenEndpoint: 'https://oauth2.googleapis.com/token',
-  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-};
-
 interface AuthState {
-  session: any | null; // Firebase doesn't use Session objects like Supabase, but we'll keep the property for compatibility
+  session: Session | null;
   user: User | null;
   profile: Profile | null;
   role: UserRole | null;
@@ -29,186 +21,172 @@ interface AuthState {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Setup AuthSession for Native Google Login
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'MISSING_CLIENT_ID',
-      scopes: ['profile', 'email'],
-      redirectUri: AuthSession.makeRedirectUri(),
-      responseType: AuthSession.ResponseType.IdToken,
-    },
-    discovery
-  );
-
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const docRef = doc(db, 'profiles', userId);
-      const docSnap = await getDoc(docRef);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setProfile({ id: docSnap.id, ...data } as Profile);
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching profile:', error);
+      }
+
+      if (data) {
+        setProfile(data as Profile);
       } else {
         setProfile(null);
       }
     } catch (err) {
-      console.error('Error fetching profile:', err);
+      console.error('Error in fetchProfile:', err);
       setProfile(null);
     }
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (!user?.uid) {
+    if (!user?.id) {
       setProfile(null);
       return;
     }
-    await fetchProfile(user.uid);
+    await fetchProfile(user.id);
   }, [user, fetchProfile]);
 
   useEffect(() => {
     let mounted = true;
 
-    // Handle Google AuthSession Result (Native)
-    if (response?.type === 'success' && response.params.id_token) {
-      const { id_token } = response.params;
-      const credential = GoogleAuthProvider.credential(id_token);
-      signInWithCredential(auth, credential).then(async (result) => {
-        if (result?.user) {
-          const docRef = doc(db, 'profiles', result.user.uid);
-          const docSnap = await getDoc(docRef);
-          if (!docSnap.exists()) {
-            await setDoc(docRef, {
-              id: result.user.uid,
-              full_name: result.user.displayName || 'Google User',
-              email: result.user.email,
-              role: 'employee',
-              organization_id: '00000000-0000-0000-0000-000000000001',
-              is_active: true,
-              created_at: serverTimestamp(),
-              updated_at: serverTimestamp(),
-            });
-            await fetchProfile(result.user.uid);
-          }
-        }
-      }).catch(err => console.error('Native Google Sign-In Error:', err));
-    }
-
-    // Handle Google Redirect Result (Web Only)
-    const handleRedirectResult = async () => {
-      if (Platform.OS !== 'web') return;
-      try {
-        const result = await getRedirectResult(auth);
-        if (result?.user) {
-          const docRef = doc(db, 'profiles', result.user.uid);
-          const docSnap = await getDoc(docRef);
-          if (!docSnap.exists()) {
-            await setDoc(docRef, {
-              id: result.user.uid,
-              full_name: result.user.displayName || 'Google User',
-              email: result.user.email,
-              role: 'employee',
-              organization_id: '00000000-0000-0000-0000-000000000001',
-              is_active: true,
-              created_at: serverTimestamp(),
-              updated_at: serverTimestamp(),
-            });
-          }
-          await fetchProfile(result.user.uid);
-        }
-      } catch (error) {
-        console.error('Redirect result error:', error);
-      }
-    };
-
-    handleRedirectResult();
-
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    // 1. Initial Session check
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (!mounted) return;
-
+      setSession(initialSession);
+      const currentUser = initialSession?.user ?? null;
       setUser(currentUser);
 
       if (currentUser) {
-        await fetchProfile(currentUser.uid);
-        
-        // Track IP and Session
+        await fetchProfile(currentUser.id);
+      }
+      setIsLoading(false);
+    }).catch((err) => {
+      console.error('Get initial session error:', err);
+      if (mounted) setIsLoading(false);
+    });
+
+    // 2. Listen to Auth State Changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+      if (!mounted) return;
+
+      setSession(currentSession);
+      const currentUser = currentSession?.user ?? null;
+      setUser(currentUser);
+
+      if (currentUser) {
+        await fetchProfile(currentUser.id);
+
+        // Session & IP Activity tracking
         try {
           const res = await fetch('https://api.ipify.org?format=json');
           const data = await res.json();
           const ip = data.ip;
           const sessionId = 'sess_' + Math.random().toString(36).substring(2, 15);
-          
-          await updateDoc(doc(db, 'profiles', currentUser.uid), {
+
+          await supabase.from('profiles').update({
             last_login_ip: ip,
             session_id: sessionId,
-            last_active: serverTimestamp(),
-          });
+            last_active: new Date().toISOString(),
+          }).eq('id', currentUser.id);
         } catch (e) {
-          console.error('Failed to track session:', e);
+          // silently ignore IP tracking errors
         }
       } else {
         setProfile(null);
       }
-
       setIsLoading(false);
     });
 
     return () => {
       mounted = false;
-      unsubscribe();
+      subscription.unsubscribe();
     };
-  }, [fetchProfile, response]);
+  }, [fetchProfile]);
 
   const handleSignIn = useCallback(async (email: string, password: string) => {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    if (cred.user) {
-      const docRef = doc(db, 'profiles', cred.user.uid);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) {
-        // Auto-create missing profile for demo users migrating to Firebase
-        await setDoc(docRef, {
-          id: cred.user.uid,
-          full_name: 'Demo User',
-          email: cred.user.email,
-          role: 'employee',
-          organization_id: '00000000-0000-0000-0000-000000000001',
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    if (data.user) {
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      if (!existingProfile) {
+        // Auto-provision default demo employee profile if not existing
+        await supabase.from('profiles').insert({
+          id: data.user.id,
+          full_name: data.user.user_metadata?.full_name || 'HRMS User',
+          email: data.user.email,
+          role: data.user.user_metadata?.role || 'employee',
+          organization_id: data.user.user_metadata?.organization_id || '00000000-0000-0000-0000-000000000001',
           is_active: true,
-          created_at: serverTimestamp(),
-          updated_at: serverTimestamp(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         });
-        await fetchProfile(cred.user.uid);
       }
+      await fetchProfile(data.user.id);
     }
   }, [fetchProfile]);
 
   const handleSignInWithGoogle = useCallback(async () => {
     try {
-      if (Platform.OS !== 'web') {
-        if (!process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID) {
-          throw new Error('Google Sign-In on iOS requires EXPO_PUBLIC_GOOGLE_CLIENT_ID in your .env file.');
-        }
-        await promptAsync();
+      if (Platform.OS === 'web') {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin,
+          },
+        });
+        if (error) throw error;
       } else {
-        const provider = new GoogleAuthProvider();
-        await signInWithRedirect(auth, provider);
+        const redirectUrl = AuthSession.makeRedirectUri();
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl,
+            skipBrowserRedirect: true,
+          },
+        });
+        if (error) throw error;
+        if (data.url) {
+          const result = await AuthSession.startAsync({ authUrl: data.url });
+          if (result.type === 'success' && result.params.access_token) {
+            await supabase.auth.setSession({
+              access_token: result.params.access_token,
+              refresh_token: result.params.refresh_token,
+            });
+          }
+        }
       }
     } catch (error) {
-      console.error('Google sign in error', error);
+      console.error('Supabase Google Sign-In error:', error);
       throw error;
     }
-  }, [promptAsync]);
+  }, []);
 
   const handleSignOut = useCallback(async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
+    setSession(null);
     setUser(null);
     setProfile(null);
   }, []);
 
   const value: AuthState = {
-    session: user ? { user } : null,
+    session,
     user,
     profile,
     role: profile?.role ?? null,

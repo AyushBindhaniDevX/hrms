@@ -6,6 +6,7 @@ import {
 import { useRouter, Redirect } from 'expo-router';
 import { HR_NAV } from '@/constants/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
@@ -29,6 +30,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 export default function HRDashboard() {
   const colors = useTheme();
   const { profile, role } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -48,10 +50,12 @@ export default function HRDashboard() {
   const loadData = useCallback(async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
+      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
+
       const [count, stats, leaves] = await Promise.all([
-        getEmployeeCount(),
-        getAttendanceStats(today),
-        getPendingLeaveRequests(),
+        getEmployeeCount(orgId),
+        getAttendanceStats(today, orgId),
+        getPendingLeaveRequests(orgId),
       ]);
       setEmpCount(count);
       setAttendanceStats(stats);
@@ -61,7 +65,7 @@ export default function HRDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile, tenantOrg]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

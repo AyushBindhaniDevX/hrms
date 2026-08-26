@@ -1,22 +1,23 @@
 import { HR_NAV } from '@/constants/navigation';
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Button } from '@/components/ui/Button';
 import { SidebarLayout } from '@/components/layout/Sidebar';
-import { getDepartments, createEmployee, getAllEmployees } from '@/lib/services/employee';
+import { getDepartments, createEmployee, getEmployees } from '@/lib/services/employee';
 import type { Department, Employee } from '@/types';
-
-
+import { RefreshCw, Sparkles } from 'lucide-react-native';
 
 export default function CreateEmployeeScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [managers, setManagers] = useState<Employee[]>([]);
@@ -24,8 +25,8 @@ export default function CreateEmployeeScreen() {
   const [error, setError] = useState('');
 
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('Pass@123');
   const [phone, setPhone] = useState('');
   const [empCode, setEmpCode] = useState('');
   const [deptId, setDeptId] = useState<string | null>(null);
@@ -34,36 +35,66 @@ export default function CreateEmployeeScreen() {
   const [designation, setDesignation] = useState('');
   const [basicSalary, setBasicSalary] = useState('');
 
+  const tenantDomain = (tenantOrg?.settings as any)?.domain || (typeof window !== 'undefined' && window.location.hostname.includes('shanti') ? 'shantimemorialhospital.com' : 'subedge.com');
+
+  const generateRandomCode = () => {
+    const prefix = tenantDomain.includes('shanti') ? 'SMH' : 'EMP';
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    return `${prefix}-${randomDigits}`;
+  };
+
+  useEffect(() => {
+    setEmpCode(generateRandomCode());
+  }, [tenantDomain]);
+
   useEffect(() => {
     (async () => {
-      const [d, m] = await Promise.all([getDepartments(), getAllEmployees()]);
+      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
+      const [d, m] = await Promise.all([
+        getDepartments(orgId),
+        getEmployees({ organization_id: orgId }),
+      ]);
       setDepartments(d);
       setManagers(m);
     })();
-  }, []);
+  }, [profile, tenantOrg]);
+
+  const handleNameChange = (name: string) => {
+    setFullName(name);
+    const words = name.trim().split(/\s+/);
+    const cleanWords = words.filter((w) => !/^(dr|mr|mrs|ms|prof)\.?$/i.test(w));
+    const mainName = cleanWords[0] || words[0] || '';
+    const usernamePrefix = mainName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (usernamePrefix) {
+      setUsername(usernamePrefix);
+    }
+  };
 
   const handleCreate = async () => {
-    if (!fullName || !email || !password || !empCode) {
-      setError('Name, email, password, and employee code are required');
+    if (!fullName || !username || !password || !empCode) {
+      setError('Name, username, password, and employee code are required');
       return;
     }
     setError('');
     setLoading(true);
     try {
+      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
+      const fullEmail = username.includes('@') ? username.trim().toLowerCase() : `${username.trim().toLowerCase()}@${tenantDomain}`;
+
       await createEmployee({
-        full_name: fullName,
-        email,
+        full_name: fullName.trim(),
+        email: fullEmail,
         password,
         phone: phone || undefined,
-        organization_id: profile?.organization_id || '',
-        employee_code: empCode,
+        organization_id: orgId,
+        employee_code: empCode.trim(),
         department_id: deptId || undefined,
         manager_id: managerId || undefined,
         role: role,
-        designation: designation || undefined,
+        designation: designation.trim() || undefined,
         basic_salary: parseFloat(basicSalary) || 0,
       });
-      if (router.canGoBack()) { router.back(); } else { router.replace('/'); }
+      router.replace('/(hr)/employees' as never);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create employee');
     } finally {
@@ -75,8 +106,8 @@ export default function CreateEmployeeScreen() {
     <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <Button title="← Cancel" onPress={() => { if (router.canGoBack()) if (router.canGoBack()) { router.back(); } else { router.replace('/'); } else router.replace('/'); }} variant="ghost" size="sm" />
-          <Text style={[styles.title, { color: colors.text }]}>Add Employee</Text>
+          <Button title="← Cancel" onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace('/'); } }} variant="ghost" size="sm" />
+          <Text style={[styles.title, { color: colors.text }]}>Add New Employee</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -87,24 +118,57 @@ export default function CreateEmployeeScreen() {
             </View>
           ) : null}
 
-          <Input label="Full Name *" value={fullName} onChangeText={setFullName} />
-          <Input label="Email *" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-          <Input label="Password *" value={password} onChangeText={setPassword} secureTextEntry />
-          <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-          <Input label="Employee Code *" value={empCode} onChangeText={setEmpCode} />
-          <Input label="Designation (Job Title)" value={designation} onChangeText={setDesignation} />
-          <Input label="Base Salary" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" />
+          <Input
+            label="Full Name *"
+            placeholder="e.g. Rahul Sharma"
+            value={fullName}
+            onChangeText={handleNameChange}
+          />
+
+          <Input
+            label="Work Username (Login ID) *"
+            placeholder="e.g. rahul"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            rightElement={
+              <View style={styles.domainBadge}>
+                <Text style={styles.domainText}>@{tenantDomain}</Text>
+              </View>
+            }
+          />
+
+          <Input
+            label="Employee Code *"
+            value={empCode}
+            onChangeText={setEmpCode}
+            rightElement={
+              <TouchableOpacity
+                onPress={() => setEmpCode(generateRandomCode())}
+                style={styles.randomBtn}
+                activeOpacity={0.7}
+              >
+                <RefreshCw size={13} color="#0D7377" />
+                <Text style={styles.randomBtnText}>Random</Text>
+              </TouchableOpacity>
+            }
+          />
+
+          <Input label="Temporary Password *" value={password} onChangeText={setPassword} secureTextEntry />
+          <Input label="Phone Number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <Input label="Designation / Position" placeholder="e.g. Chief Medical Officer" value={designation} onChangeText={setDesignation} />
+          <Input label="Monthly Base Salary (INR)" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" placeholder="50000" />
 
           <Select
             label="Department"
-            options={departments.map(d => ({ label: d.name, value: d.id }))}
+            options={departments.map((d) => ({ label: d.name, value: d.id }))}
             value={deptId}
             onValueChange={setDeptId}
           />
 
           <Select
-            label="Reporting To (Manager)"
-            options={managers.map(m => ({ label: m.profile?.full_name || m.employee_code || 'Unknown', value: m.id }))}
+            label="Reporting Manager"
+            options={managers.map((m) => ({ label: m.profile?.full_name || m.employee_code || 'Unknown', value: m.id }))}
             value={managerId}
             onValueChange={setManagerId}
           />
@@ -117,10 +181,16 @@ export default function CreateEmployeeScreen() {
               { label: 'Administrator', value: 'admin' },
             ]}
             value={role}
-            onValueChange={setRole}
+            onValueChange={(val) => setRole(val || 'employee')}
           />
 
-          <Button title="Create Employee" onPress={handleCreate} loading={loading} />
+          <Button
+            title="Create & Onboard Employee"
+            onPress={handleCreate}
+            loading={loading}
+            size="lg"
+            style={{ marginTop: 12 }}
+          />
         </ScrollView>
       </View>
     </SidebarLayout>
@@ -129,8 +199,38 @@ export default function CreateEmployeeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1 },
-  title: { fontSize: 17, fontWeight: '600' },
-  form: { padding: 16, maxWidth: 500, alignSelf: 'center', width: '100%' },
-  errorBox: { padding: 12, borderRadius: 8, marginBottom: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
+  title: { fontSize: 20, fontWeight: '700' },
+  form: { padding: 24, maxWidth: 640, width: '100%', alignSelf: 'center', gap: 6 },
+  errorBox: { padding: 12, borderRadius: 8, marginBottom: 12 },
+  domainBadge: {
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderLeftWidth: 1,
+    borderLeftColor: '#CBD5E1',
+    alignSelf: 'stretch',
+  },
+  domainText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  randomBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    backgroundColor: '#E6F4F4',
+    borderLeftWidth: 1,
+    borderLeftColor: '#CBD5E1',
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+  },
+  randomBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0D7377',
+  },
 });

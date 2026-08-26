@@ -1,6 +1,6 @@
-import { auth } from './firebase';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { supabase } from './supabase';
 
 export async function resetPassword(email: string) {
-  await sendPasswordResetEmail(auth, email);
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error) throw error;
 }

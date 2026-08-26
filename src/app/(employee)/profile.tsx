@@ -12,8 +12,7 @@ import { getEmployeeByProfileId } from '@/lib/services/employee';
 import { formatDate } from '@/utils/format';
 import type { Employee } from '@/types';
 import { Edit2, Mail, Phone, MapPin, Building, User, FileText, Upload, CheckCircle2 } from 'lucide-react-native';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 
 export default function ProfileScreen() {
   const colors = useTheme();
@@ -51,11 +50,16 @@ export default function ProfileScreen() {
     if (!profile) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'profiles', profile.id), {
-        full_name: editName.trim() || profile.full_name,
-        phone: editPhone.trim() || null,
-        updated_at: serverTimestamp(),
-      });
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: editName.trim() || profile.full_name,
+          phone: editPhone.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id);
+
+      if (error) throw error;
       await refreshProfile();
       setSaveSuccess(true);
       setTimeout(() => {

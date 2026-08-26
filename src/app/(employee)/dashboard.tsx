@@ -22,6 +22,7 @@ import {
   Briefcase, Bell, ChevronRight, Award, LifeBuoy, GraduationCap,
   Receipt, Laptop, Wifi, WifiOff, Navigation, Mic,
 } from 'lucide-react-native';
+import { useNotifications } from '@/context/NotificationContext';
 import { GeofenceMap } from '@/components/Map/GeofenceMap';
 import type { Attendance, LeaveBalance, Payslip, Employee } from '@/types';
 import Animated, {
@@ -69,10 +70,15 @@ const clockBtnStyle = StyleSheet.create({
   label: { color: '#FFF', fontSize: 17, fontWeight: '700', letterSpacing: 0.2 },
 });
 
+import { useTenant } from '@/context/TenantContext';
+import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 export default function EmployeeDashboard() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { companyName, officeName, companyLogoUrl } = useTenant();
+  const { unreadCount } = useNotifications();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -89,6 +95,11 @@ export default function EmployeeDashboard() {
   const [distance, setDistance] = useState<number | null>(null);
   const [outOfBounds, setOutOfBounds] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Face Verification Modal state
+  const [showFaceModal, setShowFaceModal] = useState(false);
+  const [faceModalType, setFaceModalType] = useState<'in' | 'out'>('in');
+  const [pendingLoc, setPendingLoc] = useState<{ latitude: number; longitude: number }>({ latitude: 0, longitude: 0 });
 
   const loadData = useCallback(async () => {
     if (!profile) return;
@@ -161,14 +172,49 @@ export default function EmployeeDashboard() {
     setClockLoading(true);
     try {
       let loc = { latitude: 0, longitude: 0 };
-      try { loc = await getCurrentLocation(); } catch { /* no permission */ }
-      const result = type === 'in'
-        ? await clockIn(loc.latitude, loc.longitude)
-        : await clockOut(loc.latitude, loc.longitude);
+      try {
+        loc = await getCurrentLocation();
+        setUserLocation(loc);
+      } catch (locErr) {
+        setClockError('Location permission is required for attendance verification.');
+        setClockLoading(false);
+        return;
+      }
+
+      // Geofencing verification
+      if (employee?.workplace) {
+        const dist = calculateDistance(loc.latitude, loc.longitude, employee.workplace.latitude, employee.workplace.longitude);
+        setDistance(Math.round(dist));
+        if (dist > (employee.workplace.radius_meters || 150)) {
+          setClockError(`You are ${Math.round(dist)}m away from ${employee.workplace.name}. Must be within ${employee.workplace.radius_meters || 150}m to clock ${type}.`);
+          setClockLoading(false);
+          return;
+        }
+      }
+
+      // Location is valid: launch Face Recognition Modal
+      setPendingLoc(loc);
+      setFaceModalType(type);
+      setShowFaceModal(true);
+    } catch (err: unknown) {
+      setClockError(err instanceof Error ? err.message : 'Failed to verify location. Please try again.');
+    } finally {
+      setClockLoading(false);
+    }
+  };
+
+  const handleFaceVerified = async (faceSnapshot?: string) => {
+    setClockLoading(true);
+    setClockError('');
+    try {
+      const result = faceModalType === 'in'
+        ? await clockIn(pendingLoc.latitude, pendingLoc.longitude, faceSnapshot)
+        : await clockOut(pendingLoc.latitude, pendingLoc.longitude, faceSnapshot);
+
       if (!result.success) {
         setClockError(result.message || 'Operation failed');
       } else {
-        if (type === 'in') {
+        if (faceModalType === 'in') {
           const startTime = formatTime(new Date().toISOString());
           await sendClockInNotification(startTime);
         } else {
@@ -177,8 +223,10 @@ export default function EmployeeDashboard() {
         await loadData();
       }
     } catch (err: unknown) {
-      setClockError(err instanceof Error ? err.message : 'Failed. Please try again.');
-    } finally { setClockLoading(false); }
+      setClockError(err instanceof Error ? err.message : 'Biometric clocking failed. Please try again.');
+    } finally {
+      setClockLoading(false);
+    }
   };
 
   const isClockedIn = todayAttendance && !todayAttendance.clock_out;
@@ -274,7 +322,9 @@ export default function EmployeeDashboard() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <TouchableOpacity onPress={() => router.push('/(employee)/notifications' as never)} style={{ position: 'relative', padding: 4 }}>
                   <Bell size={24} color="#FFF" />
-                  <View style={{ position: 'absolute', top: 2, right: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' }} />
+                  {unreadCount > 0 && (
+                    <View style={{ position: 'absolute', top: 2, right: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' }} />
+                  )}
                 </TouchableOpacity>
                 {profile && (
                   <TouchableOpacity onPress={() => router.push('/(employee)/profile' as never)} activeOpacity={0.85}>
@@ -797,6 +847,15 @@ export default function EmployeeDashboard() {
 
         </View>
       </View>
+
+      <FaceVerificationModal
+        visible={showFaceModal}
+        onClose={() => setShowFaceModal(false)}
+        onVerified={handleFaceVerified}
+        employeeName={profile?.full_name || 'Team Member'}
+        officeName={officeName}
+        isClockingIn={faceModalType === 'in'}
+      />
     </ScrollView>
   );
 }

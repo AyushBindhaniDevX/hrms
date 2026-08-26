@@ -1,4 +1,5 @@
 import { ADMIN_NAV } from '@/constants/navigation';
+import { useRouter } from 'expo-router';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -28,7 +30,9 @@ import {
   updateUserProfileData,
   toggleUserActive,
   createSystemUser,
+  deleteUserRecord,
 } from '@/lib/services/organization';
+import { resetPassword } from '@/lib/auth';
 import { getDepartments, getWorkplaces } from '@/lib/services/employee';
 import { createAuditLog } from '@/lib/services/audit';
 import { formatDate } from '@/utils/format';
@@ -50,11 +54,17 @@ import {
   Users,
   ShieldCheck,
   Award,
+  Trash2,
+  KeyRound,
+  RotateCcw,
+  RefreshCw,
 } from 'lucide-react-native';
 
 export default function UserManagementScreen() {
   const colors = useTheme();
   const { profile: currentAdmin } = useAuth();
+  const { organization: tenantOrg } = useTenant();
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
@@ -73,6 +83,8 @@ export default function UserManagementScreen() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editUser, setEditUser] = useState<Profile | null>(null);
   const [toggleUser, setToggleUser] = useState<Profile | null>(null);
+  const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
+  const [infoBanner, setInfoBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Add User Form State
   const [newFullName, setNewFullName] = useState('');
@@ -102,10 +114,11 @@ export default function UserManagementScreen() {
 
   const load = useCallback(async () => {
     try {
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
       const [userData, deptData, wpData] = await Promise.all([
-        getOrgUsers(),
-        getDepartments(),
-        getWorkplaces(),
+        getOrgUsers(orgId),
+        getDepartments(orgId),
+        getWorkplaces(orgId),
       ]);
       setUsers(userData);
       setDepartments(deptData);
@@ -115,7 +128,7 @@ export default function UserManagementScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentAdmin, tenantOrg]);
 
   useEffect(() => {
     load();
@@ -127,14 +140,22 @@ export default function UserManagementScreen() {
     setRefreshing(false);
   };
 
+  const tenantDomain = (tenantOrg?.settings as any)?.domain || (typeof window !== 'undefined' && window.location.hostname.includes('shanti') ? 'shantimemorialhospital.com' : 'subedge.com');
+
+  const generateRandomCode = () => {
+    const prefix = tenantDomain.includes('shanti') ? 'SMH' : 'EMP';
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    return `${prefix}-${randomDigits}`;
+  };
+
   const openAddModal = () => {
     setNewFullName('');
     setNewEmail('');
-    setNewPassword('');
+    setNewPassword('Pass@123');
     setNewPhone('');
     setNewRole('employee');
     setCreateEmpRecord(true);
-    setNewEmpCode(`EMP-${Math.floor(1000 + Math.random() * 9000)}`);
+    setNewEmpCode(generateRandomCode());
     setNewDeptId(departments.length > 0 ? departments[0].id : null);
     setNewDesignation('');
     setNewWorkplaceId(workplaces.length > 0 ? workplaces[0].id : null);
@@ -144,13 +165,24 @@ export default function UserManagementScreen() {
     setAddModalOpen(true);
   };
 
+  const handleFullNameChange = (name: string) => {
+    setNewFullName(name);
+    const words = name.trim().split(/\s+/);
+    const cleanWords = words.filter((w) => !/^(dr|mr|mrs|ms|prof)\.?$/i.test(w));
+    const mainName = cleanWords[0] || words[0] || '';
+    const usernamePrefix = mainName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (usernamePrefix) {
+      setNewEmail(usernamePrefix);
+    }
+  };
+
   const handleCreateUser = async () => {
     if (!newFullName.trim()) {
       setFormError('Please enter a full name');
       return;
     }
-    if (!newEmail.trim() || !newEmail.includes('@')) {
-      setFormError('Please enter a valid email address');
+    if (!newEmail.trim()) {
+      setFormError('Please enter a username');
       return;
     }
     if (!newPassword || newPassword.length < 6) {
@@ -161,9 +193,11 @@ export default function UserManagementScreen() {
     setFormError('');
     setSavingUser(true);
     try {
-      const orgId = currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
+      const fullEmail = newEmail.includes('@') ? newEmail.trim().toLowerCase() : `${newEmail.trim().toLowerCase()}@${tenantDomain}`;
+
       const uid = await createSystemUser({
-        email: newEmail.trim().toLowerCase(),
+        email: fullEmail,
         password: newPassword,
         full_name: newFullName.trim(),
         role: newRole,
@@ -178,7 +212,7 @@ export default function UserManagementScreen() {
       });
 
       await createAuditLog('user_created', 'profile', uid, {
-        email: newEmail,
+        email: fullEmail,
         role: newRole,
         created_by: currentAdmin?.id,
       });
@@ -248,11 +282,62 @@ export default function UserManagementScreen() {
         { toggled_by: currentAdmin?.id }
       );
       setToggleUser(null);
+      setInfoBanner({
+        type: 'success',
+        message: `${toggleUser.full_name}'s account was ${nextActive ? 'activated' : 'deactivated'}.`,
+      });
+      setTimeout(() => setInfoBanner(null), 4000);
       await load();
     } catch (err) {
       console.error('Toggle active error:', err);
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUser) return;
+    setProcessing(true);
+    try {
+      await deleteUserRecord(deleteUser.id);
+      await createAuditLog('user_deleted', 'profile', deleteUser.id, {
+        deleted_email: deleteUser.email,
+        deleted_name: deleteUser.full_name,
+        deleted_by: currentAdmin?.id,
+      });
+      setDeleteUser(null);
+      setInfoBanner({
+        type: 'success',
+        message: `Account for ${deleteUser.full_name} (${deleteUser.email}) has been deleted.`,
+      });
+      setTimeout(() => setInfoBanner(null), 4000);
+      await load();
+    } catch (err: any) {
+      console.error('Delete user error:', err);
+      setInfoBanner({
+        type: 'error',
+        message: err.message || 'Failed to delete user account.',
+      });
+      setTimeout(() => setInfoBanner(null), 5000);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleResetPassword = async (userEmail: string) => {
+    try {
+      await resetPassword(userEmail);
+      setInfoBanner({
+        type: 'success',
+        message: `Password reset email sent to ${userEmail}.`,
+      });
+      setTimeout(() => setInfoBanner(null), 4000);
+    } catch (err: any) {
+      setInfoBanner({
+        type: 'error',
+        message: err.message || `Failed to send password reset email to ${userEmail}.`,
+      });
+      setTimeout(() => setInfoBanner(null), 5000);
     }
   };
 
@@ -302,7 +387,7 @@ export default function UserManagementScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { color: colors.text }]}>User & Access Control</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Manage organization accounts, assign roles (Admin, HR, Employee), and activate or deactivate access.
+              Manage organization accounts, assign roles (Admin, HR, Employee), reset passwords, and manage active status.
             </Text>
           </View>
           <TouchableOpacity
@@ -314,6 +399,33 @@ export default function UserManagementScreen() {
             <Text style={styles.addBtnText}>Add New User</Text>
           </TouchableOpacity>
         </View>
+
+        {infoBanner && (
+          <View
+            style={[
+              styles.alertBox,
+              infoBanner.type === 'success'
+                ? { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }
+                : { backgroundColor: colors.dangerLight, borderColor: colors.danger + '40' },
+            ]}
+          >
+            {infoBanner.type === 'success' ? (
+              <CheckCircle2 size={18} color="#006a61" />
+            ) : (
+              <AlertCircle size={18} color={colors.danger} />
+            )}
+            <Text
+              style={{
+                color: infoBanner.type === 'success' ? '#006a61' : colors.danger,
+                fontWeight: '600',
+                fontSize: 13,
+                flex: 1,
+              }}
+            >
+              {infoBanner.message}
+            </Text>
+          </View>
+        )}
 
         {/* Stats Grid */}
         <View style={isDesktop ? styles.statsGridDesktop : styles.statsGridMobile}>
@@ -488,6 +600,14 @@ export default function UserManagementScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                      onPress={() => handleResetPassword(u.email)}
+                      style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
+                    >
+                      <KeyRound size={14} color="#64748B" />
+                      <Text style={[styles.actionBtnText, { color: '#64748B' }]}>Reset Pwd</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                       onPress={() => setToggleUser(u)}
                       style={[
                         styles.actionBtn,
@@ -507,6 +627,14 @@ export default function UserManagementScreen() {
                           <Text style={[styles.actionBtnText, { color: '#006a61' }]}>Activate</Text>
                         </>
                       )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => setDeleteUser(u)}
+                      style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}
+                    >
+                      <Trash2 size={14} color={colors.danger} />
+                      <Text style={[styles.actionBtnText, { color: colors.danger }]}>Delete</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -539,16 +667,28 @@ export default function UserManagementScreen() {
                   label="Full Name *"
                   placeholder="e.g. Sarah Jenkins"
                   value={newFullName}
-                  onChangeText={setNewFullName}
+                  onChangeText={handleFullNameChange}
                 />
 
                 <Input
-                  label="Email Address *"
-                  placeholder="e.g. sarah.jenkins@company.com"
+                  label="Work Username (Login ID) *"
+                  placeholder="e.g. sarah"
                   value={newEmail}
                   onChangeText={setNewEmail}
-                  keyboardType="email-address"
                   autoCapitalize="none"
+                  rightElement={
+                    <View style={{
+                      paddingHorizontal: 12,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      backgroundColor: '#F1F5F9',
+                      borderLeftWidth: 1,
+                      borderLeftColor: '#CBD5E1',
+                      alignSelf: 'stretch',
+                    }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748B' }}>@{tenantDomain}</Text>
+                    </View>
+                  }
                 />
 
                 <Input
@@ -561,7 +701,7 @@ export default function UserManagementScreen() {
 
                 <Input
                   label="Phone Number"
-                  placeholder="+1 (555) 000-0000"
+                  placeholder="+91 98765 43210"
                   value={newPhone}
                   onChangeText={setNewPhone}
                   keyboardType="phone-pad"
@@ -599,10 +739,29 @@ export default function UserManagementScreen() {
                 {createEmpRecord && (
                   <View style={[styles.empFieldsBox, { borderColor: '#e2e8f0' }]}>
                     <Input
-                      label="Employee Code"
-                      placeholder="EMP-1001"
+                      label="Employee Code *"
                       value={newEmpCode}
                       onChangeText={setNewEmpCode}
+                      rightElement={
+                        <TouchableOpacity
+                          onPress={() => setNewEmpCode(generateRandomCode())}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            paddingHorizontal: 10,
+                            backgroundColor: '#E6F4F4',
+                            borderLeftWidth: 1,
+                            borderLeftColor: '#CBD5E1',
+                            alignSelf: 'stretch',
+                            justifyContent: 'center',
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <RefreshCw size={13} color="#0D7377" />
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#0D7377' }}>Random</Text>
+                        </TouchableOpacity>
+                      }
                     />
 
                     <Input
@@ -726,6 +885,18 @@ export default function UserManagementScreen() {
           onCancel={() => setToggleUser(null)}
           loading={processing}
           variant={toggleUser?.is_active ? 'danger' : 'primary'}
+        />
+
+        {/* ── Dialog: Confirm Permanent Account Deletion ──────────────────── */}
+        <ConfirmDialog
+          visible={!!deleteUser}
+          title="Permanently Delete User Account?"
+          message={`Are you sure you want to permanently delete ${deleteUser?.full_name} (${deleteUser?.email})? This action removes their access and linked employee profile records permanently.`}
+          confirmLabel="Yes, Delete Account"
+          onConfirm={handleDeleteUser}
+          onCancel={() => setDeleteUser(null)}
+          loading={processing}
+          variant="danger"
         />
       </ScrollView>
     </SidebarLayout>

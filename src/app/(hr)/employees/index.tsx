@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { Card } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -10,25 +12,26 @@ import { SearchBar } from '@/components/ui/SearchBar';
 import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
-import { getAllEmployees } from '@/lib/services/employee';
+import { getEmployees } from '@/lib/services/employee';
 import type { Employee } from '@/types';
-
-
 
 export default function EmployeesScreen() {
   const colors = useTheme();
   const router = useRouter();
+  const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const data = await getAllEmployees();
+      const orgId = tenantOrg?.id || profile?.organization_id;
+      const data = await getEmployees({ organization_id: orgId });
       setEmployees(data);
       setLoading(false);
     })();
-  }, []);
+  }, [profile, tenantOrg]);
 
   const filtered = employees.filter(e => {
     if (!search) return true;

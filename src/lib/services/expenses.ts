@@ -1,47 +1,21 @@
 /**
- * Expenses & Reimbursements Service (Dynamic Firestore)
- * Subedge Technology Pvt Ltd — Oasis Platform
+ * Expenses & Reimbursements Service (Supabase)
+ * Oasis HRMS Multi-Tenant Platform
  */
 
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  setDoc,
-  updateDoc,
-  query,
-  where,
-  orderBy,
-} from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { ExpenseClaim, ExpenseStatus, ExpenseCategory } from '@/types/database';
-import { seedDatabaseIfEmpty } from './seed';
-
-const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
 
 export async function getExpenses(employeeId?: string): Promise<ExpenseClaim[]> {
-  await seedDatabaseIfEmpty();
+  let query = supabase.from('expenses').select('*');
 
-  try {
-    const expensesRef = collection(db, 'expenses');
-    let q = query(expensesRef);
-
-    if (employeeId) {
-      q = query(expensesRef, where('employee_id', '==', employeeId));
-    }
-
-    const snapshot = await getDocs(q);
-    const results: ExpenseClaim[] = [];
-    snapshot.forEach((d) => {
-      results.push({ id: d.id, ...d.data() } as ExpenseClaim);
-    });
-
-    return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  } catch (error) {
-    console.error('Error fetching expenses from Firestore:', error);
-    return [];
+  if (employeeId) {
+    query = query.eq('employee_id', employeeId);
   }
+
+  const { data, error } = await query.order('created_at', { ascending: false });
+  if (error || !data) return [];
+  return data as ExpenseClaim[];
 }
 
 export async function createExpenseClaim(
@@ -55,10 +29,9 @@ export async function createExpenseClaim(
     created_at: new Date().toISOString(),
   };
 
-  try {
-    await setDoc(doc(db, 'expenses', newId), newClaim);
-  } catch (error) {
-    console.error('Error creating expense in Firestore:', error);
+  const { error } = await supabase.from('expenses').insert(newClaim);
+  if (error) {
+    console.error('Error creating expense claim in Supabase:', error);
   }
 
   return newClaim;
@@ -70,26 +43,47 @@ export async function updateExpenseStatus(
   reviewerName: string,
   comments?: string
 ): Promise<void> {
-  try {
-    const expRef = doc(db, 'expenses', expenseId);
-    await updateDoc(expRef, {
+  const now = new Date().toISOString();
+
+  const { data: expData } = await supabase
+    .from('expenses')
+    .select('*, employee:employees(*, profile:profiles(*))')
+    .eq('id', expenseId)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from('expenses')
+    .update({
       status,
       approved_by: reviewerName,
-      approved_at: new Date().toISOString(),
+      approved_at: now,
       ...(comments ? { comments } : {}),
-    });
+      updated_at: now,
+    })
+    .eq('id', expenseId);
 
-    if (status === 'approved' || status === 'rejected') {
-      const { sendExpenseStatusEmail } = await import('./resend');
-      await sendExpenseStatusEmail(
-        'ayush.bindhani@subedge.com',
-        'Ayush Bindhani',
-        'Expense Reimbursement Claim',
-        3450,
-        status
-      );
-    }
-  } catch (error) {
-    console.error('Error updating expense status in Firestore:', error);
+  if (error) throw error;
+
+  if (expData && (status === 'approved' || status === 'rejected')) {
+    try {
+      const profileId = expData.employee?.profile_id;
+      const claimTitle = expData.title || 'Expense Reimbursement';
+      const claimAmount = expData.amount || 0;
+
+      if (profileId) {
+        const { createNotification } = await import('./notifications');
+        await createNotification(
+          profileId,
+          'expense',
+          status === 'approved' ? 'Expense Claim Approved' : 'Expense Claim Rejected',
+          `Your claim "${claimTitle}" (₹${claimAmount}) has been ${status}.`
+        );
+      }
+    } catch (e) {}
   }
+}
+
+export async function deleteExpenseClaim(expenseId: string): Promise<void> {
+  const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+  if (error) throw error;
 }
