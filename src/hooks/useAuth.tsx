@@ -126,13 +126,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (!existingProfile) {
+        // Find a fallback organization if none exists in user_metadata
+        let fallbackOrgId = data.user.user_metadata?.organization_id;
+        
+        if (!fallbackOrgId) {
+          const { data: firstOrg } = await supabase
+            .from('organizations')
+            .select('id')
+            .limit(1)
+            .maybeSingle();
+            
+          fallbackOrgId = firstOrg?.id;
+        }
+
+        if (!fallbackOrgId) {
+           console.error('No organization found in database to link the new profile.');
+           throw new Error('System error: No organizations exist in the database to link to your profile.');
+        }
+
         // Auto-provision default demo employee profile if not existing
         const { error: upsertError } = await supabase.from('profiles').upsert({
           id: data.user.id,
           full_name: data.user.user_metadata?.full_name || 'HRMS User',
           email: data.user.email,
           role: data.user.user_metadata?.role || 'employee',
-          organization_id: data.user.user_metadata?.organization_id || '00000000-0000-0000-0000-000000000001',
+          organization_id: fallbackOrgId,
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
