@@ -98,11 +98,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, fetchTenantData]);
 
-  const isShantiSubdomain = Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname.includes('shanti');
-
-  const companyName = organization?.name || (isShantiSubdomain ? 'Shanti Memorial Hospital' : COMPANY_NAME);
-  const companyLogoUrl = organization?.logo_url || (organization?.settings as any)?.logo_url || (isShantiSubdomain ? 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Hospital_sign.svg/1024px-Hospital_sign.svg.png' : null);
-  const officeName = workplace?.name || (isShantiSubdomain ? 'Main Campus' : 'Main Office');
+  const companyName = organization?.name || COMPANY_NAME;
+  const companyLogoUrl = organization?.logo_url || (organization?.settings as any)?.logo_url || null;
+  const officeName = workplace?.name || 'Main Office';
 
   const value: TenantContextState = {
     organization,
