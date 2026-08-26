@@ -6,44 +6,7 @@
 import { supabase } from '@/lib/supabase';
 import { WorkShift, EmployeeShift } from '@/types/database';
 
-export const DEFAULT_SHIFTS: Omit<WorkShift, 'id' | 'created_at'>[] = [
-  {
-    organization_id: '00000000-0000-0000-0000-000000000002',
-    name: 'General Shift',
-    start_time: '09:30',
-    end_time: '18:30',
-    color: '#0D7377',
-    allowance_per_day: 0,
-    is_night_shift: false,
-  },
-  {
-    organization_id: '00000000-0000-0000-0000-000000000002',
-    name: 'Morning OPD Shift',
-    start_time: '07:00',
-    end_time: '15:30',
-    color: '#059669',
-    allowance_per_day: 150,
-    is_night_shift: false,
-  },
-  {
-    organization_id: '00000000-0000-0000-0000-000000000002',
-    name: 'Evening Shift',
-    start_time: '14:00',
-    end_time: '22:30',
-    color: '#D97706',
-    allowance_per_day: 250,
-    is_night_shift: false,
-  },
-  {
-    organization_id: '00000000-0000-0000-0000-000000000002',
-    name: 'Emergency Night Shift',
-    start_time: '22:00',
-    end_time: '07:00',
-    color: '#7C3AED',
-    allowance_per_day: 500,
-    is_night_shift: true,
-  },
-];
+export const DEFAULT_SHIFTS: Omit<WorkShift, 'id' | 'created_at'>[] = [];
 
 export async function getShifts(organizationId?: string): Promise<WorkShift[]> {
   try {
@@ -58,19 +21,14 @@ export async function getShifts(organizationId?: string): Promise<WorkShift[]> {
 
     const { data, error } = await query;
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data as WorkShift[];
     }
   } catch (err) {
     console.error('Error querying shifts:', err);
   }
 
-  // Fallback default shifts if table empty or seeding
-  return DEFAULT_SHIFTS.map((s, idx) => ({
-    ...s,
-    id: `shift_${idx + 1}`,
-    organization_id: organizationId || s.organization_id,
-  }));
+  return [];
 }
 
 export async function createShift(shift: Omit<WorkShift, 'id' | 'created_at'>): Promise<WorkShift> {
@@ -85,12 +43,7 @@ export async function createShift(shift: Omit<WorkShift, 'id' | 'created_at'>): 
     .single();
 
   if (error) {
-    // Return mock with id if table does not exist
-    return {
-      ...shift,
-      id: `shift_${Date.now()}`,
-      created_at: now,
-    };
+    throw error;
   }
   return data as WorkShift;
 }

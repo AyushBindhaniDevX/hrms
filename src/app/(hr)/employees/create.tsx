@@ -79,6 +79,10 @@ export default function CreateEmployeeScreen() {
       setError('Name, username, phone, and employee code are required');
       return;
     }
+    if (!shiftId) {
+      setError('Please select a default shift for the employee');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -178,10 +182,11 @@ export default function CreateEmployeeScreen() {
           />
 
           <Select
-            label="Default Shift (For Attendance)"
+            label="Default Shift (For Attendance) *"
+            placeholder="Select a shift..."
             options={shifts.map((s) => ({ label: `${s.name} (${s.start_time} - ${s.end_time})`, value: s.id }))}
-            value={shiftId}
-            onValueChange={setShiftId}
+            value={shiftId || ''}
+            onValueChange={(val) => setShiftId(val || null)}
           />
 
           <Select
