@@ -117,6 +117,7 @@ export default function DepartmentsAndHierarchyScreen() {
   const [reportingError, setReportingError] = useState('');
   const [assignManagerModalOpen, setAssignManagerModalOpen] = useState(false);
   const [quickMoveModalEmp, setQuickMoveModalEmp] = useState<Employee | null>(null);
+  const [formError, setFormError] = useState('');
 
   // Collapsed branches in Org Chart
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
