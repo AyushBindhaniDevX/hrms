@@ -127,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!existingProfile) {
         // Auto-provision default demo employee profile if not existing
-        await supabase.from('profiles').upsert({
+        const { error: upsertError } = await supabase.from('profiles').upsert({
           id: data.user.id,
           full_name: data.user.user_metadata?.full_name || 'HRMS User',
           email: data.user.email,
@@ -136,7 +136,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        });
+        }, { onConflict: 'id' });
+        
+        if (upsertError) {
+          console.error('Failed to provision user profile:', upsertError);
+          throw new Error('Failed to create user profile. Please check database RLS policies.');
+        }
       }
       await fetchProfile(data.user.id);
     }
