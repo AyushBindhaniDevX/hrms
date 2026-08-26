@@ -395,6 +395,17 @@ CREATE TABLE IF NOT EXISTS public.shifts (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS public.employee_shifts (
+  id TEXT PRIMARY KEY, -- Format: employeeId_YYYY-MM-DD
+  employee_id UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+  organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
+  shift_id UUID REFERENCES public.shifts(id) ON DELETE SET NULL,
+  date DATE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(employee_id, date)
+);
+
 -- ==============================================================================
 -- 10. AUDIT LOGS & NOTIFICATIONS
 -- ==============================================================================
@@ -587,6 +598,7 @@ ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.course_enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.shifts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.employee_shifts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
