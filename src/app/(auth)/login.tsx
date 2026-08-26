@@ -95,7 +95,8 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
-      await signIn(email, password, activeTenant?.id);
+      const finalEmail = tenantDomain && !email.includes('@') ? `${email}@${tenantDomain}` : email;
+      await signIn(finalEmail, password, activeTenant?.id);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
