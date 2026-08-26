@@ -10,9 +10,9 @@ import { Select } from '@/components/ui/Select';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Button } from '@/components/ui/Button';
 import { SidebarLayout } from '@/components/layout/Sidebar';
-import { getDepartments, createEmployee, getEmployees } from '@/lib/services/employee';
+import { getDepartments, createEmployee, getEmployees, getWorkplaces } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
-import type { Department, Employee, WorkShift } from '@/types';
+import type { Department, Employee, WorkShift, Workplace } from '@/types';
 import { RefreshCw, Sparkles } from 'lucide-react-native';
 
 export default function CreateEmployeeScreen() {
@@ -23,6 +23,7 @@ export default function CreateEmployeeScreen() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [managers, setManagers] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,6 +32,7 @@ export default function CreateEmployeeScreen() {
   const [phone, setPhone] = useState('');
   const [empCode, setEmpCode] = useState('');
   const [deptId, setDeptId] = useState<string | null>(null);
+  const [workplaceId, setWorkplaceId] = useState<string | null>(null);
   const [managerId, setManagerId] = useState<string | null>(null);
   const [shiftId, setShiftId] = useState<string | null>(null);
   const [role, setRole] = useState<string>('employee');
@@ -54,15 +56,17 @@ export default function CreateEmployeeScreen() {
       let isActive = true;
       (async () => {
         const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
-        const [d, m, s] = await Promise.all([
+        const [d, m, s, wp] = await Promise.all([
           getDepartments(orgId),
           getEmployees({ organization_id: orgId }),
-          getShifts(orgId)
+          getShifts(orgId),
+          getWorkplaces(orgId)
         ]);
         if (isActive) {
           setDepartments(d || []);
           setManagers(m || []);
           setShifts(s || []);
+          setWorkplaces(wp || []);
         }
       })();
       return () => { isActive = false; };
@@ -103,6 +107,7 @@ export default function CreateEmployeeScreen() {
         organization_id: orgId,
         employee_code: empCode.trim(),
         department_id: deptId || undefined,
+        workplace_id: workplaceId || undefined,
         manager_id: managerId || undefined,
         default_shift_id: shiftId || undefined,
         role: role,
@@ -178,6 +183,13 @@ export default function CreateEmployeeScreen() {
             options={departments.map((d) => ({ label: d.name, value: d.id }))}
             value={deptId}
             onValueChange={setDeptId}
+          />
+
+          <Select
+            label="Primary Workplace (Location)"
+            options={workplaces.map((w) => ({ label: w.name, value: w.id }))}
+            value={workplaceId}
+            onValueChange={setWorkplaceId}
           />
 
           <Select
