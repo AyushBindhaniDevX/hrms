@@ -115,6 +115,8 @@ export async function createSystemUser(params: {
   joining_date?: string;
   workplace_id?: string;
   basic_salary?: number;
+  default_shift_id?: string;
+  manager_id?: string;
 }): Promise<string> {
   // 0. Check Organization User Limit
   const orgId = params.organization_id || '00000000-0000-0000-0000-000000000001';
@@ -168,6 +170,8 @@ export async function createSystemUser(params: {
       joining_date: params.joining_date || now.split('T')[0],
       workplace_id: params.workplace_id || null,
       basic_salary: params.basic_salary || 0,
+      default_shift_id: params.default_shift_id || null,
+      manager_id: params.manager_id || null,
       employment_status: 'active',
       onboarding_completed: true,
       created_at: now,

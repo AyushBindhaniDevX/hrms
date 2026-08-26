@@ -33,10 +33,11 @@ import {
   deleteUserRecord,
 } from '@/lib/services/organization';
 import { resetPassword } from '@/lib/auth';
-import { getDepartments, getWorkplaces } from '@/lib/services/employee';
+import { getDepartments, getWorkplaces, getEmployees } from '@/lib/services/employee';
+import { getShifts } from '@/lib/services/shifts';
 import { createAuditLog } from '@/lib/services/audit';
 import { formatDate } from '@/utils/format';
-import type { Profile, Department, Workplace } from '@/types';
+import type { Profile, Department, Workplace, WorkShift, Employee } from '@/types';
 import {
   Search,
   UserPlus,
@@ -71,6 +72,8 @@ export default function UserManagementScreen() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
+  const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [managers, setManagers] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -96,6 +99,8 @@ export default function UserManagementScreen() {
   const [newDeptId, setNewDeptId] = useState<string | null>(null);
   const [newDesignation, setNewDesignation] = useState('');
   const [newWorkplaceId, setNewWorkplaceId] = useState<string | null>(null);
+  const [newShiftId, setNewShiftId] = useState<string | null>(null);
+  const [newManagerId, setNewManagerId] = useState<string | null>(null);
   const [newSalary, setNewSalary] = useState('');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState(false);
@@ -114,14 +119,18 @@ export default function UserManagementScreen() {
   const load = useCallback(async () => {
     try {
       const orgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
-      const [userData, deptData, wpData] = await Promise.all([
+      const [userData, deptData, wpData, shiftData, empData] = await Promise.all([
         getOrgUsers(orgId),
         getDepartments(orgId),
         getWorkplaces(orgId),
+        getShifts(orgId),
+        getEmployees({ organization_id: orgId }),
       ]);
       setUsers(userData);
       setDepartments(deptData);
       setWorkplaces(wpData);
+      setShifts(shiftData || []);
+      setManagers(empData || []);
     } catch (err) {
       console.error('Error loading users:', err);
     } finally {
@@ -157,6 +166,8 @@ export default function UserManagementScreen() {
     setNewDeptId(departments.length > 0 ? departments[0].id : null);
     setNewDesignation('');
     setNewWorkplaceId(workplaces.length > 0 ? workplaces[0].id : null);
+    setNewShiftId(null);
+    setNewManagerId(null);
     setNewSalary('50000');
     setFormError('');
     setFormSuccess(false);
@@ -206,6 +217,8 @@ export default function UserManagementScreen() {
         department_id: newDeptId || undefined,
         designation: newDesignation.trim() || undefined,
         workplace_id: newWorkplaceId || undefined,
+        default_shift_id: newShiftId || undefined,
+        manager_id: newManagerId || undefined,
         basic_salary: parseFloat(newSalary) || 0,
       });
 
@@ -783,12 +796,27 @@ export default function UserManagementScreen() {
 
                     {workplaces.length > 0 && (
                       <Select
-                        label="Office Workplace"
+                        label="Primary Workplace (Location)"
                         options={workplaces.map((w) => ({ label: w.name, value: w.id }))}
                         value={newWorkplaceId}
                         onValueChange={setNewWorkplaceId}
                       />
                     )}
+
+                    <Select
+                      label="Reporting Manager"
+                      options={managers.map((m) => ({ label: m.profile?.full_name || m.employee_code || 'Unknown', value: m.id }))}
+                      value={newManagerId}
+                      onValueChange={setNewManagerId}
+                    />
+
+                    <Select
+                      label="Default Shift (For Attendance)"
+                      placeholder="Select a shift..."
+                      options={shifts.map((s) => ({ label: `${s.name} (${s.start_time} - ${s.end_time})`, value: s.id }))}
+                      value={newShiftId || ''}
+                      onValueChange={(val) => setNewShiftId(val || null)}
+                    />
 
                     <Input
                       label="Basic Monthly Salary (₹)"
