@@ -785,23 +785,19 @@ export default function UserManagementScreen() {
                       onChangeText={setNewDesignation}
                     />
 
-                    {departments.length > 0 && (
-                      <Select
-                        label="Department"
-                        options={departments.map((d) => ({ label: d.name, value: d.id }))}
-                        value={newDeptId}
-                        onValueChange={setNewDeptId}
-                      />
-                    )}
+                    <Select
+                      label="Department"
+                      options={departments.map((d) => ({ label: d.name, value: d.id }))}
+                      value={newDeptId}
+                      onValueChange={setNewDeptId}
+                    />
 
-                    {workplaces.length > 0 && (
-                      <Select
-                        label="Primary Workplace (Location)"
-                        options={workplaces.map((w) => ({ label: w.name, value: w.id }))}
-                        value={newWorkplaceId}
-                        onValueChange={setNewWorkplaceId}
-                      />
-                    )}
+                    <Select
+                      label="Primary Workplace (Location)"
+                      options={workplaces.map((w) => ({ label: w.name, value: w.id }))}
+                      value={newWorkplaceId}
+                      onValueChange={setNewWorkplaceId}
+                    />
 
                     <Select
                       label="Reporting Manager"
