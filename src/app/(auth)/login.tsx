@@ -8,6 +8,8 @@ import {
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantBranding } from '@/hooks/useTenantBranding';
+import { supabase } from '@/lib/supabase';
+import type { Organization } from '@/types';
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import {
@@ -45,7 +47,49 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const tenantDomain = tenant?.settings?.domain as string | undefined;
+  const [orgCode, setOrgCode] = useState('');
+  const [manualTenant, setManualTenant] = useState<Organization | null>(null);
+  const [orgResolved, setOrgResolved] = useState(false);
+
+  const activeTenant = manualTenant || tenant;
+  const tenantDomain = (activeTenant?.settings as any)?.domain as string | undefined;
+
+  const handleCheckOrg = async () => {
+    if (!orgCode.trim()) {
+      setError('Please enter your organization code');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const { data, error: err } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('slug', orgCode.toLowerCase().trim())
+        .single();
+        
+      if (err || !data) {
+        setError('Organization not found. Please check your workspace URL.');
+        return;
+      }
+      
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const currentHost = window.location.hostname;
+        if (!currentHost.includes(data.slug) && currentHost === 'localhost') {
+          const port = window.location.port ? `:${window.location.port}` : '';
+          window.location.href = `${window.location.protocol}//${data.slug}.localhost${port}/`;
+          return;
+        }
+      }
+      
+      setManualTenant(data);
+      setOrgResolved(true);
+    } catch (e: any) {
+      setError(e.message || 'Error finding organization');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -85,12 +129,12 @@ export default function LoginScreen() {
           >
             {/* Mobile Hero */}
             <View style={styles.mobileHero}>
-              {tenant ? (
+              {activeTenant ? (
                 <View style={{ alignItems: 'center', marginBottom: 16 }}>
-                  {tenant.logo_url ? (
-                    <Image source={{ uri: tenant.logo_url }} style={{ width: 120, height: 120, borderRadius: 12 }} resizeMode="contain" />
+                  {activeTenant.logo_url ? (
+                    <Image source={{ uri: activeTenant.logo_url }} style={{ width: 120, height: 120, borderRadius: 12 }} resizeMode="contain" />
                   ) : null}
-                  <Text style={[styles.mobileHeroTitle, { marginTop: 16, fontSize: 24, textAlign: 'center' }]}>{tenant.name}</Text>
+                  <Text style={[styles.mobileHeroTitle, { marginTop: 16, fontSize: 24, textAlign: 'center' }]}>{activeTenant.name}</Text>
                 </View>
               ) : (
                 <Image
@@ -123,43 +167,64 @@ export default function LoginScreen() {
                 </View>
               ) : null}
 
-              <Input
-                label={tenantDomain ? "Username" : "Work Email"}
-                placeholder={tenantDomain ? "username" : "name@subedge.com"}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                rightElement={tenantDomain ? (
-                  <View style={{ backgroundColor: '#F1F5F9', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', paddingHorizontal: 12, height: '100%', justifyContent: 'center' }}>
-                    <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>@{tenantDomain}</Text>
-                  </View>
-                ) : undefined}
-              />
+              {!activeTenant && !orgResolved ? (
+                <>
+                  <Input
+                    label="Organization Code or Workspace URL"
+                    placeholder="e.g. acme-corp"
+                    value={orgCode}
+                    onChangeText={setOrgCode}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Button
+                    title="Continue"
+                    onPress={handleCheckOrg}
+                    loading={loading}
+                    style={styles.mobileLoginBtn}
+                  />
+                </>
+              ) : (
+                <>
+                  <Input
+                    label={tenantDomain ? "Username" : "Work Email"}
+                    placeholder={tenantDomain ? "username" : "name@subedge.com"}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    rightElement={tenantDomain ? (
+                      <View style={{ backgroundColor: '#F1F5F9', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', paddingHorizontal: 12, height: '100%', justifyContent: 'center' }}>
+                        <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>@{tenantDomain}</Text>
+                      </View>
+                    ) : undefined}
+                  />
 
-              <Input
-                label="Password"
-                placeholder="Enter your password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
+                  <Input
+                    label="Password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                  />
 
-              <Button
-                title="Sign In"
-                onPress={handleLogin}
-                loading={loading}
-                style={styles.mobileLoginBtn}
-              />
+                  <Button
+                    title="Sign In"
+                    onPress={handleLogin}
+                    loading={loading}
+                    style={styles.mobileLoginBtn}
+                  />
 
-              <Button
-                title="Forgot Password?"
-                onPress={() => router.push('/(auth)/forgot-password')}
-                variant="ghost"
-                size="sm"
-                style={{ marginTop: 8 }}
-              />
+                  <Button
+                    title="Forgot Password?"
+                    onPress={() => router.push('/(auth)/forgot-password')}
+                    variant="ghost"
+                    size="sm"
+                    style={{ marginTop: 8 }}
+                  />
+                </>
+              )}
             </View>
 
             <TouchableOpacity
@@ -289,13 +354,13 @@ export default function LoginScreen() {
           <View style={[styles.formSection, isDesktop && styles.formDesktop]}>
             <View style={styles.formWrapper}>
               <View style={styles.formHeader}>
-                {tenant ? (
+                {activeTenant ? (
                   <View style={{ alignItems: 'flex-start', marginBottom: 24 }}>
-                    {tenant.logo_url ? (
-                      <Image source={{ uri: tenant.logo_url }} style={{ width: 140, height: 140, borderRadius: 16 }} resizeMode="contain" />
+                    {activeTenant.logo_url ? (
+                      <Image source={{ uri: activeTenant.logo_url }} style={{ width: 140, height: 140, borderRadius: 16 }} resizeMode="contain" />
                     ) : null}
                     <Text style={{ fontSize: 28, fontWeight: '800', color: '#1E293B', marginTop: 16 }}>
-                      {tenant.name}
+                      {activeTenant.name}
                     </Text>
                     <Text style={{ fontSize: 15, color: '#64748B', marginTop: 8 }}>
                       Sign in to your workplace account
@@ -313,50 +378,78 @@ export default function LoginScreen() {
                   </View>
                 ) : null}
 
-                <Input
-                  label={tenantDomain ? "Username" : "Work Email"}
-                  placeholder={tenantDomain ? "username" : "name@subedge.com"}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  rightElement={tenantDomain ? (
-                    <View style={{ backgroundColor: '#F1F5F9', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', paddingHorizontal: 12, height: '100%', justifyContent: 'center' }}>
-                      <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>@{tenantDomain}</Text>
-                    </View>
-                  ) : undefined}
-                />
+                {!activeTenant && !orgResolved ? (
+                  <>
+                    <Input
+                      label="Organization Code or Workspace URL"
+                      placeholder="e.g. acme-corp"
+                      value={orgCode}
+                      onChangeText={setOrgCode}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <Button
+                      title="Continue"
+                      onPress={handleCheckOrg}
+                      loading={loading}
+                      style={{
+                        marginTop: 8,
+                        backgroundColor: '#0D7377',
+                        shadowColor: '#0D7377',
+                        shadowOpacity: 0.3,
+                        shadowRadius: 5,
+                        elevation: 3,
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      label={tenantDomain ? "Username" : "Work Email"}
+                      placeholder={tenantDomain ? "username" : "name@subedge.com"}
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      rightElement={tenantDomain ? (
+                        <View style={{ backgroundColor: '#F1F5F9', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', paddingHorizontal: 12, height: '100%', justifyContent: 'center' }}>
+                          <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>@{tenantDomain}</Text>
+                        </View>
+                      ) : undefined}
+                    />
 
-                <Input
-                  label="Password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
+                    <Input
+                      label="Password"
+                      placeholder="Enter your password"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                    />
 
-                <Button
-                  title="Sign In with Credentials"
-                  onPress={handleLogin}
-                  loading={loading}
-                  style={{
-                    marginTop: 8,
-                    backgroundColor: '#0D7377',
-                    shadowColor: '#0D7377',
-                    shadowOpacity: 0.3,
-                    shadowRadius: 5,
-                    elevation: 3,
-                  }}
-                />
+                    <Button
+                      title="Sign In with Credentials"
+                      onPress={handleLogin}
+                      loading={loading}
+                      style={{
+                        marginTop: 8,
+                        backgroundColor: '#0D7377',
+                        shadowColor: '#0D7377',
+                        shadowOpacity: 0.3,
+                        shadowRadius: 5,
+                        elevation: 3,
+                      }}
+                    />
 
-                <Button
-                  title="Forgot Password?"
-                  onPress={() => router.push('/(auth)/forgot-password')}
-                  variant="ghost"
-                  size="sm"
-                  style={{ marginTop: 12 }}
-                />
+                    <Button
+                      title="Forgot Password?"
+                      onPress={() => router.push('/(auth)/forgot-password')}
+                      variant="ghost"
+                      size="sm"
+                      style={{ marginTop: 12 }}
+                    />
+                  </>
+                )}
               </View>
 
               <TouchableOpacity

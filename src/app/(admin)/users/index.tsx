@@ -89,7 +89,6 @@ export default function UserManagementScreen() {
   // Add User Form State
   const [newFullName, setNewFullName] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState<'admin' | 'hr' | 'employee'>('employee');
   const [createEmpRecord, setCreateEmpRecord] = useState(true);
@@ -151,7 +150,6 @@ export default function UserManagementScreen() {
   const openAddModal = () => {
     setNewFullName('');
     setNewEmail('');
-    setNewPassword('Pass@123');
     setNewPhone('');
     setNewRole('employee');
     setCreateEmpRecord(true);
@@ -185,8 +183,8 @@ export default function UserManagementScreen() {
       setFormError('Please enter a username');
       return;
     }
-    if (!newPassword || newPassword.length < 6) {
-      setFormError('Password must be at least 6 characters');
+    if (!newPhone || newPhone.length < 6) {
+      setFormError('Phone number is required and must be at least 6 characters (used as default password)');
       return;
     }
 
@@ -198,11 +196,11 @@ export default function UserManagementScreen() {
 
       const uid = await createSystemUser({
         email: fullEmail,
-        password: newPassword,
+        password: newPhone.trim(),
         full_name: newFullName.trim(),
         role: newRole,
         organization_id: orgId,
-        phone: newPhone.trim() || undefined,
+        phone: newPhone.trim(),
         create_employee_record: createEmpRecord,
         employee_code: newEmpCode.trim() || undefined,
         department_id: newDeptId || undefined,
@@ -692,15 +690,7 @@ export default function UserManagementScreen() {
                 />
 
                 <Input
-                  label="Initial Password *"
-                  placeholder="Min. 6 characters"
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  secureTextEntry
-                />
-
-                <Input
-                  label="Phone Number"
+                  label="Phone Number (used as default password) *"
                   placeholder="+91 98765 43210"
                   value={newPhone}
                   onChangeText={setNewPhone}

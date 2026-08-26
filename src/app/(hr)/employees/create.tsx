@@ -26,7 +26,6 @@ export default function CreateEmployeeScreen() {
 
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('Pass@123');
   const [phone, setPhone] = useState('');
   const [empCode, setEmpCode] = useState('');
   const [deptId, setDeptId] = useState<string | null>(null);
@@ -71,8 +70,8 @@ export default function CreateEmployeeScreen() {
   };
 
   const handleCreate = async () => {
-    if (!fullName || !username || !password || !empCode) {
-      setError('Name, username, password, and employee code are required');
+    if (!fullName || !username || !empCode || !phone) {
+      setError('Name, username, phone, and employee code are required');
       return;
     }
     setError('');
@@ -84,8 +83,8 @@ export default function CreateEmployeeScreen() {
       await createEmployee({
         full_name: fullName.trim(),
         email: fullEmail,
-        password,
-        phone: phone || undefined,
+        password: phone.trim(),
+        phone: phone.trim(),
         organization_id: orgId,
         employee_code: empCode.trim(),
         department_id: deptId || undefined,
@@ -154,8 +153,7 @@ export default function CreateEmployeeScreen() {
             }
           />
 
-          <Input label="Temporary Password *" value={password} onChangeText={setPassword} secureTextEntry />
-          <Input label="Phone Number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <Input label="Phone Number (used as default password) *" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
           <Input label="Designation / Position" placeholder="e.g. Chief Medical Officer" value={designation} onChangeText={setDesignation} />
           <Input label="Monthly Base Salary (INR)" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" placeholder="50000" />
 
