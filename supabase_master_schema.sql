@@ -393,6 +393,9 @@ CREATE TABLE IF NOT EXISTS public.shifts (
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
   grace_period_mins INT DEFAULT 15,
+  color TEXT DEFAULT '#0D7377',
+  allowance_per_day NUMERIC(12, 2) DEFAULT 0,
+  is_night_shift BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
