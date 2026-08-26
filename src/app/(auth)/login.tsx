@@ -13,9 +13,9 @@ import type { Organization } from '@/types';
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import {
-  Zap
+  Zap, Building2
 } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -48,48 +48,44 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const [orgCode, setOrgCode] = useState('');
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [fetchingOrgs, setFetchingOrgs] = useState(true);
   const [manualTenant, setManualTenant] = useState<Organization | null>(null);
   const [orgResolved, setOrgResolved] = useState(false);
 
   const activeTenant = manualTenant || tenant;
   const tenantDomain = (activeTenant?.settings as any)?.domain as string | undefined;
 
-  const handleCheckOrg = async () => {
-    if (!orgCode.trim()) {
-      setError('Please enter your organization code');
-      return;
+  useEffect(() => {
+    async function loadOrgs() {
+      try {
+        const { data, error } = await supabase.from('organizations').select('*');
+        if (!error && data) {
+          setOrganizations(data);
+        }
+      } catch (err) {
+        console.error('Failed to load organizations', err);
+      } finally {
+        setFetchingOrgs(false);
+      }
     }
-    setLoading(true);
-    setError('');
-    try {
-      const { data, error: err } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('slug', orgCode.toLowerCase().trim())
-        .single();
-        
-      if (err || !data) {
-        setError('Organization not found. Please check your workspace URL.');
+    loadOrgs();
+  }, []);
+
+  const handleSelectOrg = (org: Organization) => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const currentHost = window.location.hostname;
+      if (!currentHost.includes(org.slug) && currentHost === 'localhost') {
+        const port = window.location.port ? `:${window.location.port}` : '';
+        window.location.href = `${window.location.protocol}//${org.slug}.localhost${port}/`;
         return;
       }
-      
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const currentHost = window.location.hostname;
-        if (!currentHost.includes(data.slug) && currentHost === 'localhost') {
-          const port = window.location.port ? `:${window.location.port}` : '';
-          window.location.href = `${window.location.protocol}//${data.slug}.localhost${port}/`;
-          return;
-        }
-      }
-      
-      setManualTenant(data);
-      setOrgResolved(true);
-    } catch (e: any) {
-      setError(e.message || 'Error finding organization');
-    } finally {
-      setLoading(false);
     }
+    setManualTenant(org);
+    setOrgResolved(true);
   };
+
+  // Legacy manual check function can be removed or kept
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -168,22 +164,35 @@ export default function LoginScreen() {
               ) : null}
 
               {!activeTenant && !orgResolved ? (
-                <>
-                  <Input
-                    label="Organization Code or Workspace URL"
-                    placeholder="e.g. acme-corp"
-                    value={orgCode}
-                    onChangeText={setOrgCode}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  <Button
-                    title="Continue"
-                    onPress={handleCheckOrg}
-                    loading={loading}
-                    style={styles.mobileLoginBtn}
-                  />
-                </>
+                <View style={{ gap: 12 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginBottom: 4 }}>Select Your Organization</Text>
+                  {fetchingOrgs ? (
+                    <Text style={{ color: '#64748B', textAlign: 'center', padding: 20 }}>Loading organizations...</Text>
+                  ) : (
+                    organizations.map(org => (
+                      <TouchableOpacity
+                        key={org.id}
+                        onPress={() => handleSelectOrg(org)}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center', padding: 16,
+                          backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0'
+                        }}
+                      >
+                        {org.logo_url ? (
+                          <Image source={{ uri: org.logo_url }} style={{ width: 40, height: 40, borderRadius: 8, marginRight: 12 }} />
+                        ) : (
+                          <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                            <Building2 size={20} color="#64748B" />
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 15, fontWeight: '600', color: '#0F172A' }}>{org.name}</Text>
+                          <Text style={{ fontSize: 13, color: '#64748B' }}>{org.slug}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
               ) : (
                 <>
                   <Input
@@ -379,29 +388,35 @@ export default function LoginScreen() {
                 ) : null}
 
                 {!activeTenant && !orgResolved ? (
-                  <>
-                    <Input
-                      label="Organization Code or Workspace URL"
-                      placeholder="e.g. acme-corp"
-                      value={orgCode}
-                      onChangeText={setOrgCode}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                    <Button
-                      title="Continue"
-                      onPress={handleCheckOrg}
-                      loading={loading}
-                      style={{
-                        marginTop: 8,
-                        backgroundColor: '#0D7377',
-                        shadowColor: '#0D7377',
-                        shadowOpacity: 0.3,
-                        shadowRadius: 5,
-                        elevation: 3,
-                      }}
-                    />
-                  </>
+                  <View style={{ gap: 12 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginBottom: 8 }}>Select Your Organization</Text>
+                    {fetchingOrgs ? (
+                      <Text style={{ color: '#64748B', textAlign: 'center', padding: 20 }}>Loading organizations...</Text>
+                    ) : (
+                      organizations.map(org => (
+                        <TouchableOpacity
+                          key={org.id}
+                          onPress={() => handleSelectOrg(org)}
+                          style={{
+                            flexDirection: 'row', alignItems: 'center', padding: 16,
+                            backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0'
+                          }}
+                        >
+                          {org.logo_url ? (
+                            <Image source={{ uri: org.logo_url }} style={{ width: 40, height: 40, borderRadius: 8, marginRight: 12 }} />
+                          ) : (
+                            <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                              <Building2 size={20} color="#64748B" />
+                            </View>
+                          )}
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 15, fontWeight: '600', color: '#0F172A' }}>{org.name}</Text>
+                            <Text style={{ fontSize: 13, color: '#64748B' }}>{org.slug}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))
+                    )}
+                  </View>
                 ) : (
                   <>
                     <Input

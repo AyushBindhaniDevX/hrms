@@ -36,7 +36,6 @@ export interface NavItem {
 export const HR_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
   { label: 'Employees', href: '/(hr)/employees', icon: Users },
-  { label: 'Recruitment (ATS)', href: '/(hr)/recruitment', icon: Briefcase },
   { label: 'Departments', href: '/(hr)/departments', icon: Network },
   { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
@@ -44,14 +43,12 @@ export const HR_NAV: NavItem[] = [
   { label: 'Performance', href: '/(hr)/performance', icon: Award },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
   { label: 'IT Assets', href: '/(hr)/assets', icon: Laptop },
-  { label: 'Helpdesk Tickets', href: '/(hr)/helpdesk', icon: LifeBuoy },
   { label: 'Office Locations', href: '/(hr)/locations', icon: MapPin },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
   { label: 'Employees', href: '/(hr)/employees', icon: Users },
-  { label: 'Recruitment (ATS)', href: '/(hr)/recruitment', icon: Briefcase },
   { label: 'Departments', href: '/(hr)/departments', icon: Network },
   { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
@@ -59,7 +56,6 @@ export const ADMIN_NAV: NavItem[] = [
   { label: 'Performance', href: '/(hr)/performance', icon: Award },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
   { label: 'IT Assets', href: '/(hr)/assets', icon: Laptop },
-  { label: 'Helpdesk Tickets', href: '/(hr)/helpdesk', icon: LifeBuoy },
   { label: 'Users & Roles', href: '/(admin)/users', icon: Key },
   { label: 'Locations', href: '/(hr)/locations', icon: MapPin },
   { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield },
@@ -72,7 +68,6 @@ export const EMPLOYEE_NAV: NavItem[] = [
   { label: 'Leave', href: '/(employee)/leave', icon: CalendarDays },
   { label: 'Performance', href: '/(employee)/performance', icon: Award },
   { label: 'Salary & Payslips', href: '/(employee)/payslips', icon: Banknote },
-  { label: 'Helpdesk Tickets', href: '/(employee)/helpdesk', icon: LifeBuoy },
   { label: 'Directory', href: '/(employee)/directory', icon: Users },
 ];
 

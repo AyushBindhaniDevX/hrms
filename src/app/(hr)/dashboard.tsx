@@ -96,7 +96,6 @@ export default function HRDashboard() {
     { label: 'Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
     { label: 'Leave', icon: Umbrella, href: '/(hr)/leave', color: '#7C3AED', bg: '#EDE9FE' },
     { label: 'Payroll', icon: CreditCard, href: '/(hr)/payroll', color: '#0369A1', bg: '#E0F2FE' },
-    { label: 'Recruitment', icon: Briefcase, href: '/(hr)/recruitment', color: '#D97706', bg: '#FEF3C7' },
     { label: 'Performance', icon: Award, href: '/(hr)/performance', color: '#DC2626', bg: '#FEE2E2' },
     { label: 'Expenses', icon: Receipt, href: '/(hr)/expenses', color: '#059669', bg: '#D1FAE5' },
     { label: 'Learning', icon: GraduationCap, href: '/(hr)/learning', color: '#7C3AED', bg: '#EDE9FE' },
