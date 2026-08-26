@@ -30,28 +30,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     try {
       let resolvedOrg: Organization | null = null;
 
-      // 1. Check Subdomain on Web (e.g. shanti-memorial-hospital.localhost)
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const hostname = window.location.hostname;
-        if (hostname !== 'localhost' && hostname !== '127.0.0.1' && !hostname.startsWith('192.')) {
-          const parts = hostname.split('.');
-          if (parts.length >= 2 && parts[0] !== 'www') {
-            const slug = parts[0];
-            const { data: slugOrg } = await supabase
-              .from('organizations')
-              .select('*')
-              .eq('slug', slug)
-              .maybeSingle();
-
-            if (slugOrg) {
-              resolvedOrg = slugOrg as Organization;
-            }
-          }
-        }
-      }
-
-      // 2. If no subdomain tenant, fallback to user's profile.organization_id
-      if (!resolvedOrg && profile?.organization_id) {
+      // 1. Always use user's profile.organization_id for authenticated sessions
+      if (profile?.organization_id) {
         const { data: orgData } = await supabase
           .from('organizations')
           .select('*')
