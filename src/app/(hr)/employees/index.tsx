@@ -21,6 +21,7 @@ export default function EmployeesScreen() {
   const { profile } = useAuth();
   const { organization: tenantOrg } = useTenant();
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [activeCount, setActiveCount] = useState(0);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -29,9 +30,14 @@ export default function EmployeesScreen() {
       const orgId = tenantOrg?.id || profile?.organization_id;
       const data = await getEmployees({ organization_id: orgId });
       setEmployees(data);
+      setActiveCount(data.filter(e => e.employment_status === 'active').length);
       setLoading(false);
     })();
   }, [profile, tenantOrg]);
+
+  const pkg = tenantOrg?.package_type?.toLowerCase() || 'basic';
+  const limit = pkg === 'gold' ? 250 : pkg === 'silver' ? 100 : 50;
+  const isLimitReached = activeCount >= limit;
 
   const filtered = employees.filter(e => {
     if (!search) return true;
@@ -47,8 +53,21 @@ export default function EmployeesScreen() {
     <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.topBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
-          <Text style={[styles.title, { color: colors.text }]}>Employees</Text>
-          <Button title="+ Add Employee" onPress={() => router.push('/(hr)/employees/create' as never)} size="sm" />
+          <View>
+            <Text style={[styles.title, { color: colors.text }]}>Users & Employees</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
+              <Badge label={`${pkg.toUpperCase()} PACKAGE`} variant={pkg === 'gold' ? 'warning' : 'neutral'} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: isLimitReached ? colors.danger : colors.textSecondary }}>
+                {activeCount} / {limit} Users active ({Math.max(0, limit - activeCount)} left)
+              </Text>
+            </View>
+          </View>
+          <Button 
+            title={isLimitReached ? "Limit Reached" : "+ Add Employee"} 
+            onPress={() => router.push('/(hr)/employees/create' as never)} 
+            size="sm" 
+            disabled={isLimitReached}
+          />
         </View>
 
         <View style={{ padding: 16 }}>

@@ -12,6 +12,7 @@ export interface Organization {
   name: string;
   slug?: string | null;
   logo_url?: string | null;
+  package_type?: 'basic' | 'silver' | 'gold';
   settings: Record<string, unknown>;
   created_at: string;
 }

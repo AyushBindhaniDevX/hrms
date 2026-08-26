@@ -116,6 +116,19 @@ export async function createSystemUser(params: {
   workplace_id?: string;
   basic_salary?: number;
 }): Promise<string> {
+  // 0. Check Organization User Limit
+  const orgId = params.organization_id || '00000000-0000-0000-0000-000000000001';
+  const org = await getOrganization(orgId);
+  const currentUsers = await getOrgUsers(orgId);
+  const currentCount = currentUsers.filter(u => u.is_active).length; // Count active users
+
+  const pkg = org?.package_type?.toLowerCase() || 'basic';
+  const limit = pkg === 'gold' ? 250 : pkg === 'silver' ? 100 : 50;
+
+  if (currentCount >= limit) {
+    throw new Error(`User limit reached for ${pkg.toUpperCase()} package (${currentCount}/${limit} users). Please upgrade to add more.`);
+  }
+
   // 1. Sign up user via Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: params.email,

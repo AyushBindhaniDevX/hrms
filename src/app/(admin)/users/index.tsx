@@ -371,6 +371,10 @@ export default function UserManagementScreen() {
     return 'neutral';
   };
 
+  const pkg = tenantOrg?.package_type?.toLowerCase() || 'basic';
+  const limit = pkg === 'gold' ? 250 : pkg === 'silver' ? 100 : 50;
+  const isLimitReached = activeCount >= limit;
+
   if (loading) return <LoadingState />;
 
   return (
@@ -383,18 +387,25 @@ export default function UserManagementScreen() {
         {/* Top Header */}
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: colors.text }]}>User & Access Control</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Users & Employees</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Manage organization accounts, assign roles (Admin, HR, Employee), reset passwords, and manage active status.
+              Manage organization accounts, roles, and employee records.
             </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 }}>
+              <Badge label={`${pkg.toUpperCase()} PACKAGE`} variant={pkg === 'gold' ? 'warning' : 'neutral'} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: isLimitReached ? colors.danger : colors.textSecondary }}>
+                {activeCount} / {limit} Users active ({Math.max(0, limit - activeCount)} left)
+              </Text>
+            </View>
           </View>
           <TouchableOpacity
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}
+            style={[styles.addBtn, { backgroundColor: isLimitReached ? colors.border : colors.primary }]}
             onPress={openAddModal}
             activeOpacity={0.85}
+            disabled={isLimitReached}
           >
             <UserPlus size={16} color="#FFF" />
-            <Text style={styles.addBtnText}>Add New User</Text>
+            <Text style={styles.addBtnText}>{isLimitReached ? 'Limit Reached' : 'Add New User'}</Text>
           </TouchableOpacity>
         </View>
 

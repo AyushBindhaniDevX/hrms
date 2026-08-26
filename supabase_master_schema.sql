@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
   name TEXT NOT NULL,
   slug TEXT UNIQUE,
   logo_url TEXT,
+  package_type TEXT DEFAULT 'basic',
   settings JSONB DEFAULT '{"currency": "INR", "timezone": "Asia/Kolkata", "geofence_radius_default": 150}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -586,6 +587,10 @@ ALTER TABLE public.shifts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
+-- Allow anonymous users to read organizations (e.g. for login page org selection)
+DROP POLICY IF EXISTS "Allow anon select on organizations" ON public.organizations;
+CREATE POLICY "Allow anon select on organizations" ON public.organizations FOR SELECT TO anon USING (true);
+
 -- Standard Public/Authenticated Access Policies for seamless operations
 DO $$
 DECLARE
@@ -629,12 +634,14 @@ EXCEPTION WHEN OTHERS THEN NULL; END $$;
 -- ==============================================================================
 -- 15. SEED DATA (DEFAULT TENANT, OFFICES, DEPARTMENTS, LEAVE TYPES)
 -- ==============================================================================
-INSERT INTO public.organizations (id, name, slug, logo_url, settings)
+-- ==============================================================================
+INSERT INTO public.organizations (id, name, slug, logo_url, package_type, settings)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
   'Acme Corporation',
   'acme',
   'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=300&auto=format&fit=crop&q=80',
+  'gold',
   '{"currency": "INR", "timezone": "Asia/Kolkata", "geofence_radius_default": 150}'::jsonb
 ),
 (
@@ -642,12 +649,14 @@ VALUES (
   'Shanti Memorial Hospital',
   'shanti-memorial-hospital',
   'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Hospital_sign.svg/1024px-Hospital_sign.svg.png',
+  'silver',
   '{"currency": "INR", "timezone": "Asia/Kolkata", "geofence_radius_default": 150, "domain": "shantimemorialhospital.com"}'::jsonb
 )
 ON CONFLICT (id) DO UPDATE SET 
   name = EXCLUDED.name,
   slug = EXCLUDED.slug,
   logo_url = EXCLUDED.logo_url,
+  package_type = EXCLUDED.package_type,
   settings = EXCLUDED.settings;
 
 INSERT INTO public.workplaces (id, organization_id, name, address, latitude, longitude, radius_meters)
