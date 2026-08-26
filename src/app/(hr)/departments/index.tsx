@@ -90,11 +90,7 @@ export default function DepartmentsAndHierarchyScreen() {
 
   // Modals state
   const [createDeptModalOpen, setCreateDeptModalOpen] = useState(false);
-  const [newDeptName, setNewDeptName] = useState('');
-  const [newDeptDesc, setNewDeptDesc] = useState('');
-  const [newDeptManagerId, setNewDeptManagerId] = useState<string | null>(null);
   const [savingDept, setSavingDept] = useState(false);
-  const [deptFormError, setDeptFormError] = useState('');
 
   const [createWpModalOpen, setCreateWpModalOpen] = useState(false);
   const [newWpName, setNewWpName] = useState('');
@@ -122,6 +118,7 @@ export default function DepartmentsAndHierarchyScreen() {
   const [deptDesc, setDeptDesc] = useState('');
   const [deptManagerId, setDeptManagerId] = useState<string | null>(null);
   const [editDept, setEditDept] = useState<Department | null>(null);
+  const [deleteDept, setDeleteDept] = useState<Department | null>(null);
 
   // Collapsed branches in Org Chart
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
