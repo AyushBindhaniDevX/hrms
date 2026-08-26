@@ -48,7 +48,7 @@ export const HR_NAV: NavItem[] = [
 
 export const ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
-  { label: 'Employees', href: '/(hr)/employees', icon: Users },
+  { label: 'Users & Employees', href: '/(admin)/users', icon: Users },
   { label: 'Departments', href: '/(hr)/departments', icon: Network },
   { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
@@ -56,7 +56,6 @@ export const ADMIN_NAV: NavItem[] = [
   { label: 'Performance', href: '/(hr)/performance', icon: Award },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
   { label: 'IT Assets', href: '/(hr)/assets', icon: Laptop },
-  { label: 'Users & Roles', href: '/(admin)/users', icon: Key },
   { label: 'Locations', href: '/(hr)/locations', icon: MapPin },
   { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield },
   { label: 'Settings', href: '/(admin)/settings', icon: Settings },
