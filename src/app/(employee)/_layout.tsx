@@ -74,7 +74,6 @@ export default function EmployeeLayout() {
         <Stack.Screen name="payslips/[id]" />
         <Stack.Screen name="expenses/index" />
         <Stack.Screen name="helpdesk/index" />
-        <Stack.Screen name="learning/index" />
         <Stack.Screen name="directory/index" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="settings" />

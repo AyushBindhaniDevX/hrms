@@ -296,7 +296,6 @@ export default function EmployeeDashboard() {
     { label: 'Directory', icon: Users, href: '/(employee)/directory', color: '#B45309', bg: '#FEF3C7' },
     { label: 'Performance', icon: Award, href: '/(employee)/performance', color: '#059669', bg: '#D1FAE5' },
     { label: 'Expenses', icon: Receipt, href: '/(employee)/expenses', color: '#DC2626', bg: '#FEE2E2' },
-    { label: 'Learning', icon: GraduationCap, href: '/(employee)/learning', color: '#7C3AED', bg: '#EDE9FE' },
   ];
 
   // ─────────────────────────────────────────────────────────────────────────────
