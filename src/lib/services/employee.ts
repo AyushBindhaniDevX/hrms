@@ -126,6 +126,7 @@ export async function createEmployee(params: {
   const orgId = params.organization_id || '00000000-0000-0000-0000-000000000001';
 
   // 1. Sign up user via isolated client so current admin session is NOT overwritten
+  let uid: string | null = null;
   const { data: authData, error: authError } = await isolatedAuthClient.auth.signUp({
     email: params.email,
     password: params.password,
@@ -139,14 +140,32 @@ export async function createEmployee(params: {
   });
 
   if (authError) {
-    throw new Error(`Authentication Error: ${authError.message}`);
+    if (
+      authError.message?.toLowerCase().includes('already registered') ||
+      authError.message?.toLowerCase().includes('already exists') ||
+      authError.status === 422
+    ) {
+      const { data: existingProf } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', params.email)
+        .maybeSingle();
+
+      if (existingProf?.id) {
+        uid = existingProf.id;
+      } else {
+        throw new Error(`Authentication Error: ${authError.message}`);
+      }
+    } else {
+      throw new Error(`Authentication Error: ${authError.message}`);
+    }
+  } else {
+    uid = authData.user?.id || null;
   }
 
-  if (!authData.user?.id) {
-    throw new Error('Failed to create user account. No ID returned from Auth.');
+  if (!uid) {
+    throw new Error('Failed to create or obtain user account ID.');
   }
-
-  const uid = authData.user.id;
   const now = new Date().toISOString();
 
   // 2. Create/update profile
