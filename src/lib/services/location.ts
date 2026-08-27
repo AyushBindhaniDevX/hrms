@@ -8,7 +8,6 @@ export interface LocationCoords {
 
 export async function getCurrentLocation(): Promise<LocationCoords> {
   if (Platform.OS === 'web') {
-    // Use browser geolocation API
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error('Geolocation is not supported by this browser'));
@@ -16,25 +15,64 @@ export async function getCurrentLocation(): Promise<LocationCoords> {
       }
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-        (err) => reject(new Error(err.message)),
-        { enableHighAccuracy: true, timeout: 10000 }
+        (err) => reject(new Error(err.message || 'Unable to retrieve location')),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
       );
     });
   }
 
+  // Mobile (Android / iOS)
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== 'granted') {
-    throw new Error('Location permission denied. Please enable location access in settings.');
+    throw new Error('Location permission denied. Please enable location access in your device settings.');
   }
 
-  const location = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
+  try {
+    // 1. Try to get last known position first for instant response
+    const lastKnown = await Location.getLastKnownPositionAsync({});
+    if (lastKnown && lastKnown.coords) {
+      // If position was recorded in the last 2 minutes, use it
+      const ageMs = Date.now() - lastKnown.timestamp;
+      if (ageMs < 120000) {
+        return {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+        };
+      }
+    }
+  } catch (e) {
+    // Ignore and proceed to live fetch
+  }
 
-  return {
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
-  };
+  try {
+    // 2. Fetch live position with 6-second timeout promise race
+    const livePromise = Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('GPS location request timed out')), 7000)
+    );
+
+    const location = await Promise.race([livePromise, timeoutPromise]);
+    return {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    };
+  } catch (err) {
+    // 3. Fallback to any last known location if live GPS timeout
+    try {
+      const fallback = await Location.getLastKnownPositionAsync({});
+      if (fallback && fallback.coords) {
+        return {
+          latitude: fallback.coords.latitude,
+          longitude: fallback.coords.longitude,
+        };
+      }
+    } catch (e) {}
+
+    throw new Error('Unable to obtain GPS fix. Please ensure location/GPS is toggled on.');
+  }
 }
 
 export function calculateDistance(

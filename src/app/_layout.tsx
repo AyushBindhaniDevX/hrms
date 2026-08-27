@@ -17,6 +17,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
 
+import { ForcePasswordChangeModal } from '@/components/auth/ForcePasswordChangeModal';
+
 function AuthLayoutWrapper({ children }: { children: React.ReactNode }) {
   const { isLoading } = useAuth();
 
@@ -36,7 +38,12 @@ function AuthLayoutWrapper({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(safetyTimer);
   }, []);
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <ForcePasswordChangeModal />
+    </>
+  );
 }
 
 export default function RootLayout() {

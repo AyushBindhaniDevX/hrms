@@ -135,6 +135,7 @@ export async function createEmployee(params: {
         full_name: params.full_name,
         role: params.role || 'employee',
         organization_id: orgId,
+        needs_password_change: true,
       },
     },
   });
@@ -169,7 +170,7 @@ export async function createEmployee(params: {
   const now = new Date().toISOString();
 
   // 2. Create/update profile
-  const { error: profError } = await supabase.from('profiles').upsert({
+  const profPayload: Record<string, any> = {
     id: uid,
     full_name: params.full_name,
     email: params.email,
@@ -177,9 +178,17 @@ export async function createEmployee(params: {
     organization_id: orgId,
     phone: params.phone || null,
     is_active: true,
+    needs_password_change: true,
     created_at: now,
     updated_at: now,
-  });
+  };
+
+  let { error: profError } = await supabase.from('profiles').upsert(profPayload);
+  if (profError && profError.code === 'PGRST204') {
+    delete profPayload.needs_password_change;
+    const retry = await supabase.from('profiles').upsert(profPayload);
+    profError = retry.error;
+  }
 
   if (profError) {
     console.error('Failed to create profile row:', profError);
