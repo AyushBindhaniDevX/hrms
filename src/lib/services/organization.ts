@@ -182,7 +182,7 @@ export async function createSystemUser(params: {
 
   // 3. Create employee record if requested
   if (params.create_employee_record) {
-    const { error: empError } = await supabase.from('employees').insert({
+    const empPayload: Record<string, any> = {
       profile_id: uid,
       employee_code: params.employee_code || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
       department_id: cleanUuid(params.department_id),
@@ -196,11 +196,59 @@ export async function createSystemUser(params: {
       onboarding_completed: true,
       created_at: now,
       updated_at: now,
-    });
+    };
+
+    let empRecord: any = null;
+    let { data: insData, error: empError } = await supabase
+      .from('employees')
+      .insert(empPayload)
+      .select()
+      .maybeSingle();
+
+    // If column doesn't exist in remote schema cache (PGRST204), omit it and retry
+    if (empError && empError.code === 'PGRST204') {
+      const missingColMatch = empError.message?.match(/Could not find the '([^']+)' column/);
+      if (missingColMatch && missingColMatch[1]) {
+        delete empPayload[missingColMatch[1]];
+        const retry = await supabase.from('employees').insert(empPayload).select().maybeSingle();
+        insData = retry.data;
+        empError = retry.error;
+
+        // Second retry if another column is also missing
+        if (empError && empError.code === 'PGRST204') {
+          const match2 = empError.message?.match(/Could not find the '([^']+)' column/);
+          if (match2 && match2[1]) {
+            delete empPayload[match2[1]];
+            const retry2 = await supabase.from('employees').insert(empPayload).select().maybeSingle();
+            insData = retry2.data;
+            empError = retry2.error;
+          }
+        }
+      }
+    }
 
     if (empError) {
       console.error('Failed to create employee row:', empError);
       throw new Error(`Failed to create employee record: ${empError.message}`);
+    }
+
+    empRecord = insData;
+
+    // If shift was selected, also link in employee_shifts for roster
+    if (params.default_shift_id && empRecord?.id) {
+      try {
+        const today = now.split('T')[0];
+        await supabase.from('employee_shifts').upsert({
+          id: `${empRecord.id}_${today}`,
+          employee_id: empRecord.id,
+          date: today,
+          shift_id: cleanUuid(params.default_shift_id),
+          organization_id: orgId,
+          created_at: now,
+        });
+      } catch (e) {
+        console.warn('Could not assign initial employee shift:', e);
+      }
     }
   }
 

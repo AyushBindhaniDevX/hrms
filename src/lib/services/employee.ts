@@ -168,7 +168,7 @@ export async function createEmployee(params: {
   }
 
   // 3. Create employee
-  const { error: empError } = await supabase.from('employees').insert({
+  const empPayload: Record<string, any> = {
     profile_id: uid,
     employee_code: params.employee_code,
     department_id: cleanUuid(params.department_id),
@@ -181,12 +181,60 @@ export async function createEmployee(params: {
     onboarding_completed: false,
     created_at: now,
     updated_at: now,
-  });
+  };
+
+  let empRecord: any = null;
+  let { data: insData, error: empError } = await supabase
+    .from('employees')
+    .insert(empPayload)
+    .select()
+    .maybeSingle();
+
+  if (empError && empError.code === 'PGRST204') {
+    const missingColMatch = empError.message?.match(/Could not find the '([^']+)' column/);
+    if (missingColMatch && missingColMatch[1]) {
+      delete empPayload[missingColMatch[1]];
+      const retry = await supabase.from('employees').insert(empPayload).select().maybeSingle();
+      insData = retry.data;
+      empError = retry.error;
+
+      if (empError && empError.code === 'PGRST204') {
+        const match2 = empError.message?.match(/Could not find the '([^']+)' column/);
+        if (match2 && match2[1]) {
+          delete empPayload[match2[1]];
+          const retry2 = await supabase.from('employees').insert(empPayload).select().maybeSingle();
+          insData = retry2.data;
+          empError = retry2.error;
+        }
+      }
+    }
+  }
 
   if (empError) {
     console.error('Failed to create employee row:', empError);
     throw new Error(`Failed to create employee record: ${empError.message}`);
   }
+
+  empRecord = insData;
+
+  // Link initial shift to employee_shifts roster
+  if (params.default_shift_id && empRecord?.id) {
+    try {
+      const today = now.split('T')[0];
+      await supabase.from('employee_shifts').upsert({
+        id: `${empRecord.id}_${today}`,
+        employee_id: empRecord.id,
+        date: today,
+        shift_id: cleanUuid(params.default_shift_id),
+        organization_id: orgId,
+        created_at: now,
+      });
+    } catch (e) {
+      console.warn('Could not assign initial employee shift:', e);
+    }
+  }
+
+
 
   // Send Resend Welcome Notification
   try {
