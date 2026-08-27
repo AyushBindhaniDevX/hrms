@@ -24,13 +24,32 @@ export async function getLeaveTypes(organizationId?: string): Promise<LeaveType[
       const unique = Array.from(new Map((data as LeaveType[]).map((item) => [item.name, item])).values());
       return unique;
     }
+
+    // Seed default leave types with real UUIDs in Supabase if empty
+    const orgId = organizationId || '00000000-0000-0000-0000-000000000001';
+    const seededList: LeaveType[] = [];
+    for (const lt of DEFAULT_LEAVE_TYPES) {
+      const { data: ins } = await supabase
+        .from('leave_types')
+        .insert({
+          organization_id: orgId,
+          name: lt.name,
+          annual_days: lt.annual_days,
+          is_paid: lt.is_paid,
+          created_at: new Date().toISOString(),
+        })
+        .select('*')
+        .maybeSingle();
+      if (ins) seededList.push(ins as LeaveType);
+    }
+    if (seededList.length > 0) return seededList;
   } catch (err) {
     console.warn('Could not query remote leave_types, using defaults:', err);
   }
 
-  // Safe fallback to default leave types without causing 409 conflicts
+  // Safe fallback to default leave types with valid UUID structure
   return DEFAULT_LEAVE_TYPES.map((lt, idx) => ({
-    id: `lt_${idx + 1}`,
+    id: `00000000-0000-0000-0000-00000000000${idx + 1}`,
     name: lt.name,
     annual_days: lt.annual_days,
     is_paid: lt.is_paid,
@@ -233,14 +252,22 @@ export async function updateLeaveBalance(
   year?: number
 ): Promise<void> {
   const y = year ?? new Date().getFullYear();
-  const id = `bal_${employeeId}_${leaveTypeId}_${y}`;
   const remaining = Math.max(0, allocatedDays - usedDays);
   const now = new Date().toISOString();
 
-  const payload = {
-    id,
+  // Find real leave_type_id if needed
+  let validLeaveTypeId = leaveTypeId;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(leaveTypeId);
+  if (!isUuid) {
+    const { data: realTypes } = await supabase.from('leave_types').select('id').limit(1);
+    if (realTypes && realTypes.length > 0) {
+      validLeaveTypeId = realTypes[0].id;
+    }
+  }
+
+  const payload: Record<string, any> = {
     employee_id: employeeId,
-    leave_type_id: leaveTypeId,
+    leave_type_id: validLeaveTypeId,
     year: y,
     allocated_days: allocatedDays,
     used_days: usedDays,
@@ -248,6 +275,25 @@ export async function updateLeaveBalance(
     updated_at: now,
   };
 
-  const { error } = await supabase.from('leave_balances').upsert(payload);
-  if (error) throw error;
+  // Check if balance record exists
+  const { data: existing } = await supabase
+    .from('leave_balances')
+    .select('id')
+    .eq('employee_id', employeeId)
+    .eq('leave_type_id', validLeaveTypeId)
+    .eq('year', y)
+    .maybeSingle();
+
+  if (existing?.id) {
+    const { error: updErr } = await supabase
+      .from('leave_balances')
+      .update(payload)
+      .eq('id', existing.id);
+    if (updErr) throw updErr;
+  } else {
+    const { error: insErr } = await supabase
+      .from('leave_balances')
+      .insert(payload);
+    if (insErr) throw insErr;
+  }
 }

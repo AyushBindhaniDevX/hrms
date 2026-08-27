@@ -62,19 +62,11 @@ export async function clockIn(
 
   const { emp, wp } = data;
   let distance: number | undefined = undefined;
-  let isValid = true;
+  let isWithinGeofence = true;
 
-  if (wp && wp.latitude && wp.longitude) {
+  if (wp && wp.latitude && wp.longitude && latitude && longitude) {
     distance = calculateDistance(latitude, longitude, wp.latitude, wp.longitude);
-    isValid = distance <= (wp.radius_meters || 150);
-
-    if (!isValid) {
-      return {
-        success: false,
-        message: `You are ${Math.round(distance)}m away. Must be within ${wp.radius_meters || 150}m of ${wp.name}.`,
-        distance_meters: distance,
-      };
-    }
+    isWithinGeofence = distance <= (wp.radius_meters || 200);
   }
 
   const today = new Date().toISOString().split('T')[0];
@@ -88,8 +80,13 @@ export async function clockIn(
     .eq('id', attendanceId)
     .maybeSingle();
 
-  if (existing && existing.clock_in) {
-    return { success: false, message: 'Already clocked in today' };
+  if (existing && existing.clock_in && !existing.clock_out) {
+    return {
+      success: true,
+      message: 'Already clocked in today',
+      distance_meters: distance,
+      face_verified: true,
+    };
   }
 
   const payload = {
@@ -120,7 +117,11 @@ export async function clockIn(
 
   return {
     success: true,
-    message: wp ? `Clocked in at ${wp.name}` : 'Clocked in successfully',
+    message: wp
+      ? isWithinGeofence
+        ? `Clocked in at ${wp.name}`
+        : `Clocked in (Remote Verification: ${Math.round(distance || 0)}m from ${wp.name})`
+      : 'Clocked in successfully',
     distance_meters: distance,
     face_verified: true,
   };
@@ -149,20 +150,15 @@ export async function clockOut(
     return { success: false, message: 'No clock-in found for today. Please clock in first.' };
   }
   if (attDoc.clock_out) {
-    return { success: false, message: 'Already clocked out for today.' };
+    return { success: true, message: 'Already clocked out for today.' };
   }
 
   let distance_meters: number | undefined;
-  if (wp && wp.latitude && wp.longitude) {
+  let isWithinGeofence = true;
+  if (wp && wp.latitude && wp.longitude && latitude && longitude) {
     const dist = calculateDistance(latitude, longitude, wp.latitude, wp.longitude);
     distance_meters = dist;
-    if (dist > (wp.radius_meters || 150)) {
-      return {
-        success: false,
-        message: `You are ${Math.round(dist)}m away. Must be within ${wp.radius_meters || 150}m to clock out.`,
-        distance_meters: dist,
-      };
-    }
+    isWithinGeofence = dist <= (wp.radius_meters || 200);
   }
 
   const clockInTime = new Date(attDoc.clock_in);

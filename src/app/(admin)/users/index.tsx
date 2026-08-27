@@ -37,8 +37,9 @@ import { resetPassword } from '@/lib/auth';
 import { getDepartments, getWorkplaces, getEmployees, updateEmployee } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import { createAuditLog } from '@/lib/services/audit';
+import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
-import type { Profile, Department, Workplace, WorkShift, Employee } from '@/types';
+import type { Profile, Department, Workplace, WorkShift, Employee, LeaveBalance, LeaveType } from '@/types';
 import {
   Search,
   UserPlus,
@@ -60,6 +61,7 @@ import {
   KeyRound,
   RotateCcw,
   RefreshCw,
+  Umbrella,
 } from 'lucide-react-native';
 
 export default function UserManagementScreen() {
@@ -122,6 +124,15 @@ export default function UserManagementScreen() {
   const [editStatus, setEditStatus] = useState('active');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
+
+  // Leave Quotas Modal State
+  const [leaveUser, setLeaveUser] = useState<Profile | null>(null);
+  const [leaveEmployeeId, setLeaveEmployeeId] = useState<string | null>(null);
+  const [userLeaveBalances, setUserLeaveBalances] = useState<LeaveBalance[]>([]);
+  const [userLeaveTypes, setUserLeaveTypes] = useState<LeaveType[]>([]);
+  const [customLeaveQuotas, setCustomLeaveQuotas] = useState<Record<string, string>>({});
+  const [savingLeaveQuotas, setSavingLeaveQuotas] = useState(false);
+  const [leaveSuccessBanner, setLeaveSuccessBanner] = useState('');
 
   // Processing state for quick actions
   const [processing, setProcessing] = useState(false);
@@ -258,6 +269,82 @@ export default function UserManagementScreen() {
       setFormError(err.message || 'Failed to create user. Please try again.');
     } finally {
       setSavingUser(false);
+    }
+  };
+
+  const openLeaveModalForUser = async (u: Profile) => {
+    setLeaveUser(u);
+    setLeaveSuccessBanner('');
+    try {
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
+      
+      // Auto-resolve employee ID for profile
+      let empId: string | null = null;
+      const { data: empData } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('profile_id', u.id)
+        .maybeSingle();
+
+      if (empData?.id) {
+        empId = empData.id;
+      } else {
+        // Auto-create minimal employee record so quotas can be assigned
+        const { data: newEmp } = await supabase
+          .from('employees')
+          .insert({
+            profile_id: u.id,
+            employee_code: `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
+            designation: u.role === 'admin' ? 'Administrator' : u.role === 'hr' ? 'HR Manager' : 'Staff',
+            employment_status: 'active',
+            onboarding_completed: true,
+          })
+          .select('id')
+          .maybeSingle();
+        if (newEmp?.id) empId = newEmp.id;
+      }
+
+      setLeaveEmployeeId(empId);
+
+      const [types, balances] = await Promise.all([
+        getLeaveTypes(orgId),
+        empId ? getLeaveBalances(empId) : [],
+      ]);
+
+      setUserLeaveTypes(types || []);
+      setUserLeaveBalances(balances || []);
+
+      const qMap: Record<string, string> = {};
+      types.forEach((lt) => {
+        const found = balances.find((b) => b.leave_type_id === lt.id || b.leave_type?.name === lt.name);
+        qMap[lt.id] = String(found ? found.allocated_days : lt.annual_days || 12);
+      });
+      setCustomLeaveQuotas(qMap);
+    } catch (err) {
+      console.error('Error opening leave modal:', err);
+    }
+  };
+
+  const handleSaveAdminLeaveQuotas = async () => {
+    if (!leaveEmployeeId) return;
+    setSavingLeaveQuotas(true);
+    setLeaveSuccessBanner('');
+    try {
+      for (const lt of userLeaveTypes) {
+        const days = parseFloat(customLeaveQuotas[lt.id] || '0') || 0;
+        const existing = userLeaveBalances.find((b) => b.leave_type_id === lt.id || b.leave_type?.name === lt.name);
+        await updateLeaveBalance(leaveEmployeeId, lt.id, days, existing?.used_days || 0);
+      }
+      setLeaveSuccessBanner('Leave quotas saved successfully!');
+      setTimeout(() => {
+        setLeaveUser(null);
+        setLeaveEmployeeId(null);
+        setLeaveSuccessBanner('');
+      }, 1000);
+    } catch (err: any) {
+      console.error('Failed to save leave quotas:', err);
+    } finally {
+      setSavingLeaveQuotas(false);
     }
   };
 
@@ -766,6 +853,14 @@ export default function UserManagementScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                      onPress={() => openLeaveModalForUser(u)}
+                      style={[styles.actionBtn, { borderColor: '#0D737740', borderWidth: 1, backgroundColor: '#F0F9F8' }]}
+                    >
+                      <Umbrella size={14} color="#0D7377" />
+                      <Text style={[styles.actionBtnText, { color: '#0D7377' }]}>Leave</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                       onPress={() => handleResetPassword(u.email)}
                       style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
                     >
@@ -1123,6 +1218,54 @@ export default function UserManagementScreen() {
                   title={savingEdit ? 'Saving...' : 'Save Changes'}
                   onPress={handleSaveEdit}
                   loading={savingEdit}
+                  style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8 }}
+                />
+              </View>
+            </View>
+          </ScrollView>
+        </Modal>
+
+        {/* ── Modal: Set Leave Quotas ────────────────────────────────────────── */}
+        <Modal
+          visible={!!leaveUser}
+          onClose={() => setLeaveUser(null)}
+          title={`Set Leave Quotas for ${leaveUser?.full_name || 'Staff'}`}
+        >
+          <ScrollView style={{ maxHeight: 480 }}>
+            <View style={{ gap: 14 }}>
+              {leaveSuccessBanner ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', padding: 10, borderRadius: 8, gap: 6 }}>
+                  <CheckCircle2 size={16} color="#059669" />
+                  <Text style={{ color: '#065F46', fontSize: 13, fontWeight: '600' }}>{leaveSuccessBanner}</Text>
+                </View>
+              ) : null}
+
+              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                Configure the annual allocated days for each leave category for {leaveUser?.full_name}.
+              </Text>
+
+              {userLeaveTypes.map((lt) => (
+                <Input
+                  key={lt.id}
+                  label={`${lt.name} (Days per Year)`}
+                  value={customLeaveQuotas[lt.id] || ''}
+                  onChangeText={(val) => setCustomLeaveQuotas((prev) => ({ ...prev, [lt.id]: val }))}
+                  placeholder={String(lt.annual_days || 12)}
+                  keyboardType="numeric"
+                />
+              ))}
+
+              <View style={styles.modalActions}>
+                <Button
+                  title="Cancel"
+                  onPress={() => setLeaveUser(null)}
+                  variant="outline"
+                  style={{ flex: 1, borderRadius: 8 }}
+                />
+                <Button
+                  title={savingLeaveQuotas ? 'Saving...' : 'Save Leave Quotas'}
+                  onPress={handleSaveAdminLeaveQuotas}
+                  loading={savingLeaveQuotas}
                   style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8 }}
                 />
               </View>

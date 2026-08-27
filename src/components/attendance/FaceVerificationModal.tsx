@@ -81,10 +81,12 @@ export function FaceVerificationModal({
 
       if (cameraRef.current) {
         try {
-          const photo = await cameraRef.current.takePictureAsync({
+          const capturePromise = cameraRef.current.takePictureAsync({
             quality: 0.7,
             base64: true,
           });
+          const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 3500));
+          const photo: any = await Promise.race([capturePromise, timeoutPromise]);
 
           if (photo) {
             snapshotBase64 = photo.base64 ? `data:image/jpeg;base64,${photo.base64}` : photo.uri;
