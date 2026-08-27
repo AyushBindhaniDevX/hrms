@@ -9,21 +9,8 @@ function cleanUuid(val?: string | null): string | null {
 }
 
 export async function getEmployeeByProfileId(profileId: string): Promise<Employee | null> {
-  const { data, error } = await supabase
-    .from('employees')
-    .select(`
-      *,
-      profile:profiles(*),
-      department:departments(*),
-      workplace:workplaces(*),
-      manager:employees!employees_manager_id_fkey(*, profile:profiles(*))
-    `)
-    .eq('profile_id', profileId)
-    .maybeSingle();
-
-  if (error || !data) {
-    // Fallback if join syntax differs
-    const { data: simpleEmp } = await supabase
+  try {
+    const { data: simpleEmp, error } = await supabase
       .from('employees')
       .select('*')
       .eq('profile_id', profileId)
@@ -33,8 +20,12 @@ export async function getEmployeeByProfileId(profileId: string): Promise<Employe
 
     const [profRes, deptRes, wpRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', profileId).maybeSingle(),
-      simpleEmp.department_id ? supabase.from('departments').select('*').eq('id', simpleEmp.department_id).maybeSingle() : Promise.resolve({ data: null }),
-      simpleEmp.workplace_id ? supabase.from('workplaces').select('*').eq('id', simpleEmp.workplace_id).maybeSingle() : Promise.resolve({ data: null }),
+      simpleEmp.department_id
+        ? supabase.from('departments').select('*').eq('id', simpleEmp.department_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      simpleEmp.workplace_id
+        ? supabase.from('workplaces').select('*').eq('id', simpleEmp.workplace_id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
     return {
@@ -43,9 +34,10 @@ export async function getEmployeeByProfileId(profileId: string): Promise<Employe
       department: deptRes.data as Department,
       workplace: wpRes.data as Workplace,
     } as Employee;
+  } catch (err) {
+    console.error('Error fetching employee by profile ID:', err);
+    return null;
   }
-
-  return data as Employee;
 }
 
 export async function getEmployees(params?: {
