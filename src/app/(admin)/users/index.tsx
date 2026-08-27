@@ -32,6 +32,7 @@ import {
   createSystemUser,
   deleteUserRecord,
 } from '@/lib/services/organization';
+import { supabase } from '@/lib/supabase';
 import { resetPassword } from '@/lib/auth';
 import { getDepartments, getWorkplaces, getEmployees, updateEmployee } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
@@ -281,10 +282,26 @@ export default function UserManagementScreen() {
         setEditDesignation(empData.designation || '');
         setEditDeptId(empData.department_id || null);
         setEditWorkplaceId(empData.workplace_id || null);
-        setEditShiftId((empData as any).default_shift_id || null);
         setEditManagerId(empData.manager_id || null);
         setEditSalary(empData.basic_salary ? String(empData.basic_salary) : '0');
         setEditStatus(empData.employment_status || 'active');
+
+        let shiftVal = (empData as any).default_shift_id || null;
+        if (!shiftVal) {
+          try {
+            const today = new Date().toISOString().split('T')[0];
+            const { data: shiftRoster } = await supabase
+              .from('employee_shifts')
+              .select('shift_id')
+              .eq('employee_id', empData.id)
+              .eq('date', today)
+              .maybeSingle();
+            if (shiftRoster?.shift_id) {
+              shiftVal = shiftRoster.shift_id;
+            }
+          } catch (sErr) {}
+        }
+        setEditShiftId(shiftVal);
       } else {
         setEditEmpId(null);
         setEditEmpCode('');
