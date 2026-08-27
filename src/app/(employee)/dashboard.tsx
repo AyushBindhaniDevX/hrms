@@ -857,6 +857,8 @@ export default function EmployeeDashboard() {
         employeeName={profile?.full_name || 'Team Member'}
         officeName={officeName}
         isClockingIn={faceModalType === 'in'}
+        enrolledFaceUrl={profile?.avatar_url}
+        profileId={profile?.id}
       />
     </ScrollView>
   );
