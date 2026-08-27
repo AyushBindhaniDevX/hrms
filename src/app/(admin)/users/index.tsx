@@ -328,9 +328,10 @@ export default function UserManagementScreen() {
         role: editRole,
       });
 
-      // 2. Update linked Employee if exists
-      if (editEmpId) {
-        await updateEmployee(editEmpId, {
+      // 2. Update linked Employee if exists, otherwise create it!
+      let currentEmpId = editEmpId;
+      if (currentEmpId) {
+        await updateEmployee(currentEmpId, {
           employee_code: editEmpCode.trim() || undefined,
           designation: editDesignation.trim() || null,
           department_id: editDeptId || null,
@@ -340,21 +341,55 @@ export default function UserManagementScreen() {
           basic_salary: parseFloat(editSalary) || 0,
           employment_status: editStatus as any,
         });
+      } else {
+        const empPayload: Record<string, any> = {
+          profile_id: editUser.id,
+          employee_code: editEmpCode.trim() || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
+          department_id: editDeptId || null,
+          workplace_id: editWorkplaceId || null,
+          designation: editDesignation.trim() || 'Staff',
+          manager_id: editManagerId || null,
+          default_shift_id: editShiftId || null,
+          basic_salary: parseFloat(editSalary) || 0,
+          employment_status: editStatus as any,
+          onboarding_completed: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
 
-        // 3. Link shift roster
-        if (editShiftId && editUser.organization_id) {
-          try {
-            const today = new Date().toISOString().split('T')[0];
-            await supabase.from('employee_shifts').upsert({
-              id: `${editEmpId}_${today}`,
-              employee_id: editEmpId,
-              date: today,
-              shift_id: editShiftId,
-              organization_id: editUser.organization_id,
-              created_at: new Date().toISOString(),
-            });
-          } catch (sErr) {}
+        let { data: newEmp, error: insErr } = await supabase
+          .from('employees')
+          .insert(empPayload)
+          .select()
+          .maybeSingle();
+
+        if (insErr && insErr.code === 'PGRST204') {
+          const match = insErr.message?.match(/Could not find the '([^']+)' column/);
+          if (match && match[1]) {
+            delete empPayload[match[1]];
+            const retry = await supabase.from('employees').insert(empPayload).select().maybeSingle();
+            newEmp = retry.data;
+          }
         }
+
+        if (newEmp) {
+          currentEmpId = newEmp.id;
+        }
+      }
+
+      // 3. Link shift roster if assigned
+      if (editShiftId && editUser.organization_id && currentEmpId) {
+        try {
+          const today = new Date().toISOString().split('T')[0];
+          await supabase.from('employee_shifts').upsert({
+            id: `${currentEmpId}_${today}`,
+            employee_id: currentEmpId,
+            date: today,
+            shift_id: editShiftId,
+            organization_id: editUser.organization_id,
+            created_at: new Date().toISOString(),
+          });
+        } catch (sErr) {}
       }
 
       await createAuditLog('user_updated', 'profile', editUser.id, {
@@ -974,93 +1009,91 @@ export default function UserManagementScreen() {
                 onValueChange={(val) => setEditRole(val as any)}
               />
 
-              {editEmpId ? (
-                <View style={{ gap: 14, marginTop: 6 }}>
-                  <Text style={[styles.formSubHeader, { color: colors.textSecondary }]}>Employee & Job Assignment</Text>
+              <View style={{ gap: 14, marginTop: 6 }}>
+                <Text style={[styles.formSubHeader, { color: colors.textSecondary }]}>Employee & Job Assignment</Text>
 
-                  <Input
-                    label="Employee Code"
-                    value={editEmpCode}
-                    onChangeText={setEditEmpCode}
-                    placeholder="e.g. EMP-1001"
-                  />
+                <Input
+                  label="Employee Code"
+                  value={editEmpCode}
+                  onChangeText={setEditEmpCode}
+                  placeholder="e.g. EMP-1001"
+                />
 
-                  <Input
-                    label="Designation / Job Title"
-                    value={editDesignation}
-                    onChangeText={setEditDesignation}
-                    placeholder="e.g. Senior Software Engineer"
-                  />
+                <Input
+                  label="Designation / Job Title"
+                  value={editDesignation}
+                  onChangeText={setEditDesignation}
+                  placeholder="e.g. Senior Software Engineer"
+                />
 
-                  <Select
-                    label="Department"
-                    options={[
-                      { label: 'None / Unassigned', value: '' },
-                      ...departments.map((d) => ({ label: d.name, value: d.id })),
-                    ]}
-                    value={editDeptId}
-                    onValueChange={handleDeptChangeEdit}
-                  />
+                <Select
+                  label="Department"
+                  options={[
+                    { label: 'None / Unassigned', value: '' },
+                    ...departments.map((d) => ({ label: d.name, value: d.id })),
+                  ]}
+                  value={editDeptId}
+                  onValueChange={handleDeptChangeEdit}
+                />
 
-                  <Select
-                    label="Primary Workplace (Location)"
-                    options={[
-                      { label: 'None / Unassigned', value: '' },
-                      ...workplaces.map((w) => ({ label: w.name, value: w.id })),
-                    ]}
-                    value={editWorkplaceId}
-                    onValueChange={setEditWorkplaceId}
-                  />
+                <Select
+                  label="Primary Workplace (Location)"
+                  options={[
+                    { label: 'None / Unassigned', value: '' },
+                    ...workplaces.map((w) => ({ label: w.name, value: w.id })),
+                  ]}
+                  value={editWorkplaceId}
+                  onValueChange={setEditWorkplaceId}
+                />
 
-                  <Select
-                    label="Reporting Manager"
-                    options={[
-                      { label: 'None / Top Level', value: '' },
-                      ...managers
-                        .filter(m => m.profile_id !== editUser?.id)
-                        .map((m) => ({
-                          label: m.profile?.full_name || m.employee_code || 'Unknown',
-                          value: m.id,
-                        })),
-                    ]}
-                    value={editManagerId}
-                    onValueChange={setEditManagerId}
-                  />
-
-                  <Select
-                    label="Default Shift (For Attendance)"
-                    options={[
-                      { label: 'Standard / Unset', value: '' },
-                      ...shifts.map((s) => ({
-                        label: `${s.name} (${s.start_time} - ${s.end_time})`,
-                        value: s.id,
+                <Select
+                  label="Reporting Manager"
+                  options={[
+                    { label: 'None / Top Level', value: '' },
+                    ...managers
+                      .filter(m => m.profile_id !== editUser?.id)
+                      .map((m) => ({
+                        label: m.profile?.full_name || m.employee_code || 'Unknown',
+                        value: m.id,
                       })),
-                    ]}
-                    value={editShiftId || ''}
-                    onValueChange={(val) => setEditShiftId(val || null)}
-                  />
+                  ]}
+                  value={editManagerId}
+                  onValueChange={setEditManagerId}
+                />
 
-                  <Input
-                    label="Basic Monthly Salary (₹)"
-                    value={editSalary}
-                    onChangeText={setEditSalary}
-                    placeholder="50000"
-                    keyboardType="numeric"
-                  />
+                <Select
+                  label="Default Shift (For Attendance)"
+                  options={[
+                    { label: 'Standard / Unset', value: '' },
+                    ...shifts.map((s) => ({
+                      label: `${s.name} (${s.start_time} - ${s.end_time})`,
+                      value: s.id,
+                    })),
+                  ]}
+                  value={editShiftId || ''}
+                  onValueChange={(val) => setEditShiftId(val || null)}
+                />
 
-                  <Select
-                    label="Employment Status"
-                    options={[
-                      { label: 'Active', value: 'active' },
-                      { label: 'On Leave', value: 'on_leave' },
-                      { label: 'Suspended', value: 'suspended' },
-                      { label: 'Terminated', value: 'terminated' },
-                    ]}
-                    value={editStatus}
-                    onValueChange={(val) => setEditStatus(val || 'active')}
-                  />
-                </View>
-              ) : null}
+                <Input
+                  label="Basic Monthly Salary (₹)"
+                  value={editSalary}
+                  onChangeText={setEditSalary}
+                  placeholder="50000"
+                  keyboardType="numeric"
+                />
+
+                <Select
+                  label="Employment Status"
+                  options={[
+                    { label: 'Active', value: 'active' },
+                    { label: 'On Leave', value: 'on_leave' },
+                    { label: 'Suspended', value: 'suspended' },
+                    { label: 'Terminated', value: 'terminated' },
+                  ]}
+                  value={editStatus}
+                  onValueChange={(val) => setEditStatus(val || 'active')}
+                />
+              </View>
 
               <View style={[styles.modalActions, { marginTop: 16, marginBottom: 12 }]}>
                 <Button
