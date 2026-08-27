@@ -1,5 +1,12 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, isolatedAuthClient } from '@/lib/supabase';
 import type { Organization, Profile, Department, Workplace } from '@/types';
+
+function cleanUuid(val?: string | null): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(trimmed) ? trimmed : null;
+}
 
 export async function getOrganization(orgId: string): Promise<Organization | null> {
   const { data, error } = await supabase
@@ -131,15 +138,15 @@ export async function createSystemUser(params: {
     throw new Error(`User limit reached for ${pkg.toUpperCase()} package (${currentCount}/${limit} users). Please upgrade to add more.`);
   }
 
-  // 1. Sign up user via Supabase Auth
-  const { data: authData, error: authError } = await supabase.auth.signUp({
+  // 1. Sign up user via isolated client so current admin session is NOT overwritten
+  const { data: authData, error: authError } = await isolatedAuthClient.auth.signUp({
     email: params.email,
     password: params.password,
     options: {
       data: {
         full_name: params.full_name,
         role: params.role,
-        organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
+        organization_id: orgId,
       },
     },
   });
@@ -156,35 +163,45 @@ export async function createSystemUser(params: {
 
   // 2. Insert Profile
   const now = new Date().toISOString();
-  await supabase.from('profiles').upsert({
+  const { error: profError } = await supabase.from('profiles').upsert({
     id: uid,
     full_name: params.full_name,
     email: params.email,
     role: params.role,
-    organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
+    organization_id: orgId,
     phone: params.phone || null,
     is_active: true,
     created_at: now,
     updated_at: now,
   });
 
+  if (profError) {
+    console.error('Failed to create profile row:', profError);
+    throw new Error(`Failed to create profile: ${profError.message}`);
+  }
+
   // 3. Create employee record if requested
   if (params.create_employee_record) {
-    await supabase.from('employees').insert({
+    const { error: empError } = await supabase.from('employees').insert({
       profile_id: uid,
       employee_code: params.employee_code || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
-      department_id: params.department_id || null,
+      department_id: cleanUuid(params.department_id),
       designation: params.designation || (params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Staff'),
       joining_date: params.joining_date || now.split('T')[0],
-      workplace_id: params.workplace_id || null,
+      workplace_id: cleanUuid(params.workplace_id),
       basic_salary: params.basic_salary || 0,
-      default_shift_id: params.default_shift_id || null,
-      manager_id: params.manager_id || null,
+      default_shift_id: cleanUuid(params.default_shift_id),
+      manager_id: cleanUuid(params.manager_id),
       employment_status: 'active',
       onboarding_completed: true,
       created_at: now,
       updated_at: now,
     });
+
+    if (empError) {
+      console.error('Failed to create employee row:', empError);
+      throw new Error(`Failed to create employee record: ${empError.message}`);
+    }
   }
 
   try {

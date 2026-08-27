@@ -78,7 +78,7 @@ export default function EmployeeLayout() {
         <Stack.Screen name="directory/index" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="settings" />
-        <Stack.Screen name="notifications" />
+        <Stack.Screen name="notifications/index" />
       </Stack>
     </SidebarLayout>
   );
