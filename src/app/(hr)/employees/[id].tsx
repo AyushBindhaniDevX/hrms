@@ -22,9 +22,10 @@ import {
 } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import { updateUserProfileData } from '@/lib/services/organization';
+import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate, formatCurrency } from '@/utils/format';
-import type { Employee, Department, Workplace, WorkShift } from '@/types';
-import { Edit3, AlertCircle } from 'lucide-react-native';
+import type { Employee, Department, Workplace, WorkShift, LeaveBalance, LeaveType } from '@/types';
+import { Edit3, AlertCircle, Umbrella, CheckCircle2 } from 'lucide-react-native';
 
 export default function EmployeeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,6 +35,14 @@ export default function EmployeeDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [showDeactivate, setShowDeactivate] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
+
+  // Leave Balances State
+  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [customQuotas, setCustomQuotas] = useState<Record<string, string>>({});
+  const [savingLeave, setSavingLeave] = useState(false);
+  const [leaveSuccessMsg, setLeaveSuccessMsg] = useState('');
 
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -73,17 +82,21 @@ export default function EmployeeDetailScreen() {
       setEmp(employeeData);
 
       const orgId = employeeData?.profile?.organization_id || employeeData?.department?.organization_id;
-      if (orgId) {
-        const [deptList, wpList, shiftList, empList] = await Promise.all([
+      if (orgId && id) {
+        const [deptList, wpList, shiftList, empList, balances, lTypes] = await Promise.all([
           getDepartments(orgId),
           getWorkplaces(orgId),
           getShifts(orgId),
           getEmployees({ organization_id: orgId }),
+          getLeaveBalances(id),
+          getLeaveTypes(orgId),
         ]);
         setDepartments(deptList || []);
         setWorkplaces(wpList || []);
         setShifts(shiftList || []);
         setManagers(empList?.filter(e => e.id !== id) || []);
+        setLeaveBalances(balances || []);
+        setLeaveTypes(lTypes || []);
       }
     } catch (e) {
       console.error('Error loading employee details:', e);
@@ -95,6 +108,40 @@ export default function EmployeeDetailScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const openLeaveModal = () => {
+    const quotaMap: Record<string, string> = {};
+    leaveTypes.forEach((lt) => {
+      const existing = leaveBalances.find((b) => b.leave_type_id === lt.id || b.leave_type?.name === lt.name);
+      quotaMap[lt.id] = String(existing ? existing.allocated_days : lt.annual_days || 12);
+    });
+    setCustomQuotas(quotaMap);
+    setLeaveSuccessMsg('');
+    setLeaveModalOpen(true);
+  };
+
+  const handleSaveLeaveBalances = async () => {
+    if (!emp) return;
+    setSavingLeave(true);
+    setLeaveSuccessMsg('');
+    try {
+      for (const lt of leaveTypes) {
+        const days = parseFloat(customQuotas[lt.id] || '0') || 0;
+        const existing = leaveBalances.find((b) => b.leave_type_id === lt.id || b.leave_type?.name === lt.name);
+        await updateLeaveBalance(emp.id, lt.id, days, existing?.used_days || 0);
+      }
+      setLeaveSuccessMsg('Leave balances updated successfully!');
+      await loadData();
+      setTimeout(() => {
+        setLeaveModalOpen(false);
+        setLeaveSuccessMsg('');
+      }, 1000);
+    } catch (err) {
+      console.error('Failed to update leave quotas:', err);
+    } finally {
+      setSavingLeave(false);
+    }
+  };
 
   const openEditModal = () => {
     if (!emp) return;
@@ -259,6 +306,58 @@ export default function EmployeeDetailScreen() {
             <Row label="Joining Date" value={emp.joining_date ? formatDate(emp.joining_date) : 'N/A'} colors={colors} />
           </Card>
 
+          {/* Leave Balances Card */}
+          <Card style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Umbrella size={18} color={colors.primary} />
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Leave Balances & Quotas</Text>
+              </View>
+              <Button
+                title="Set Quotas"
+                onPress={openLeaveModal}
+                size="sm"
+                variant="outline"
+                style={{ borderRadius: 8 }}
+              />
+            </View>
+
+            <View style={{ gap: 8 }}>
+              {leaveBalances.length === 0 ? (
+                <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>
+                  No leave quotas set yet. Click &quot;Set Quotas&quot; to assign.
+                </Text>
+              ) : (
+                leaveBalances.map((b) => (
+                  <View
+                    key={b.id || b.leave_type_id}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingVertical: 6,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border + '30',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>
+                      {b.leave_type?.name || 'Leave'}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                        Used: {b.used_days || 0}d / Total: {b.allocated_days || 0}d
+                      </Text>
+                      <Badge
+                        label={`${b.remaining_days ?? b.allocated_days ?? 0}d Left`}
+                        variant={(b.remaining_days ?? 0) > 0 ? 'success' : 'neutral'}
+                      />
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          </Card>
+
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <Button
               title="Edit Details"
@@ -274,6 +373,54 @@ export default function EmployeeDetailScreen() {
             />
           </View>
         </ScrollView>
+
+        {/* Modal: Set Leave Quotas */}
+        <Modal
+          visible={leaveModalOpen}
+          onClose={() => setLeaveModalOpen(false)}
+          title={`Set Leave Quotas for ${emp.profile?.full_name || 'Employee'}`}
+        >
+          <ScrollView style={{ maxHeight: 480 }}>
+            <View style={{ gap: 14 }}>
+              {leaveSuccessMsg ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', padding: 10, borderRadius: 8, gap: 6 }}>
+                  <CheckCircle2 size={16} color="#059669" />
+                  <Text style={{ color: '#065F46', fontSize: 13, fontWeight: '600' }}>{leaveSuccessMsg}</Text>
+                </View>
+              ) : null}
+
+              <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 4 }}>
+                Enter the annual allocated days for each leave category for the current year.
+              </Text>
+
+              {leaveTypes.map((lt) => (
+                <Input
+                  key={lt.id}
+                  label={`${lt.name} (Days per Year)`}
+                  value={customQuotas[lt.id] || ''}
+                  onChangeText={(val) => setCustomQuotas((prev) => ({ ...prev, [lt.id]: val }))}
+                  placeholder={String(lt.annual_days || 12)}
+                  keyboardType="numeric"
+                />
+              ))}
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <Button
+                  title="Cancel"
+                  onPress={() => setLeaveModalOpen(false)}
+                  variant="outline"
+                  style={{ flex: 1, borderRadius: 8 }}
+                />
+                <Button
+                  title={savingLeave ? 'Saving...' : 'Save Leave Quotas'}
+                  onPress={handleSaveLeaveBalances}
+                  loading={savingLeave}
+                  style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8 }}
+                />
+              </View>
+            </View>
+          </ScrollView>
+        </Modal>
 
         {/* Full Edit Employee Modal */}
         <Modal

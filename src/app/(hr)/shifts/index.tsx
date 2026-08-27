@@ -92,18 +92,34 @@ export default function ShiftsScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
+      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
       const startDate = weekDates[0].dateStr;
       const endDate = weekDates[weekDates.length - 1].dateStr;
 
-      const [shiftData, empData, rosterData] = await Promise.all([
+      let [shiftData, empData, rosterData] = await Promise.all([
         getShifts(orgId),
         getEmployees({ organization_id: orgId }),
         getRoster(startDate, endDate, orgId),
       ]);
 
-      setShifts(shiftData);
-      setEmployees(empData);
+      // If no shifts exist, seed default standard shifts
+      if (!shiftData || shiftData.length === 0) {
+        try {
+          const defaultShifts = [
+            { name: 'General Day Shift', start_time: '09:00', end_time: '17:00', color: '#0D7377', allowance_per_day: 0, is_night_shift: false, organization_id: orgId },
+            { name: 'Morning Shift', start_time: '07:00', end_time: '15:00', color: '#0284C7', allowance_per_day: 100, is_night_shift: false, organization_id: orgId },
+            { name: 'Evening Shift', start_time: '14:00', end_time: '22:00', color: '#D97706', allowance_per_day: 150, is_night_shift: false, organization_id: orgId },
+            { name: 'Night Shift (ICU)', start_time: '21:00', end_time: '07:00', color: '#7C3AED', allowance_per_day: 300, is_night_shift: true, organization_id: orgId },
+          ];
+          for (const s of defaultShifts) {
+            await createShift(s);
+          }
+          shiftData = await getShifts(orgId);
+        } catch (sErr) {}
+      }
+
+      setShifts(shiftData || []);
+      setEmployees(empData || []);
 
       const rMap: Record<string, string> = {};
       rosterData.forEach((r) => {
@@ -128,7 +144,7 @@ export default function ShiftsScreen() {
 
   const handleAssignShift = async (shiftId: string | null) => {
     if (!assignModal.employee) return;
-    const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
+    const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
     const key = `${assignModal.employee.id}_${assignModal.date}`;
 
     // Optimistic update
@@ -136,6 +152,7 @@ export default function ShiftsScreen() {
     setAssignModal({ open: false, employee: null, date: '', dayLabel: '' });
 
     await assignEmployeeShift(assignModal.employee.id, assignModal.date, shiftId, orgId);
+    await loadData();
   };
 
   const handleCreateOrUpdateShift = async () => {

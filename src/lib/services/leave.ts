@@ -210,9 +210,9 @@ export async function processLeaveRequest(
       const { createNotification } = await import('./notifications');
       await createNotification(
         reqData.employee.profile_id,
-        'leave_status',
         `Leave Request ${action === 'approve' ? 'Approved' : 'Rejected'}`,
-        `Your leave request from ${reqData.start_date} to ${reqData.end_date} has been ${action}d.`
+        `Your ${reqData.leave_type?.name || 'leave'} request for ${reqData.days} day(s) from ${reqData.start_date} to ${reqData.end_date} has been ${action === 'approve' ? 'approved' : 'rejected'}.`,
+        action === 'approve' ? 'success' : 'alert'
       );
     } catch (e) {}
   }
@@ -223,4 +223,31 @@ export async function processLeaveRequest(
     request_id: requestId,
     new_status: action === 'approve' ? 'approved' : 'rejected',
   };
+}
+
+export async function updateLeaveBalance(
+  employeeId: string,
+  leaveTypeId: string,
+  allocatedDays: number,
+  usedDays: number = 0,
+  year?: number
+): Promise<void> {
+  const y = year ?? new Date().getFullYear();
+  const id = `bal_${employeeId}_${leaveTypeId}_${y}`;
+  const remaining = Math.max(0, allocatedDays - usedDays);
+  const now = new Date().toISOString();
+
+  const payload = {
+    id,
+    employee_id: employeeId,
+    leave_type_id: leaveTypeId,
+    year: y,
+    allocated_days: allocatedDays,
+    used_days: usedDays,
+    remaining_days: remaining,
+    updated_at: now,
+  };
+
+  const { error } = await supabase.from('leave_balances').upsert(payload);
+  if (error) throw error;
 }

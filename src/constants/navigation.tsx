@@ -42,7 +42,6 @@ export const HR_NAV: NavItem[] = [
   { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock },
   { label: 'Performance', href: '/(hr)/performance', icon: Award },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
-  { label: 'IT Assets', href: '/(hr)/assets', icon: Laptop },
   { label: 'Office Locations', href: '/(hr)/locations', icon: MapPin },
 ];
 
@@ -55,7 +54,6 @@ export const ADMIN_NAV: NavItem[] = [
   { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock },
   { label: 'Performance', href: '/(hr)/performance', icon: Award },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
-  { label: 'IT Assets', href: '/(hr)/assets', icon: Laptop },
   { label: 'Locations', href: '/(hr)/locations', icon: MapPin },
   { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield },
   { label: 'Settings', href: '/(admin)/settings', icon: Settings },

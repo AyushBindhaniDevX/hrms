@@ -79,7 +79,7 @@ export async function getRoster(
       .lte('date', endDate);
 
     if (organizationId) {
-      query = query.eq('organization_id', organizationId);
+      query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
     }
 
     const { data, error } = await query;
@@ -97,20 +97,33 @@ export async function assignEmployeeShift(
   employeeId: string,
   date: string,
   shiftId: string | null,
-  organizationId: string
+  organizationId?: string
 ): Promise<void> {
   const now = new Date().toISOString();
   const id = `${employeeId}_${date}`;
 
   try {
-    await supabase.from('employee_shifts').upsert({
+    if (!shiftId || shiftId === 'OFF') {
+      await supabase.from('employee_shifts').delete().eq('id', id);
+      return;
+    }
+
+    const payload: Record<string, any> = {
       id,
       employee_id: employeeId,
       date,
       shift_id: shiftId,
-      organization_id: organizationId,
       created_at: now,
-    });
+    };
+    if (organizationId) {
+      payload.organization_id = organizationId;
+    }
+
+    let { error } = await supabase.from('employee_shifts').upsert(payload);
+    if (error && error.code === 'PGRST204') {
+      delete payload.organization_id;
+      await supabase.from('employee_shifts').upsert(payload);
+    }
   } catch (err) {
     console.error('Error assigning employee shift:', err);
   }
