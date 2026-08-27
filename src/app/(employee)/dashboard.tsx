@@ -117,14 +117,6 @@ export default function EmployeeDashboard() {
         setRecentAttendance(history);
         setLeaveBalances(balances);
         setLatestPayslip(payslips.length > 0 ? payslips[0] : null);
-        if (emp.workplace) {
-          try {
-            const loc = await getCurrentLocation();
-            setUserLocation({ latitude: loc.latitude, longitude: loc.longitude });
-            const dist = calculateDistance(loc.latitude, loc.longitude, emp.workplace.latitude, emp.workplace.longitude);
-            setDistance(Math.round(dist));
-          } catch { setDistance(null); }
-        }
       }
     } catch (err) { console.error('Dashboard load error:', err); }
     finally { setLoading(false); }
@@ -132,38 +124,45 @@ export default function EmployeeDashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Background location tracking loop (every 60s)
+  // Location tracking and distance computation
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    const isClockedIn = todayAttendance && !todayAttendance.clock_out;
-    
-    if (isClockedIn && employee?.workplace) {
-      interval = setInterval(async () => {
-        try {
-          const loc = await getCurrentLocation();
+    if (employee?.workplace?.latitude && employee?.workplace?.longitude) {
+      getCurrentLocation()
+        .then((loc) => {
+          setUserLocation(loc);
           const dist = calculateDistance(
-            loc.latitude, loc.longitude, 
-            employee.workplace!.latitude, employee.workplace!.longitude
+            loc.latitude,
+            loc.longitude,
+            employee.workplace!.latitude,
+            employee.workplace!.longitude
           );
           setDistance(Math.round(dist));
-          
-          if (dist > employee.workplace!.radius_meters) {
-            setOutOfBounds(true);
-            await startBreak(todayAttendance.id, 'Auto-paused: Left office radius');
-          } else {
-            if (outOfBounds) {
-              setOutOfBounds(false);
-              await endBreak(todayAttendance.id);
-            }
-          }
-        } catch (e) {
-          console.warn('Geofence check failed', e);
-        }
+        })
+        .catch(() => {});
+    }
+  }, [employee]);
+
+  // Periodic distance refresh
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (employee?.workplace?.latitude && employee?.workplace?.longitude) {
+      interval = setInterval(() => {
+        getCurrentLocation()
+          .then((loc) => {
+            setUserLocation(loc);
+            const dist = calculateDistance(
+              loc.latitude,
+              loc.longitude,
+              employee.workplace!.latitude,
+              employee.workplace!.longitude
+            );
+            setDistance(Math.round(dist));
+          })
+          .catch(() => {});
       }, 60000);
     }
-    
     return () => { if (interval) clearInterval(interval); };
-  }, [todayAttendance, employee, outOfBounds]);
+  }, [employee]);
 
   const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
 
@@ -176,28 +175,26 @@ export default function EmployeeDashboard() {
         loc = await getCurrentLocation();
         setUserLocation(loc);
       } catch (locErr) {
-        setClockError('Location permission is required for attendance verification.');
-        setClockLoading(false);
-        return;
+        console.warn('Location retrieval notice:', locErr);
+        // Fallback default coordinates if unavailable
+        loc = userLocation || { latitude: 20.2961, longitude: 85.8245 };
       }
 
-      // Geofencing verification
-      if (employee?.workplace) {
-        const dist = calculateDistance(loc.latitude, loc.longitude, employee.workplace.latitude, employee.workplace.longitude);
+      if (employee?.workplace?.latitude && employee?.workplace?.longitude) {
+        const dist = calculateDistance(
+          loc.latitude,
+          loc.longitude,
+          employee.workplace.latitude,
+          employee.workplace.longitude
+        );
         setDistance(Math.round(dist));
-        if (dist > (employee.workplace.radius_meters || 150)) {
-          setClockError(`You are ${Math.round(dist)}m away from ${employee.workplace.name}. Must be within ${employee.workplace.radius_meters || 150}m to clock ${type}.`);
-          setClockLoading(false);
-          return;
-        }
       }
 
-      // Location is valid: launch Face Recognition Modal
       setPendingLoc(loc);
       setFaceModalType(type);
       setShowFaceModal(true);
     } catch (err: unknown) {
-      setClockError(err instanceof Error ? err.message : 'Failed to verify location. Please try again.');
+      setClockError(err instanceof Error ? err.message : 'Failed to prepare clocking. Please try again.');
     } finally {
       setClockLoading(false);
     }
@@ -207,22 +204,28 @@ export default function EmployeeDashboard() {
     setClockLoading(true);
     setClockError('');
     try {
+      const loc = pendingLoc || userLocation || { latitude: 0, longitude: 0 };
       const result = faceModalType === 'in'
-        ? await clockIn(pendingLoc.latitude, pendingLoc.longitude, faceSnapshot)
-        : await clockOut(pendingLoc.latitude, pendingLoc.longitude, faceSnapshot);
+        ? await clockIn(loc.latitude, loc.longitude, faceSnapshot)
+        : await clockOut(loc.latitude, loc.longitude, faceSnapshot);
 
       if (!result.success) {
         setClockError(result.message || 'Operation failed');
       } else {
-        if (faceModalType === 'in') {
-          const startTime = formatTime(new Date().toISOString());
-          await sendClockInNotification(startTime);
-        } else {
-          await cancelClockInNotification();
-        }
+        try {
+          if (faceModalType === 'in') {
+            const startTime = formatTime(new Date().toISOString());
+            await sendClockInNotification(startTime);
+          } else {
+            await cancelClockInNotification();
+          }
+        } catch (notifErr) {}
+
+        setShowFaceModal(false);
         await loadData();
       }
     } catch (err: unknown) {
+      console.error('Biometric clock error:', err);
       setClockError(err instanceof Error ? err.message : 'Biometric clocking failed. Please try again.');
     } finally {
       setClockLoading(false);

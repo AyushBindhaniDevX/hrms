@@ -32,12 +32,13 @@ export async function requestNotificationPermissions() {
 }
 
 export async function sendClockInNotification(startTime: string) {
-  const hasPermission = await requestNotificationPermissions();
-  if (!hasPermission) return;
-
-  await cancelClockInNotification();
-
+  if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
   try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return;
+
+    await cancelClockInNotification();
+
     await ExpoNotifications.scheduleNotificationAsync({
       content: {
         title: '✅ Clocked In',
@@ -48,7 +49,7 @@ export async function sendClockInNotification(startTime: string) {
       trigger: null,
     });
   } catch (e) {
-    console.warn('Expo scheduleNotification warning:', e);
+    console.warn('Expo scheduleNotification suppressed warning:', e);
   }
 }
 
