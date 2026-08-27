@@ -33,7 +33,7 @@ import {
   deleteUserRecord,
 } from '@/lib/services/organization';
 import { resetPassword } from '@/lib/auth';
-import { getDepartments, getWorkplaces, getEmployees } from '@/lib/services/employee';
+import { getDepartments, getWorkplaces, getEmployees, updateEmployee } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import { createAuditLog } from '@/lib/services/audit';
 import { formatDate } from '@/utils/format';
@@ -110,6 +110,15 @@ export default function UserManagementScreen() {
   const [editFullName, setEditFullName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editRole, setEditRole] = useState<'admin' | 'hr' | 'employee'>('employee');
+  const [editEmpId, setEditEmpId] = useState<string | null>(null);
+  const [editEmpCode, setEditEmpCode] = useState('');
+  const [editDesignation, setEditDesignation] = useState('');
+  const [editDeptId, setEditDeptId] = useState<string | null>(null);
+  const [editWorkplaceId, setEditWorkplaceId] = useState<string | null>(null);
+  const [editShiftId, setEditShiftId] = useState<string | null>(null);
+  const [editManagerId, setEditManagerId] = useState<string | null>(null);
+  const [editSalary, setEditSalary] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -251,12 +260,55 @@ export default function UserManagementScreen() {
     }
   };
 
-  const openEditModal = (u: Profile) => {
+  const openEditModal = async (u: Profile) => {
     setEditUser(u);
     setEditFullName(u.full_name || '');
     setEditPhone(u.phone || '');
     setEditRole((u.role as any) || 'employee');
     setEditError('');
+
+    // Fetch linked employee record if any
+    try {
+      const { data: empData } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('profile_id', u.id)
+        .maybeSingle();
+
+      if (empData) {
+        setEditEmpId(empData.id);
+        setEditEmpCode(empData.employee_code || '');
+        setEditDesignation(empData.designation || '');
+        setEditDeptId(empData.department_id || null);
+        setEditWorkplaceId(empData.workplace_id || null);
+        setEditShiftId((empData as any).default_shift_id || null);
+        setEditManagerId(empData.manager_id || null);
+        setEditSalary(empData.basic_salary ? String(empData.basic_salary) : '0');
+        setEditStatus(empData.employment_status || 'active');
+      } else {
+        setEditEmpId(null);
+        setEditEmpCode('');
+        setEditDesignation('');
+        setEditDeptId(null);
+        setEditWorkplaceId(null);
+        setEditShiftId(null);
+        setEditManagerId(null);
+        setEditSalary('');
+        setEditStatus('active');
+      }
+    } catch (e) {
+      console.warn('Could not fetch linked employee for user edit:', e);
+    }
+  };
+
+  const handleDeptChangeEdit = (val: string | null) => {
+    setEditDeptId(val);
+    if (val) {
+      const dept = departments.find(d => d.id === val);
+      if (dept && dept.manager_id) {
+        setEditManagerId(dept.manager_id);
+      }
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -269,11 +321,41 @@ export default function UserManagementScreen() {
     setSavingEdit(true);
     setEditError('');
     try {
+      // 1. Update Profile
       await updateUserProfileData(editUser.id, {
         full_name: editFullName.trim(),
         phone: editPhone.trim() || null,
         role: editRole,
       });
+
+      // 2. Update linked Employee if exists
+      if (editEmpId) {
+        await updateEmployee(editEmpId, {
+          employee_code: editEmpCode.trim() || undefined,
+          designation: editDesignation.trim() || null,
+          department_id: editDeptId || null,
+          workplace_id: editWorkplaceId || null,
+          default_shift_id: editShiftId || null,
+          manager_id: editManagerId || null,
+          basic_salary: parseFloat(editSalary) || 0,
+          employment_status: editStatus as any,
+        });
+
+        // 3. Link shift roster
+        if (editShiftId && editUser.organization_id) {
+          try {
+            const today = new Date().toISOString().split('T')[0];
+            await supabase.from('employee_shifts').upsert({
+              id: `${editEmpId}_${today}`,
+              employee_id: editEmpId,
+              date: today,
+              shift_id: editShiftId,
+              organization_id: editUser.organization_id,
+              created_at: new Date().toISOString(),
+            });
+          } catch (sErr) {}
+        }
+      }
 
       await createAuditLog('user_updated', 'profile', editUser.id, {
         old_role: editUser.role,
@@ -853,57 +935,149 @@ export default function UserManagementScreen() {
           )}
         </Modal>
 
-        {/* ── Modal: Edit User ───────────────────────────────────────────── */}
-        <Modal visible={!!editUser} onClose={() => setEditUser(null)} title="Edit User Profile">
-          <View style={{ gap: 14 }}>
-            {editError ? (
-              <View style={[styles.alertBox, { backgroundColor: colors.dangerLight, borderColor: colors.danger + '40' }]}>
-                <AlertCircle size={16} color={colors.danger} />
-                <Text style={{ color: colors.danger, fontSize: 13, flex: 1 }}>{editError}</Text>
+        {/* ── Modal: Edit User & Employee ─────────────────────────────────── */}
+        <Modal visible={!!editUser} onClose={() => setEditUser(null)} title="Edit User & Employee Profile">
+          <ScrollView style={{ maxHeight: 520, paddingRight: 4 }}>
+            <View style={{ gap: 14 }}>
+              {editError ? (
+                <View style={[styles.alertBox, { backgroundColor: colors.dangerLight, borderColor: colors.danger + '40' }]}>
+                  <AlertCircle size={16} color={colors.danger} />
+                  <Text style={{ color: colors.danger, fontSize: 13, flex: 1 }}>{editError}</Text>
+                </View>
+              ) : null}
+
+              <Text style={[styles.formSubHeader, { color: colors.textSecondary }]}>Account & Profile</Text>
+
+              <Input
+                label="Full Name *"
+                value={editFullName}
+                onChangeText={setEditFullName}
+                placeholder="Full name"
+              />
+
+              <Input
+                label="Phone Number"
+                value={editPhone}
+                onChangeText={setEditPhone}
+                placeholder="+91 98765 43210"
+                keyboardType="phone-pad"
+              />
+
+              <Select
+                label="System Role"
+                options={[
+                  { label: 'Employee (Standard Access)', value: 'employee' },
+                  { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                  { label: 'Administrator (System & Org Settings)', value: 'admin' },
+                ]}
+                value={editRole}
+                onValueChange={(val) => setEditRole(val as any)}
+              />
+
+              {editEmpId ? (
+                <View style={{ gap: 14, marginTop: 6 }}>
+                  <Text style={[styles.formSubHeader, { color: colors.textSecondary }]}>Employee & Job Assignment</Text>
+
+                  <Input
+                    label="Employee Code"
+                    value={editEmpCode}
+                    onChangeText={setEditEmpCode}
+                    placeholder="e.g. EMP-1001"
+                  />
+
+                  <Input
+                    label="Designation / Job Title"
+                    value={editDesignation}
+                    onChangeText={setEditDesignation}
+                    placeholder="e.g. Senior Software Engineer"
+                  />
+
+                  <Select
+                    label="Department"
+                    options={[
+                      { label: 'None / Unassigned', value: '' },
+                      ...departments.map((d) => ({ label: d.name, value: d.id })),
+                    ]}
+                    value={editDeptId}
+                    onValueChange={handleDeptChangeEdit}
+                  />
+
+                  <Select
+                    label="Primary Workplace (Location)"
+                    options={[
+                      { label: 'None / Unassigned', value: '' },
+                      ...workplaces.map((w) => ({ label: w.name, value: w.id })),
+                    ]}
+                    value={editWorkplaceId}
+                    onValueChange={setEditWorkplaceId}
+                  />
+
+                  <Select
+                    label="Reporting Manager"
+                    options={[
+                      { label: 'None / Top Level', value: '' },
+                      ...managers
+                        .filter(m => m.profile_id !== editUser?.id)
+                        .map((m) => ({
+                          label: m.profile?.full_name || m.employee_code || 'Unknown',
+                          value: m.id,
+                        })),
+                    ]}
+                    value={editManagerId}
+                    onValueChange={setEditManagerId}
+                  />
+
+                  <Select
+                    label="Default Shift (For Attendance)"
+                    options={[
+                      { label: 'Standard / Unset', value: '' },
+                      ...shifts.map((s) => ({
+                        label: `${s.name} (${s.start_time} - ${s.end_time})`,
+                        value: s.id,
+                      })),
+                    ]}
+                    value={editShiftId || ''}
+                    onValueChange={(val) => setEditShiftId(val || null)}
+                  />
+
+                  <Input
+                    label="Basic Monthly Salary (₹)"
+                    value={editSalary}
+                    onChangeText={setEditSalary}
+                    placeholder="50000"
+                    keyboardType="numeric"
+                  />
+
+                  <Select
+                    label="Employment Status"
+                    options={[
+                      { label: 'Active', value: 'active' },
+                      { label: 'On Leave', value: 'on_leave' },
+                      { label: 'Suspended', value: 'suspended' },
+                      { label: 'Terminated', value: 'terminated' },
+                    ]}
+                    value={editStatus}
+                    onValueChange={(val) => setEditStatus(val || 'active')}
+                  />
+                </View>
+              ) : null}
+
+              <View style={[styles.modalActions, { marginTop: 16, marginBottom: 12 }]}>
+                <Button
+                  title="Cancel"
+                  onPress={() => setEditUser(null)}
+                  variant="outline"
+                  style={{ flex: 1, borderRadius: 8 }}
+                />
+                <Button
+                  title={savingEdit ? 'Saving...' : 'Save Changes'}
+                  onPress={handleSaveEdit}
+                  loading={savingEdit}
+                  style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8 }}
+                />
               </View>
-            ) : null}
-
-            <Input
-              label="Full Name"
-              value={editFullName}
-              onChangeText={setEditFullName}
-              placeholder="Full name"
-            />
-
-            <Input
-              label="Phone Number"
-              value={editPhone}
-              onChangeText={setEditPhone}
-              placeholder="+1 (555) 000-0000"
-              keyboardType="phone-pad"
-            />
-
-            <Select
-              label="System Role"
-              options={[
-                { label: 'Employee (Standard Access)', value: 'employee' },
-                { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
-                { label: 'Administrator (System & Org Settings)', value: 'admin' },
-              ]}
-              value={editRole}
-              onValueChange={(val) => setEditRole(val as any)}
-            />
-
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                onPress={() => setEditUser(null)}
-                variant="outline"
-                style={{ flex: 1, borderRadius: 8 }}
-              />
-              <Button
-                title="Save Changes"
-                onPress={handleSaveEdit}
-                loading={savingEdit}
-                style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8 }}
-              />
             </View>
-          </View>
+          </ScrollView>
         </Modal>
 
         {/* ── Dialog: Confirm Deactivation / Activation ────────────────────── */}

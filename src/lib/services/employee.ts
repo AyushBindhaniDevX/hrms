@@ -271,12 +271,28 @@ export async function createEmployee(params: {
 
 export async function updateEmployee(
   id: string,
-  updates: Partial<Pick<Employee, 'department_id' | 'designation' | 'workplace_id' | 'basic_salary' | 'employment_status' | 'employee_code' | 'manager_id'>>
+  updates: Record<string, any>
 ): Promise<void> {
-  const { error } = await supabase
+  const payload: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
+  
+  if ('department_id' in payload) payload.department_id = cleanUuid(payload.department_id);
+  if ('workplace_id' in payload) payload.workplace_id = cleanUuid(payload.workplace_id);
+  if ('manager_id' in payload) payload.manager_id = cleanUuid(payload.manager_id);
+  if ('default_shift_id' in payload) payload.default_shift_id = cleanUuid(payload.default_shift_id);
+
+  let { error } = await supabase
     .from('employees')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq('id', id);
+
+  if (error && error.code === 'PGRST204') {
+    const missingColMatch = error.message?.match(/Could not find the '([^']+)' column/);
+    if (missingColMatch && missingColMatch[1]) {
+      delete payload[missingColMatch[1]];
+      const retry = await supabase.from('employees').update(payload).eq('id', id);
+      error = retry.error;
+    }
+  }
 
   if (error) throw error;
 }
