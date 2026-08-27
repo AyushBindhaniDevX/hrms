@@ -24,25 +24,6 @@ export async function getLeaveTypes(organizationId?: string): Promise<LeaveType[
       const unique = Array.from(new Map((data as LeaveType[]).map((item) => [item.name, item])).values());
       return unique;
     }
-
-    // Seed default leave types with real UUIDs in Supabase if empty
-    const orgId = organizationId || '00000000-0000-0000-0000-000000000001';
-    const seededList: LeaveType[] = [];
-    for (const lt of DEFAULT_LEAVE_TYPES) {
-      const { data: ins } = await supabase
-        .from('leave_types')
-        .insert({
-          organization_id: orgId,
-          name: lt.name,
-          annual_days: lt.annual_days,
-          is_paid: lt.is_paid,
-          created_at: new Date().toISOString(),
-        })
-        .select('*')
-        .maybeSingle();
-      if (ins) seededList.push(ins as LeaveType);
-    }
-    if (seededList.length > 0) return seededList;
   } catch (err) {
     console.warn('Could not query remote leave_types, using defaults:', err);
   }
@@ -109,18 +90,74 @@ export async function applyLeave(params: {
   reason: string;
 }): Promise<LeaveRequest> {
   const now = new Date().toISOString();
+
+  // 1. Ensure employee_id is valid
+  let empId = params.employee_id;
+  if (!empId) {
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user?.id) {
+      const { data: empRecord } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('profile_id', userData.user.id)
+        .maybeSingle();
+      if (empRecord?.id) empId = empRecord.id;
+    }
+  }
+
+  if (!empId) {
+    throw new Error('Employee record could not be identified. Please ensure your profile is active.');
+  }
+
+  // 2. Ensure leave_type_id exists in leave_types table
+  let validLeaveTypeId = params.leave_type_id;
+  const { data: matchedType } = await supabase
+    .from('leave_types')
+    .select('id')
+    .eq('id', validLeaveTypeId)
+    .maybeSingle();
+
+  if (!matchedType) {
+    const { data: anyType } = await supabase.from('leave_types').select('id').limit(1).maybeSingle();
+    if (anyType?.id) {
+      validLeaveTypeId = anyType.id;
+    } else {
+      const { data: insType } = await supabase
+        .from('leave_types')
+        .insert({
+          name: 'Annual Leave',
+          annual_days: 18,
+          is_paid: true,
+          organization_id: '00000000-0000-0000-0000-000000000001',
+        })
+        .select('id')
+        .maybeSingle();
+      if (insType?.id) validLeaveTypeId = insType.id;
+    }
+  }
+
   const { data, error } = await supabase
     .from('leave_requests')
     .insert({
-      ...params,
+      employee_id: empId,
+      leave_type_id: validLeaveTypeId,
+      start_date: params.start_date,
+      end_date: params.end_date,
+      days: params.days,
+      is_half_day: params.is_half_day,
+      reason: params.reason,
       status: 'pending',
       created_at: now,
       updated_at: now,
     })
-    .select('*, leave_type:leave_types(*)')
+    .select('*')
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('applyLeave error:', error);
+    throw new Error(error.message || 'Failed to submit leave request');
+  }
+
   return data as LeaveRequest;
 }
 

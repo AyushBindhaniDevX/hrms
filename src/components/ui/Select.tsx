@@ -80,13 +80,13 @@ export function Select({ label, placeholder = 'Select...', options, value, onVal
               </option>
             ))}
           </select>
-          <View pointerEvents="none" style={styles.chevronWeb}>
+          <View style={[styles.chevronWeb, { pointerEvents: 'none' as any }]}>
             <ChevronDown size={16} color={colors.textSecondary} />
           </View>
         </View>
-        {error && (
+        {error ? (
           <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
-        )}
+        ) : null}
       </View>
     );
   }

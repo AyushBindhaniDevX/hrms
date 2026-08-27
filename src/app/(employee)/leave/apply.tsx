@@ -310,7 +310,7 @@ export default function ApplyLeaveScreen() {
         </View>
 
         {/* Duration summary */}
-        {days > 0 && (
+        {days > 0 ? (
           <View
             style={[
               styles.daysSummary,
@@ -319,13 +319,10 @@ export default function ApplyLeaveScreen() {
           >
             <Calendar size={16} color={colors.primary} />
             <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 14 }}>
-              {days} day{days !== 1 ? 's' : ''} of leave
-              {startDate && endDate
-                ? `  ·  ${formatDate(startDate)} to ${formatDate(endDate)}`
-                : ''}
+              {`${days} day${days !== 1 ? 's' : ''} of leave${startDate && endDate ? `  ·  ${formatDate(startDate)} to ${formatDate(endDate)}` : ''}`}
             </Text>
           </View>
-        )}
+        ) : null}
 
         {/* Reason — plain TextInput for cross-platform reliability */}
         <View>

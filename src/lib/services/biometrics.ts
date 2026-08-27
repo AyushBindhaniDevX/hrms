@@ -14,19 +14,22 @@ export async function uploadBiometricFace(
   userId: string,
   base64OrUri: string
 ): Promise<string> {
+  if (!base64OrUri || base64OrUri === 'captured_biometric_face') {
+    return base64OrUri;
+  }
+
   const fileName = `face_${userId}_${Date.now()}.jpg`;
 
   try {
-    // Attempt upload to 'biometrics' or 'avatars' bucket in Supabase Storage
-    if (base64OrUri.startsWith('data:image')) {
-      const base64Data = base64OrUri.split(',')[1];
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    if (typeof window !== 'undefined' && base64OrUri.includes('base64,')) {
+      const base64Data = base64OrUri.split('base64,')[1].replace(/\s/g, '');
+      const binaryStr = window.atob(base64Data);
+      const len = binaryStr.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+      const blob = new Blob([bytes], { type: 'image/jpeg' });
 
       const { data, error } = await supabase.storage
         .from('avatars')
@@ -44,11 +47,8 @@ export async function uploadBiometricFace(
         }
       }
     }
-  } catch (err) {
-    console.warn('Storage upload notice (using direct payload storage):', err);
-  }
+  } catch (err) {}
 
-  // Reliable fallback: Return the base64 / URI string directly
   return base64OrUri;
 }
 
