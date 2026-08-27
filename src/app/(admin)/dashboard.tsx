@@ -105,11 +105,12 @@ export default function AdminDashboard() {
   const hrCount = users.filter((u) => u.role === 'hr').length;
   const adminCount = users.filter((u) => u.role === 'admin').length;
   const activeCount = users.filter((u) => u.is_active).length;
+  const totalStaffCount = Math.max(empCount, activeCount, users.length);
 
   const kpis = [
     {
       label: 'Total Staff',
-      value: empCount,
+      value: totalStaffCount,
       sub: `${activeCount} active accounts`,
       icon: <Users size={20} color={colors.textSecondary} />,
       bg: colors.surface,

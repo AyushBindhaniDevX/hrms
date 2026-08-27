@@ -487,6 +487,33 @@ export async function updateWorkplace(id: string, updates: Partial<Workplace>): 
 }
 
 export async function getEmployeeCount(organizationId?: string): Promise<number> {
-  const emps = await getEmployees(organizationId ? { organization_id: organizationId, employment_status: 'active' } : { employment_status: 'active' });
-  return emps.length;
+  try {
+    let profQuery = supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true);
+
+    if (organizationId) {
+      profQuery = profQuery.eq('organization_id', organizationId);
+    }
+
+    const { count: profCount } = await profQuery;
+
+    let empQuery = supabase
+      .from('employees')
+      .select('id, profile:profiles(organization_id)', { count: 'exact' })
+      .eq('employment_status', 'active');
+
+    const { data: emps, count: empCount } = await empQuery;
+
+    if (organizationId && emps) {
+      const filtered = emps.filter((e: any) => e.profile?.organization_id === organizationId);
+      return Math.max(filtered.length, profCount || 0);
+    }
+
+    return Math.max(empCount || 0, profCount || 0);
+  } catch (e) {
+    const emps = await getEmployees(organizationId ? { organization_id: organizationId, employment_status: 'active' } : { employment_status: 'active' });
+    return emps.length;
+  }
 }
