@@ -46,7 +46,7 @@ export default function LoginScreen() {
   const isDesktop = width >= 1024;
 
   const { tenant } = useTenantBranding();
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn } = useAuth();
   const router = useRouter();
 
   const {
@@ -63,7 +63,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [rememberBiometric, setRememberBiometric] = useState(true);
 
@@ -130,20 +129,6 @@ export default function LoginScreen() {
       setRegError(err?.message || 'Failed to register biometrics on this device.');
     } finally {
       setRegLoading(false);
-    }
-  };
-
-  // Google OAuth via Supabase
-  const handleGoogleOAuth = async () => {
-    setError('');
-    setOauthLoading(true);
-    try {
-      await signInWithGoogle();
-    } catch (err: any) {
-      console.error('Google OAuth error:', err);
-      setError(err?.message || 'Google sign-in failed. Please try again.');
-    } finally {
-      setOauthLoading(false);
     }
   };
 
@@ -381,31 +366,12 @@ export default function LoginScreen() {
                     style={styles.mobileLoginBtn}
                   />
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 10 }}>
-                    <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
-                    <Text style={{ marginHorizontal: 10, fontSize: 12, color: '#94A3B8', fontWeight: '600' }}>OR</Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
-                  </View>
-
-                  <Button
-                    title="Continue with Google"
-                    onPress={handleGoogleOAuth}
-                    loading={oauthLoading}
-                    variant="outline"
-                    style={{
-                      borderColor: '#4F46E5',
-                      borderRadius: 12,
-                      paddingVertical: 12,
-                    }}
-                    textStyle={{ color: '#4F46E5', fontWeight: '700' }}
-                  />
-
                   <Button
                     title="Forgot Password?"
                     onPress={() => router.push('/(auth)/forgot-password')}
                     variant="ghost"
                     size="sm"
-                    style={{ marginTop: 8 }}
+                    style={{ marginTop: 12 }}
                   />
                 </>
               )}
@@ -726,24 +692,6 @@ export default function LoginScreen() {
                         shadowRadius: 5,
                         elevation: 3,
                       }}
-                    />
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 12 }}>
-                      <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
-                      <Text style={{ marginHorizontal: 10, fontSize: 12, color: '#94A3B8', fontWeight: '600' }}>OR</Text>
-                      <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
-                    </View>
-
-                    <Button
-                      title="Continue with Google"
-                      onPress={handleGoogleOAuth}
-                      loading={oauthLoading}
-                      variant="outline"
-                      style={{
-                        borderColor: '#4F46E5',
-                        borderRadius: 10,
-                      }}
-                      textStyle={{ color: '#4F46E5', fontWeight: '700' }}
                     />
 
                     <Button

@@ -26,7 +26,6 @@ interface AuthState {
   isAuthenticated: boolean;
   signIn: (email: string, password: string, fallbackOrgId?: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string, role?: string, orgId?: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -275,24 +274,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [syncProfileForAuthUser]
   );
 
-  // Google OAuth via Supabase
-  const handleSignInWithGoogle = useCallback(async () => {
-    const redirectTo = Platform.OS === 'web' && typeof window !== 'undefined'
-      ? `${window.location.origin}/sso-callback`
-      : undefined;
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo,
-      },
-    });
-
-    if (error) {
-      throw new Error(error.message || 'Google Sign-In failed');
-    }
-  }, []);
-
   // Sign Out via Supabase Auth
   const handleSignOut = useCallback(async () => {
     try {
@@ -320,7 +301,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!user,
         signIn: handleSignIn,
         signUp: handleSignUp,
-        signInWithGoogle: handleSignInWithGoogle,
         signOut: handleSignOut,
         refreshProfile,
       }}
