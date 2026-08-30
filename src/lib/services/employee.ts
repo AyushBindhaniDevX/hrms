@@ -256,18 +256,33 @@ export async function createEmployee(params: {
     orgId = defaultOrg?.id;
   }
 
-  // 1. Check if profile exists by email or generate new profile identifier
+  // 1. Check if user exists in Clerk or can be provisioned via Clerk Backend API
   let uid: string = '';
-  const { data: existingProf } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('email', params.email)
-    .maybeSingle();
+  try {
+    const { provisionClerkUser } = await import('./clerkAuth');
+    const clerkRes = await provisionClerkUser({
+      email: params.email,
+      name: params.full_name,
+      role: params.role || 'employee',
+      organizationId: orgId,
+    });
+    if (clerkRes?.id) {
+      uid = clerkRes.id;
+    }
+  } catch (cErr) {}
 
-  if (existingProf?.id) {
-    uid = existingProf.id;
-  } else {
-    uid = generateUuid();
+  if (!uid) {
+    const { data: existingProf } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', params.email)
+      .maybeSingle();
+
+    if (existingProf?.id) {
+      uid = existingProf.id;
+    } else {
+      uid = generateUuid();
+    }
   }
 
   const now = new Date().toISOString();

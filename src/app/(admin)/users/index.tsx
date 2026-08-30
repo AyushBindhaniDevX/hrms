@@ -571,6 +571,30 @@ export default function UserManagementScreen() {
     }
   };
 
+  const handleResendInvite = async (u: Profile) => {
+    try {
+      const { sendWelcomeEmail } = await import('@/lib/services/resend');
+      const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+      await sendWelcomeEmail(
+        u.email,
+        u.full_name || 'Team Member',
+        emp?.employee_code || 'EMP-ACCESS',
+        u.role === 'admin' ? 'Administrator' : u.role === 'hr' ? 'HR Manager' : 'Employee'
+      );
+      setInfoBanner({
+        type: 'success',
+        message: `Welcome & Clerk sign-in invitation sent to ${u.email} successfully.`,
+      });
+      setTimeout(() => setInfoBanner(null), 4000);
+    } catch (err: any) {
+      setInfoBanner({
+        type: 'error',
+        message: `Failed to dispatch invitation email: ${err.message}`,
+      });
+      setTimeout(() => setInfoBanner(null), 4000);
+    }
+  };
+
   const handleToggle = async () => {
     if (!toggleUser) return;
     setProcessing(true);
@@ -884,6 +908,17 @@ export default function UserManagementScreen() {
                         label={u.is_active ? 'ACTIVE' : 'INACTIVE'}
                         variant={u.is_active ? 'successLight' : 'dangerLight'}
                       />
+                      {u.id.startsWith('user_') ? (
+                        <Badge
+                          label="CLERK SYNCED"
+                          variant="purple"
+                        />
+                      ) : (
+                        <Badge
+                          label="PENDING CLERK LOGIN"
+                          variant="warning"
+                        />
+                      )}
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 2 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -918,6 +953,14 @@ export default function UserManagementScreen() {
                         <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Profile</Text>
                       </TouchableOpacity>
                     )}
+
+                    <TouchableOpacity
+                      onPress={() => handleResendInvite(u)}
+                      style={[styles.actionBtn, { borderColor: '#c7d2fe', borderWidth: 1, backgroundColor: '#eef2ff' }]}
+                    >
+                      <Mail size={14} color="#4f46e5" />
+                      <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Invite</Text>
+                    </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={() => openEditModal(u)}

@@ -178,18 +178,34 @@ export async function createSystemUser(params: {
     throw new Error(`User limit reached for ${pkg.toUpperCase()} package (${currentCount}/${limit} users). Please upgrade to add more.`);
   }
 
-  // 1. Check if profile exists by email or generate new profile identifier
+  // 1. Check if user exists in Clerk or can be provisioned via Clerk Backend API
   let uid: string = '';
-  const { data: existingProf } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('email', params.email)
-    .maybeSingle();
+  try {
+    const { provisionClerkUser } = await import('./clerkAuth');
+    const clerkRes = await provisionClerkUser({
+      email: params.email,
+      name: params.full_name,
+      role: params.role,
+      password: params.password,
+      organizationId: orgId,
+    });
+    if (clerkRes?.id) {
+      uid = clerkRes.id;
+    }
+  } catch (cErr) {}
 
-  if (existingProf?.id) {
-    uid = existingProf.id;
-  } else {
-    uid = generateUuid();
+  if (!uid) {
+    const { data: existingProf } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', params.email)
+      .maybeSingle();
+
+    if (existingProf?.id) {
+      uid = existingProf.id;
+    } else {
+      uid = generateUuid();
+    }
   }
 
   // 2. Insert Profile
@@ -309,6 +325,19 @@ export async function createSystemUser(params: {
       has_employee_record: !!params.create_employee_record,
     });
   } catch (e) {}
+
+  // Send Resend Welcome / Onboarding invitation email
+  try {
+    const { sendWelcomeEmail } = await import('./resend');
+    await sendWelcomeEmail(
+      params.email,
+      params.full_name || 'Team Member',
+      params.employee_code || 'EMP-ACCESS',
+      params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Employee'
+    );
+  } catch (mailErr) {
+    console.warn('Welcome notification dispatch warning:', mailErr);
+  }
 
   return uid;
 }

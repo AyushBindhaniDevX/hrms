@@ -129,8 +129,80 @@ export async function syncClerkOrgToDatabase(clerkOrg?: {
 }
 
 /**
+ * Provisions a user directly in Clerk Backend via Clerk REST API if CLERK_SECRET_KEY is configured.
+ * Endpoint: https://api.clerk.com/v1/users or https://api.clerk.com/v1/invitations
+ */
+export async function provisionClerkUser(params: {
+  email: string;
+  name?: string;
+  role?: string;
+  password?: string;
+  organizationId?: string;
+}): Promise<{ id?: string; error?: string }> {
+  const secretKey =
+    process.env.EXPO_PUBLIC_CLERK_SECRET_KEY ||
+    process.env.CLERK_SECRET_KEY ||
+    (typeof window !== 'undefined' ? (window as any)?.__CLERK_SECRET_KEY__ : undefined);
+
+  if (!secretKey) {
+    return { error: 'NO_SECRET_KEY' };
+  }
+
+  const nameParts = (params.name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || 'Team';
+  const lastName = nameParts.slice(1).join(' ') || 'Member';
+
+  try {
+    const payload: Record<string, any> = {
+      email_address: [params.email.toLowerCase().trim()],
+      first_name: firstName,
+      last_name: lastName,
+      public_metadata: {
+        role: params.role || 'employee',
+        organization_id: params.organizationId || CLERK_ORG_ID,
+      },
+    };
+
+    if (params.password && params.password.length >= 8) {
+      payload.password = params.password;
+      payload.skip_password_checks = true;
+    }
+
+    const response = await fetch('https://api.clerk.com/v1/users', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (response.ok && data?.id) {
+      return { id: data.id };
+    }
+
+    // If user already exists in Clerk, query for their ID
+    if (data?.errors?.[0]?.code === 'form_identifier_exists') {
+      const searchRes = await fetch(`https://api.clerk.com/v1/users?email_address=${encodeURIComponent(params.email.toLowerCase().trim())}`, {
+        headers: { 'Authorization': `Bearer ${secretKey}` },
+      });
+      const searchData = await searchRes.json();
+      if (Array.isArray(searchData) && searchData[0]?.id) {
+        return { id: searchData[0].id };
+      }
+    }
+
+    return { error: data?.errors?.[0]?.message || 'Clerk provisioning error' };
+  } catch (err: any) {
+    console.warn('Clerk provisioning attempt notice:', err);
+    return { error: err.message || 'Network error provisioning Clerk user' };
+  }
+}
+
+/**
  * Synchronizes an authenticated Clerk user into Supabase profiles and employees tables,
- * linking their profile to the matched Supabase organization slug.
+ * safely migrating any pre-existing database records created by Admin/HR.
  */
 export async function syncClerkUserToProfile(clerkUser: {
   id: string;
@@ -154,10 +226,12 @@ export async function syncClerkUserToProfile(clerkUser: {
   });
 
   const now = new Date().toISOString();
-  const email = clerkUser.email || `${clerkUser.id}@clerk.user`;
+  const email = (clerkUser.email || `${clerkUser.id}@clerk.user`).toLowerCase().trim();
 
   // 2. Find if profile exists by ID or email
   let existingProfile: any = null;
+  let placeholderProfileId: string | null = null;
+
   try {
     const { data: profById } = await supabase
       .from('profiles')
@@ -176,29 +250,27 @@ export async function syncClerkUserToProfile(clerkUser: {
 
       if (profByEmail) {
         existingProfile = profByEmail;
-        // Migrate placeholder profile FKs to new Clerk user ID
-        try {
-          await supabase
-            .from('employees')
-            .update({ profile_id: clerkUser.id })
-            .eq('profile_id', profByEmail.id);
-          await supabase.from('profiles').delete().eq('id', profByEmail.id);
-        } catch (mErr) {}
+        if (profByEmail.id !== clerkUser.id) {
+          placeholderProfileId = profByEmail.id;
+        }
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Profile lookup warning:', e);
+  }
 
-  // Determine target organization ID (priority: matched syncedOrg.id -> existingProfile.organization_id -> default)
+  // Determine target organization ID
   const targetOrgId = syncedOrg?.id || existingProfile?.organization_id || CLERK_ORG_ID;
 
-  // 3. Upsert profile in Supabase with matched organization_id
+  // 3. Upsert profile in Supabase under the Clerk User ID
   const profilePayload = {
     id: clerkUser.id,
     full_name: clerkUser.fullName || existingProfile?.full_name || 'Clerk User',
     email: email,
     avatar_url: clerkUser.imageUrl || existingProfile?.avatar_url || null,
-    role: role,
+    role: existingProfile?.role || role,
     organization_id: targetOrgId,
+    phone: existingProfile?.phone || null,
     is_active: true,
     last_active: now,
     created_at: existingProfile?.created_at || now,
@@ -218,10 +290,47 @@ export async function syncClerkUserToProfile(clerkUser: {
       savedProfile = data as Profile;
     }
   } catch (e) {
-    console.warn('Profile sync warning:', e);
+    console.warn('Profile upsert warning:', e);
   }
 
-  // 4. Ensure corresponding employee record exists in Supabase and belongs to targetOrgId
+  // 4. Safely migrate all child foreign keys if this user had a pre-created placeholder profile
+  if (placeholderProfileId && placeholderProfileId !== clerkUser.id) {
+    try {
+      // Move employee record to the new Clerk User ID
+      await supabase
+        .from('employees')
+        .update({ profile_id: clerkUser.id, updated_at: now })
+        .eq('profile_id', placeholderProfileId);
+
+      // Move department manager links
+      await supabase
+        .from('departments')
+        .update({ manager_id: clerkUser.id })
+        .eq('manager_id', placeholderProfileId);
+
+      // Move notifications
+      await supabase
+        .from('notifications')
+        .update({ profile_id: clerkUser.id })
+        .eq('profile_id', placeholderProfileId);
+
+      // Move audit logs
+      await supabase
+        .from('audit_logs')
+        .update({ user_id: clerkUser.id })
+        .eq('user_id', placeholderProfileId);
+
+      // Delete the old placeholder profile
+      await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', placeholderProfileId);
+    } catch (migErr) {
+      console.warn('Placeholder migration notice:', migErr);
+    }
+  }
+
+  // 5. Ensure corresponding employee record exists in Supabase and belongs to targetOrgId
   let savedEmployee: Employee | null = null;
   try {
     const { data: existingEmp } = await supabase
@@ -232,7 +341,6 @@ export async function syncClerkUserToProfile(clerkUser: {
 
     if (existingEmp) {
       savedEmployee = existingEmp as Employee;
-      // Update employee organization_id if mismatched with organization
       if (existingEmp.organization_id !== targetOrgId) {
         await supabase
           .from('employees')
@@ -241,7 +349,7 @@ export async function syncClerkUserToProfile(clerkUser: {
         savedEmployee.organization_id = targetOrgId;
       }
     } else {
-      // Auto-provision employee record for this user in the matched organization
+      // Auto-provision employee record if not created yet
       const empCode = 'EMP-' + Math.floor(1000 + Math.random() * 9000);
       const designation = role === 'admin' ? 'System Administrator' : role === 'hr' ? 'HR Specialist' : 'Software Engineer';
 
