@@ -22,7 +22,6 @@ import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingState } from '@/components/ui/States';
-import { SidebarLayout } from '@/components/layout/Sidebar';
 import {
   getGoals,
   createGoal,
@@ -550,9 +549,7 @@ export default function EmployeePerformanceScreen() {
   return (
     <>
       {isDesktop ? (
-        <SidebarLayout>
-          <View style={styles.desktopContainer}>{content}</View>
-        </SidebarLayout>
+        <View style={styles.desktopContainer}>{content}</View>
       ) : (
         <View style={[styles.mobileRoot, { backgroundColor: colors.background }]}>
           <View style={styles.mobileHeader}>
