@@ -117,7 +117,11 @@ export function FaceVerificationModal({
       setStatusMsg('Comparing facial geometry against enrolled template...');
       await new Promise((resolve) => setTimeout(resolve, 800));
 
-      const matchResult = await verifyFaceMatch(enrolledFaceUrl, snapshotBase64);
+      const matchResult = await verifyFaceMatch(enrolledFaceUrl, snapshotBase64, profileId);
+      if (!matchResult.isMatch) {
+        throw new Error(matchResult.message || 'Face did not match the registered employee profile.');
+      }
+
       setMatchScore(matchResult.confidence);
       setVerificationSuccess(true);
       setStatusMsg(

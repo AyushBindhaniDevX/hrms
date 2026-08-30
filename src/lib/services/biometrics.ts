@@ -400,34 +400,23 @@ export async function enrollEmployeeFace(
 }
 
 /**
- * Compares live face capture with registered reference face
+ * Compares live face capture with registered reference face using AI Face Recognition
  */
 export async function verifyFaceMatch(
   enrolledFaceUrl?: string | null,
-  liveFaceBase64?: string | null
+  liveFaceBase64?: string | null,
+  profileId?: string
 ): Promise<FaceMatchResult> {
-  if (!liveFaceBase64) {
-    return {
-      isMatch: false,
-      confidence: 0,
-      message: 'No live face capture detected. Please position your face.',
-    };
-  }
-
-  if (!enrolledFaceUrl) {
-    return {
-      isMatch: true,
-      confidence: 100,
-      message: 'Face registered successfully as initial biometric template.',
-    };
-  }
-
-  const baseConfidence = 97.5 + Math.random() * 2.3;
-  const confidence = Math.round(baseConfidence * 10) / 10;
+  const { compareFacesForClockIn } = await import('./faceRecognition');
+  const result = await compareFacesForClockIn(
+    profileId || 'user_id',
+    liveFaceBase64 || '',
+    enrolledFaceUrl
+  );
 
   return {
-    isMatch: true,
-    confidence,
-    message: `Biometric Face Verified (${confidence}% Match)`,
+    isMatch: result.isMatch,
+    confidence: result.confidence,
+    message: result.message,
   };
 }
