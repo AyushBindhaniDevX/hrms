@@ -79,9 +79,9 @@ CREATE TABLE IF NOT EXISTS public.departments (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3.4 Profiles (Linked 1:1 with Supabase Auth Users)
+-- 3.4 Profiles (Multi-tenant user profiles)
 CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY,
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   full_name TEXT NOT NULL DEFAULT 'HRMS User',
   email TEXT NOT NULL,

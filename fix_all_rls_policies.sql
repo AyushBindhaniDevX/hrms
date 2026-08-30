@@ -15,6 +15,9 @@ ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS default_shift_id UUID;
 ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS manager_id UUID;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS biometric_enrolled BOOLEAN DEFAULT FALSE;
 
+-- Remove blocking foreign key constraint to auth.users if present (enables multi-auth / Clerk / pre-registration onboarding)
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;
+
 -- Notify PostgREST to reload schema cache
 NOTIFY pgrst, 'reload schema';
 

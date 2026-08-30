@@ -216,6 +216,9 @@ export async function createSystemUser(params: {
 
   if (profError) {
     console.error('Failed to create profile row:', profError);
+    if (profError.message?.includes('profiles_id_fkey')) {
+      throw new Error("Database Foreign Key constraint 'profiles_id_fkey' is preventing profile creation. Please run 'ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;' in Supabase SQL editor.");
+    }
     throw new Error(`Failed to create profile: ${profError.message}`);
   }
 
