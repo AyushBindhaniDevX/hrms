@@ -1,6 +1,11 @@
-import { supabase } from './supabase';
+import { trackUserActivity, logUserLogin, logUserLogout } from './services/userActivity';
+import { syncClerkUserToProfile, mapClerkRoleToUserRole, syncClerkOrgToDatabase } from './services/clerkAuth';
 
-export async function resetPassword(email: string) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
-  if (error) throw error;
-}
+export {
+  trackUserActivity,
+  logUserLogin,
+  logUserLogout,
+  syncClerkUserToProfile,
+  mapClerkRoleToUserRole,
+  syncClerkOrgToDatabase,
+};

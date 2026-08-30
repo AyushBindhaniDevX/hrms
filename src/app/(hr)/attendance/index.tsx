@@ -1,6 +1,8 @@
 import { HR_NAV } from '@/constants/navigation';
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -12,10 +14,10 @@ import { getOrgAttendance } from '@/lib/services/attendance';
 import { formatTime, formatMinutes } from '@/utils/format';
 import type { Attendance } from '@/types';
 
-
-
 export default function HRAttendanceScreen() {
   const colors = useTheme();
+  const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const [date, setDate] = useState<Date>(new Date());
   const [records, setRecords] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,11 +25,12 @@ export default function HRAttendanceScreen() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const data = await getOrgAttendance(date.toISOString().split('T')[0]);
+      const orgId = tenantOrg?.id || profile?.organization_id;
+      const data = await getOrgAttendance(date.toISOString().split('T')[0], orgId);
       setRecords(data);
       setLoading(false);
     })();
-  }, [date]);
+  }, [date, profile, tenantOrg]);
 
   const statusVariant = (s: string) => {
     const map: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {

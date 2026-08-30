@@ -1,19 +1,43 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Switch, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useBiometrics } from '@/hooks/useBiometrics';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { Lock, Bell, Monitor, Link2, Smartphone, XCircle, AlertCircle, CheckCircle2 } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
+import { enrollEmployeeFace } from '@/lib/services/biometrics';
+import {
+  Lock,
+  Bell,
+  Monitor,
+  Link2,
+  AlertCircle,
+  CheckCircle2,
+  Fingerprint,
+  ScanFace,
+  ShieldCheck,
+  UserCheck,
+} from 'lucide-react-native';
+import { trackUserActivity } from '@/lib/services/userActivity';
 
 export default function SettingsScreen() {
   const colors = useTheme();
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, clerkUser, refreshProfile } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+
+  const {
+    hasHardware,
+    isEnrolled,
+    biometricType,
+    isEnabled: isBiometricEnabled,
+    registerBiometrics,
+    disableBiometrics,
+    isLoading: isBiometricsLoading,
+  } = useBiometrics();
 
   const [activeTab, setActiveTab] = useState('security');
   const [pwModalOpen, setPwModalOpen] = useState(false);
@@ -23,6 +47,15 @@ export default function SettingsScreen() {
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
+
+  // Biometric Enable Modal
+  const [bioModalOpen, setBioModalOpen] = useState(false);
+  const [bioPassword, setBioPassword] = useState('');
+  const [bioError, setBioError] = useState('');
+  const [bioLoading, setBioLoading] = useState(false);
+
+  // Attendance Face Enrollment Modal
+  const [faceEnrollModalOpen, setFaceEnrollModalOpen] = useState(false);
 
   const tabs = [
     { id: 'security', label: 'Account Security', icon: Lock },
@@ -52,14 +85,73 @@ export default function SettingsScreen() {
     setPwError('');
     setSavingPw(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPw });
-      if (error) throw error;
+      if (clerkUser?.updatePassword) {
+        await clerkUser.updatePassword({
+          currentPassword: currentPw || undefined,
+          newPassword: newPw,
+        });
+      } else if (clerkUser?.createPassword) {
+        await clerkUser.createPassword({
+          newPassword: newPw,
+        });
+      } else {
+        throw new Error('Password service is unavailable for this account.');
+      }
+
+      if (profile?.id) {
+        await trackUserActivity({
+          userId: profile.id,
+          organizationId: profile.organization_id,
+          action: 'USER_PASSWORD_CHANGE',
+          entityType: 'auth',
+          entityId: profile.id,
+          description: `User ${profile.full_name} updated account password`,
+          actorName: profile.full_name,
+          actorEmail: profile.email,
+          actorRole: profile.role,
+        });
+      }
+
       setPwSuccess(true);
       setTimeout(() => setPwModalOpen(false), 2000);
     } catch (err: any) {
-      setPwError(err.message || 'Failed to update password.');
+      console.error('Password change error:', err);
+      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Failed to update password.';
+      setPwError(msg);
     } finally {
       setSavingPw(false);
+    }
+  };
+
+  const handleToggleBiometrics = async (nextValue: boolean) => {
+    if (!nextValue) {
+      await disableBiometrics();
+    } else {
+      setBioPassword('');
+      setBioError('');
+      setBioModalOpen(true);
+    }
+  };
+
+  const handleConfirmEnableBiometrics = async () => {
+    if (!bioPassword) {
+      setBioError('Please enter your account password to authorize biometric vault.');
+      return;
+    }
+    setBioError('');
+    setBioLoading(true);
+    try {
+      const email = profile?.email || clerkUser?.primaryEmailAddress?.emailAddress || '';
+      const result = await registerBiometrics(email, bioPassword);
+      if (result.success) {
+        setBioModalOpen(false);
+      } else {
+        setBioError(result.error || 'Failed to enable biometrics.');
+      }
+    } catch (err: any) {
+      setBioError(err?.message || 'Failed to enable biometrics.');
+    } finally {
+      setBioLoading(false);
     }
   };
 
@@ -69,6 +161,82 @@ export default function SettingsScreen() {
         <View style={[styles.mainArea, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
           <View style={[styles.sectionHeader, { borderBottomColor: '#f1f5f9' }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Account Security</Text>
+          </View>
+
+          {/* Biometric Quick Login */}
+          <View style={[styles.block, { borderBottomColor: '#f1f5f9' }]}>
+            <View style={{ flex: 1, paddingRight: 24 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                {biometricType === 'Face ID' ? (
+                  <ScanFace size={20} color={colors.primary} />
+                ) : (
+                  <Fingerprint size={20} color={colors.primary} />
+                )}
+                <Text style={[styles.blockTitle, { color: colors.text, marginBottom: 0 }]}>
+                  {biometricType === 'None' ? 'Biometric Login' : `${biometricType} Quick Login`}
+                </Text>
+                {isBiometricEnabled ? (
+                  <Badge label="Enabled" variant="successLight" />
+                ) : hasHardware ? (
+                  <Badge label="Available" variant="accentLight" />
+                ) : (
+                  <Badge label="Unsupported" variant="neutral" />
+                )}
+              </View>
+              <Text style={[styles.blockDesc, { color: colors.textSecondary }]}>
+                {hasHardware
+                  ? `Quickly and securely authenticate into your Clerk account using ${biometricType || 'device biometrics'}.`
+                  : 'Biometric hardware is not detected on this device.'}
+              </Text>
+            </View>
+
+            {isBiometricsLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : hasHardware ? (
+              <Switch
+                value={isBiometricEnabled}
+                onValueChange={handleToggleBiometrics}
+                trackColor={{ false: '#cbd5e1', true: colors.primary }}
+                thumbColor="#ffffff"
+              />
+            ) : (
+              <Button
+                title="Not Supported"
+                disabled
+                onPress={() => {}}
+                size="sm"
+                variant="outline"
+                style={{ opacity: 0.6 }}
+              />
+            )}
+          </View>
+
+          {/* Attendance Face Biometric Registration */}
+          <View style={[styles.block, { borderBottomColor: '#f1f5f9' }]}>
+            <View style={{ flex: 1, paddingRight: 24 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <UserCheck size={20} color={colors.primary} />
+                <Text style={[styles.blockTitle, { color: colors.text, marginBottom: 0 }]}>
+                  Attendance Face Template
+                </Text>
+                {profile?.biometric_enrolled || profile?.avatar_url ? (
+                  <Badge label="Registered" variant="successLight" />
+                ) : (
+                  <Badge label="Not Registered" variant="warningLight" />
+                )}
+              </View>
+              <Text style={[styles.blockDesc, { color: colors.textSecondary }]}>
+                Enrolled reference face photo used by camera & verification algorithms during Attendance Clock-In.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.outlineBtn, { borderColor: colors.primary }]}
+              onPress={() => setFaceEnrollModalOpen(true)}
+            >
+              <Text style={[styles.outlineBtnText, { color: colors.primary }]}>
+                {profile?.biometric_enrolled || profile?.avatar_url ? 'Update Face' : 'Register Face'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Password */}
@@ -89,10 +257,10 @@ export default function SettingsScreen() {
             <View style={{ flex: 1, paddingRight: 24 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <Text style={[styles.blockTitle, { color: colors.text }]}>Two-Factor Authentication (2FA)</Text>
-                <Badge label="Coming Soon" variant="warningLight" />
+                <Badge label="Clerk Security" variant="accentLight" />
               </View>
               <Text style={[styles.blockDesc, { color: colors.textSecondary }]}>
-                Add an extra layer of security. 2FA via SMS and authenticator apps will be available soon.
+                Secured by Clerk. Manage 2FA verification codes, authenticator apps, and passkeys directly from your user security portal.
               </Text>
             </View>
           </View>
@@ -113,7 +281,7 @@ export default function SettingsScreen() {
                   )}
                   {profile?.session_id && (
                     <Text style={[styles.sessionDesc, { color: colors.textSecondary, fontSize: 11, marginTop: 2 }]}>
-                      ID: {profile.session_id}
+                      Session ID: {profile.session_id}
                     </Text>
                   )}
                 </View>
@@ -177,6 +345,88 @@ export default function SettingsScreen() {
         )}
       </Modal>
 
+      {/* Enable Biometrics Confirmation Modal */}
+      <Modal
+        visible={bioModalOpen}
+        onClose={() => setBioModalOpen(false)}
+        title={`Register ${biometricType || 'Biometric'} Login`}
+      >
+        <View style={{ gap: 14 }}>
+          <View style={{ alignItems: 'center', marginVertical: 8 }}>
+            <View
+              style={{
+                width: 60,
+                height: 60,
+                borderRadius: 30,
+                backgroundColor: '#e6f4f1',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 8,
+              }}
+            >
+              {biometricType === 'Face ID' ? (
+                <ScanFace size={32} color="#0D7377" />
+              ) : (
+                <Fingerprint size={32} color="#0D7377" />
+              )}
+            </View>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 }}>
+              Verify your password and device biometric scanner to authorize 1-tap {biometricType || 'biometric'} quick login.
+            </Text>
+          </View>
+
+          {bioError ? (
+            <View style={[styles.alertBox, { backgroundColor: colors.dangerLight }]}>
+              <AlertCircle size={16} color={colors.danger} />
+              <Text style={{ color: colors.danger, flex: 1, fontSize: 14 }}>{bioError}</Text>
+            </View>
+          ) : null}
+
+          <Input
+            label="Account Password"
+            value={bioPassword}
+            onChangeText={setBioPassword}
+            secureTextEntry
+            placeholder="Enter your current password"
+          />
+
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+            <Button
+              title="Cancel"
+              onPress={() => setBioModalOpen(false)}
+              variant="outline"
+              style={{ flex: 1, borderRadius: 8 }}
+            />
+            <Button
+              title="Verify & Register"
+              onPress={handleConfirmEnableBiometrics}
+              loading={bioLoading}
+              style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8 }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Attendance Face Enrollment Modal */}
+      <FaceVerificationModal
+        visible={faceEnrollModalOpen}
+        onClose={() => setFaceEnrollModalOpen(false)}
+        onVerified={async (faceSnapshot) => {
+          if (faceSnapshot && profile?.id) {
+            await enrollEmployeeFace(profile.id, faceSnapshot);
+            if (refreshProfile) {
+              await refreshProfile();
+            }
+          }
+          setFaceEnrollModalOpen(false);
+        }}
+        employeeName={profile?.full_name || 'Employee'}
+        officeName="Workplace"
+        isClockingIn={false}
+        enrolledFaceUrl={profile?.avatar_url}
+        profileId={profile?.id}
+      />
+
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
       </View>
@@ -233,7 +483,7 @@ const styles = StyleSheet.create({
   block: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     padding: 24,
     borderBottomWidth: 1,
   },

@@ -145,8 +145,42 @@ export default function PayslipDetailScreen() {
           <View>
             <Text style={styles.netPayLabel}>Net Take-Home Pay</Text>
             <Text style={styles.netPayAmount}>{formatCurrency(p.net_salary)}</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 4 }}>
+              {monthName} {year} · {payslip.payslip_number}
+            </Text>
           </View>
           <CheckCircle2 size={32} color="#86f2e4" />
+        </View>
+
+        {/* Employee Info Card */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+          <Text style={[styles.cardHeading, { color: colors.text }]}>Employee Details</Text>
+          <View style={styles.infoGrid}>
+            <View style={styles.infoCell}>
+              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Name</Text>
+              <Text style={[styles.infoCellVal, { color: colors.text }]}>{employee?.profile?.full_name || (p.employee as any)?.profile?.full_name || '—'}</Text>
+            </View>
+            <View style={styles.infoCell}>
+              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Designation</Text>
+              <Text style={[styles.infoCellVal, { color: colors.text }]}>{employee?.designation || '—'}</Text>
+            </View>
+            <View style={styles.infoCell}>
+              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Department</Text>
+              <Text style={[styles.infoCellVal, { color: colors.text }]}>{employee?.department?.name || '—'}</Text>
+            </View>
+            <View style={styles.infoCell}>
+              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>PF / UAN No.</Text>
+              <Text style={[styles.infoCellVal, { color: colors.text }]}>{(employee as any)?.tax_config?.pf_number || 'Not Assigned'}</Text>
+            </View>
+            <View style={styles.infoCell}>
+              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Tax Regime</Text>
+              <Text style={[styles.infoCellVal, { color: colors.text }]}>{((employee as any)?.tax_config?.tax_regime || 'new').toUpperCase()} REGIME</Text>
+            </View>
+            <View style={styles.infoCell}>
+              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Pay Period</Text>
+              <Text style={[styles.infoCellVal, { color: colors.text }]}>{monthName} {year}</Text>
+            </View>
+          </View>
         </View>
 
         {/* Earnings Breakdown Card */}
@@ -268,4 +302,9 @@ const styles = StyleSheet.create({
   totalRow: { borderTopWidth: 1, paddingTop: 10, marginTop: 4 },
   totalLabel: { fontSize: 14, fontWeight: '800' },
   totalVal: { fontSize: 15, fontWeight: '800' },
+
+  infoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
+  infoCell: { minWidth: '45%', flex: 1 },
+  infoCellLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 },
+  infoCellVal: { fontSize: 13, fontWeight: '700' },
 });

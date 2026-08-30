@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -21,6 +22,7 @@ import type { PayrollPeriod } from '@/types';
 export default function PayrollScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,14 +36,15 @@ export default function PayrollScreen() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getPayrollPeriods();
+      const orgId = tenantOrg?.id || profile?.organization_id;
+      const data = await getPayrollPeriods(orgId);
       setPeriods(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load payroll periods. If you are using an adblocker (like Brave Shields), please disable it for this site.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile, tenantOrg]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -49,7 +52,8 @@ export default function PayrollScreen() {
     if (!newMonth) return;
     setCreating(true);
     try {
-      await createPayrollPeriod(parseInt(newMonth), parseInt(newYear), profile?.organization_id || '');
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
+      await createPayrollPeriod(parseInt(newMonth), parseInt(newYear), orgId);
       setShowCreate(false);
       await load();
     } catch {}

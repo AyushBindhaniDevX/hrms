@@ -607,10 +607,7 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 -- Allow anonymous users to read organizations (e.g. for login page org selection)
-DROP POLICY IF EXISTS "Allow anon select on organizations" ON public.organizations;
-CREATE POLICY "Allow anon select on organizations" ON public.organizations FOR SELECT TO anon USING (true);
-
--- Standard Public/Authenticated Access Policies for seamless operations
+-- Standard Public/Authenticated Access Policies for seamless operations (Clerk Auth Integration)
 DO $$
 DECLARE
   t TEXT;
@@ -619,17 +616,17 @@ BEGIN
     SELECT table_name FROM information_schema.tables 
     WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
   LOOP
-    EXECUTE format('DROP POLICY IF EXISTS "Allow authenticated select on %I" ON public.%I', t, t);
-    EXECUTE format('CREATE POLICY "Allow authenticated select on %I" ON public.%I FOR SELECT TO authenticated USING (true)', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "Allow all select on %I" ON public.%I', t, t);
+    EXECUTE format('CREATE POLICY "Allow all select on %I" ON public.%I FOR SELECT TO public USING (true)', t, t);
 
-    EXECUTE format('DROP POLICY IF EXISTS "Allow authenticated insert on %I" ON public.%I', t, t);
-    EXECUTE format('CREATE POLICY "Allow authenticated insert on %I" ON public.%I FOR INSERT TO authenticated WITH CHECK (true)', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "Allow all insert on %I" ON public.%I', t, t);
+    EXECUTE format('CREATE POLICY "Allow all insert on %I" ON public.%I FOR INSERT TO public WITH CHECK (true)', t, t);
 
-    EXECUTE format('DROP POLICY IF EXISTS "Allow authenticated update on %I" ON public.%I', t, t);
-    EXECUTE format('CREATE POLICY "Allow authenticated update on %I" ON public.%I FOR UPDATE TO authenticated USING (true)', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "Allow all update on %I" ON public.%I', t, t);
+    EXECUTE format('CREATE POLICY "Allow all update on %I" ON public.%I FOR UPDATE TO public USING (true) WITH CHECK (true)', t, t);
 
-    EXECUTE format('DROP POLICY IF EXISTS "Allow authenticated delete on %I" ON public.%I', t, t);
-    EXECUTE format('CREATE POLICY "Allow authenticated delete on %I" ON public.%I FOR DELETE TO authenticated USING (true)', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "Allow all delete on %I" ON public.%I', t, t);
+    EXECUTE format('CREATE POLICY "Allow all delete on %I" ON public.%I FOR DELETE TO public USING (true)', t, t);
   END LOOP;
 END $$;
 

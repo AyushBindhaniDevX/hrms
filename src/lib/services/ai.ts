@@ -65,3 +65,18 @@ export async function createChatSession(profile: Profile, employeeContext?: any)
 
   return chat;
 }
+
+export async function getAIResponse(prompt: string): Promise<{ answer: string }> {
+  if (!API_KEY) {
+    return { answer: "AI service is currently not configured with an API key." };
+  }
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return { answer: response.text() };
+  } catch (error) {
+    console.error('getAIResponse error:', error);
+    return { answer: "I'm having trouble processing your request right now." };
+  }
+}

@@ -1,17 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions, Linking, Modal } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { LoadingState } from '@/components/ui/States';
 import { Badge } from '@/components/ui/Badge';
 import { getDirectory, getDepartments } from '@/lib/services/employee';
 import type { Employee, Department } from '@/types';
-import { Mail, MessageSquare, Search, Users } from 'lucide-react-native';
+import { Mail, MessageSquare, Search, Users, Phone, Building, Briefcase, MapPin, Calendar, X } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 export default function DirectoryScreen() {
   const colors = useTheme();
+  const { profile } = useAuth();
+  const { organization } = useTenant();
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+
+  const orgId = organization?.id || profile?.organization_id;
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -20,26 +28,29 @@ export default function DirectoryScreen() {
   const [searchInput, setSearchInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null);
 
   useEffect(() => {
     (async () => {
-      const depts = await getDepartments();
+      const [depts, emps] = await Promise.all([
+        getDepartments(orgId),
+        getDirectory(undefined, undefined, orgId),
+      ]);
       setDepartments(depts);
-      const emps = await getDirectory();
       setEmployees(emps);
       setLoading(false);
     })();
-  }, []);
+  }, [orgId]);
 
   const runSearch = useCallback(async (term: string, dept: string | null) => {
     setSearching(true);
     try {
-      const emps = await getDirectory(term || undefined, dept || undefined);
+      const emps = await getDirectory(term || undefined, dept || undefined, orgId);
       setEmployees(emps);
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [orgId]);
 
   // Debounce search
   useEffect(() => {
@@ -48,11 +59,25 @@ export default function DirectoryScreen() {
       runSearch(searchInput, deptFilter);
     }, 350);
     return () => clearTimeout(t);
-  }, [searchInput, deptFilter]);
+  }, [searchInput, deptFilter, runSearch]);
+
+  const handleEmail = (email?: string) => {
+    if (email) {
+      Linking.openURL(`mailto:${email}`).catch((err) => console.warn('Could not open mail client:', err));
+    }
+  };
+
+  const handlePhone = (phone?: string) => {
+    if (phone) {
+      Linking.openURL(`tel:${phone}`).catch((err) => console.warn('Could not open dialer:', err));
+    }
+  };
+
+  const handleChat = (emp: Employee) => {
+    router.push('/(employee)/call-ovi' as never);
+  };
 
   if (loading) return <LoadingState />;
-
-  const numCols = isDesktop ? 4 : 2;
 
   return (
     <ScrollView
@@ -65,7 +90,7 @@ export default function DirectoryScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { color: colors.text }]}>Company Directory</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Find and connect with {employees.length} colleagues across the organization.
+              Find and connect with {employees.length} colleagues across {organization?.name || 'the organization'}.
             </Text>
           </View>
         </View>
@@ -77,10 +102,10 @@ export default function DirectoryScreen() {
 
       {/* Search + Filters */}
       <View style={styles.controls}>
-        <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+        <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Search size={16} color={colors.textSecondary} />
           <TextInput
-            placeholder="Search by name, role, or code..."
+            placeholder="Search by name, role, department, or code..."
             placeholderTextColor={colors.textSecondary}
             value={searchInput}
             onChangeText={setSearchInput}
@@ -93,7 +118,7 @@ export default function DirectoryScreen() {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
           <TouchableOpacity
-            style={[styles.filterPill, !deptFilter ? { backgroundColor: colors.primary } : { backgroundColor: '#f1f5f9' }]}
+            style={[styles.filterPill, !deptFilter ? { backgroundColor: colors.primary } : { backgroundColor: colors.backgroundElement }]}
             onPress={() => { setDeptFilter(null); runSearch(searchInput, null); }}
           >
             <Text style={[styles.filterText, { color: !deptFilter ? '#FFF' : colors.text }]}>All</Text>
@@ -101,7 +126,7 @@ export default function DirectoryScreen() {
           {departments.map(d => (
             <TouchableOpacity
               key={d.id}
-              style={[styles.filterPill, deptFilter === d.id ? { backgroundColor: colors.primary } : { backgroundColor: '#f1f5f9' }]}
+              style={[styles.filterPill, deptFilter === d.id ? { backgroundColor: colors.primary } : { backgroundColor: colors.backgroundElement }]}
               onPress={() => { setDeptFilter(d.id); runSearch(searchInput, d.id); }}
             >
               <Text style={[styles.filterText, { color: deptFilter === d.id ? '#FFF' : colors.text }]}>{d.name}</Text>
@@ -112,9 +137,9 @@ export default function DirectoryScreen() {
 
       {/* Grid */}
       {employees.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+        <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Users size={40} color={colors.textSecondary} />
-          <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 16, marginTop: 12 }}>No employees found</Text>
+          <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16, marginTop: 12 }}>No employees found</Text>
           <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 4 }}>
             {search ? `No results for "${search}"` : 'No active employees in this department'}
           </Text>
@@ -122,27 +147,28 @@ export default function DirectoryScreen() {
       ) : (
         <View style={styles.grid}>
           {employees.map(emp => (
-            <View
+            <TouchableOpacity
               key={emp.id}
+              activeOpacity={0.85}
+              onPress={() => setSelectedEmp(emp)}
               style={[
                 styles.card,
-                { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
-                // Responsive width via minWidth trick
+                { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
             >
               <View style={styles.avatarContainer}>
-                <Avatar name={emp.profile?.full_name || ''} url={emp.profile?.avatar_url} size={72} />
+                <Avatar name={emp.profile?.full_name || emp.employee_code || ''} url={emp.profile?.avatar_url} size={72} />
                 <View style={[styles.statusDot, { backgroundColor: '#1E8E3E', borderColor: colors.surface }]} />
               </View>
 
               <View style={styles.infoContainer}>
                 <Text style={[styles.empName, { color: colors.text }]} numberOfLines={1}>
-                  {emp.profile?.full_name}
+                  {emp.profile?.full_name || 'Team Member'}
                 </Text>
                 <Text style={[styles.empRole, { color: colors.textSecondary }]} numberOfLines={1}>
                   {emp.designation || 'Employee'}
                 </Text>
-                <View style={[styles.deptPill, { backgroundColor: '#eaf1ff' }]}>
+                <View style={[styles.deptPill, { backgroundColor: colors.primary + '15' }]}>
                   <Text style={[styles.deptText, { color: colors.primary }]} numberOfLines={1}>
                     {emp.department?.name || 'General'}
                   </Text>
@@ -158,22 +184,103 @@ export default function DirectoryScreen() {
               <View style={styles.actionsContainer}>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.actionBtnOutline, { borderColor: colors.primary }]}
-                  onPress={() => { /* mailto */ }}
+                  onPress={() => handleEmail(emp.profile?.email)}
                 >
                   <Mail size={14} color={colors.primary} />
                   <Text style={[styles.actionBtnText, { color: colors.primary }]}>Email</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.actionBtnSolid, { backgroundColor: colors.primary }]}
+                  onPress={() => handleChat(emp)}
                 >
                   <MessageSquare size={14} color="#FFF" />
                   <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Chat</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       )}
+
+      {/* Member Details Modal */}
+      <Modal
+        visible={!!selectedEmp}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedEmp(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Colleague Profile</Text>
+              <TouchableOpacity onPress={() => setSelectedEmp(null)} style={styles.closeBtn}>
+                <X size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedEmp && (
+              <View style={{ gap: 16 }}>
+                <View style={{ alignItems: 'center', gap: 8, paddingVertical: 12 }}>
+                  <Avatar name={selectedEmp.profile?.full_name || ''} url={selectedEmp.profile?.avatar_url} size={88} />
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>{selectedEmp.profile?.full_name}</Text>
+                  <Text style={{ fontSize: 14, color: colors.textSecondary }}>{selectedEmp.designation || 'Employee'}</Text>
+                  <Badge label={selectedEmp.employee_code || 'EMP'} variant="neutral" />
+                </View>
+
+                <View style={{ gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 }}>
+                  <View style={styles.detailRow}>
+                    <Building size={16} color={colors.textSecondary} />
+                    <Text style={{ color: colors.textSecondary, fontSize: 13, width: 90 }}>Department:</Text>
+                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flex: 1 }}>{selectedEmp.department?.name || 'General'}</Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Mail size={16} color={colors.textSecondary} />
+                    <Text style={{ color: colors.textSecondary, fontSize: 13, width: 90 }}>Email:</Text>
+                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flex: 1 }}>{selectedEmp.profile?.email || 'N/A'}</Text>
+                  </View>
+
+                  {selectedEmp.profile?.phone && (
+                    <View style={styles.detailRow}>
+                      <Phone size={16} color={colors.textSecondary} />
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, width: 90 }}>Phone:</Text>
+                      <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flex: 1 }}>{selectedEmp.profile.phone}</Text>
+                    </View>
+                  )}
+
+                  {selectedEmp.workplace?.name && (
+                    <View style={styles.detailRow}>
+                      <MapPin size={16} color={colors.textSecondary} />
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, width: 90 }}>Workplace:</Text>
+                      <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flex: 1 }}>{selectedEmp.workplace.name}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnOutline, { borderColor: colors.primary, flex: 1 }]}
+                    onPress={() => handleEmail(selectedEmp.profile?.email || undefined)}
+                  >
+                    <Mail size={16} color={colors.primary} />
+                    <Text style={[styles.actionBtnText, { color: colors.primary }]}>Send Email</Text>
+                  </TouchableOpacity>
+
+                  {selectedEmp.profile?.phone && (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionBtnSolid, { backgroundColor: colors.primary, flex: 1 }]}
+                      onPress={() => handlePhone(selectedEmp.profile?.phone || undefined)}
+                    >
+                      <Phone size={16} color="#FFF" />
+                      <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Call</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -273,4 +380,42 @@ const styles = StyleSheet.create({
   actionBtnOutline: { borderWidth: 1 },
   actionBtnSolid: {},
   actionBtnText: { fontSize: 13, fontWeight: '600' },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 440,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
 });

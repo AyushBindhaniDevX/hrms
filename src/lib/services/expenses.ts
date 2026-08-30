@@ -6,11 +6,15 @@
 import { supabase } from '@/lib/supabase';
 import { ExpenseClaim, ExpenseStatus, ExpenseCategory } from '@/types/database';
 
-export async function getExpenses(employeeId?: string): Promise<ExpenseClaim[]> {
-  let query = supabase.from('expenses').select('*');
+export async function getExpenses(employeeId?: string, organizationId?: string): Promise<ExpenseClaim[]> {
+  let query = supabase.from('expenses').select('*, employee:employees(*, profile:profiles(*))');
 
   if (employeeId) {
     query = query.eq('employee_id', employeeId);
+  }
+
+  if (organizationId) {
+    query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
   }
 
   const { data, error } = await query.order('created_at', { ascending: false });

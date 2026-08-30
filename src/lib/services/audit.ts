@@ -6,21 +6,21 @@ export async function createAuditLog(
   action: string,
   entityType: string,
   entityId?: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  actorUserId?: string
 ): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
     let actorName = 'System / Administrator';
-    let actorEmail = user?.email || 'admin@subedge.com';
+    let actorEmail = 'admin@subedge.com';
     let actorRole = 'admin';
+    let actorOrgId: string | null = null;
+    let userId: string | null = actorUserId || null;
 
-    let actorOrgId = '00000000-0000-0000-0000-000000000001';
-
-    if (user?.id) {
+    if (userId) {
       const { data: prof } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', userId)
         .maybeSingle();
 
       if (prof) {
@@ -29,6 +29,11 @@ export async function createAuditLog(
         actorRole = prof.role || actorRole;
         if (prof.organization_id) actorOrgId = prof.organization_id;
       }
+    }
+
+    if (!actorOrgId) {
+      const { data: org } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
+      if (org?.id) actorOrgId = org.id;
     }
 
     const logData = {
@@ -41,7 +46,7 @@ export async function createAuditLog(
         platform: Platform.OS,
         timestamp_ms: Date.now(),
       },
-      user_id: user?.id || null,
+      user_id: userId,
       user: {
         full_name: actorName,
         email: actorEmail,

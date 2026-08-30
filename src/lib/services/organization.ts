@@ -1,5 +1,13 @@
-import { supabase, isolatedAuthClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { Organization, Profile, Department, Workplace } from '@/types';
+
+function generateUuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 function cleanUuid(val?: string | null): string | null {
   if (!val || typeof val !== 'string') return null;
@@ -29,20 +37,39 @@ export async function updateOrganization(orgId: string, updates: Partial<Organiz
 }
 
 export async function getOrgUsers(organizationId?: string): Promise<Profile[]> {
-  let query = supabase
-    .from('profiles')
-    .select('*')
-    .order('role', { ascending: true })
-    .order('full_name', { ascending: true });
+  try {
+    let query = supabase
+      .from('profiles')
+      .select('*, employee:employees(*, department:departments!employees_department_id_fkey(*), workplace:workplaces(*))')
+      .order('role', { ascending: true })
+      .order('full_name', { ascending: true });
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId);
+    if (organizationId) {
+      query = query.eq('organization_id', organizationId);
+    }
+
+    const { data, error } = await query;
+
+    if (!error && data) {
+      return data as Profile[];
+    }
+
+    let fallbackQuery = supabase
+      .from('profiles')
+      .select('*')
+      .order('role', { ascending: true })
+      .order('full_name', { ascending: true });
+
+    if (organizationId) {
+      fallbackQuery = fallbackQuery.eq('organization_id', organizationId);
+    }
+
+    const { data: fallbackData } = await fallbackQuery;
+    return (fallbackData || []) as Profile[];
+  } catch (err) {
+    console.error('getOrgUsers error:', err);
+    return [];
   }
-
-  const { data, error } = await query;
-
-  if (error || !data) return [];
-  return data as Profile[];
 }
 
 export async function updateUserRole(userId: string, role: string): Promise<void> {
@@ -122,13 +149,26 @@ export async function createSystemUser(params: {
   joining_date?: string;
   workplace_id?: string;
   basic_salary?: number;
+  employment_type?: 'full_time' | 'part_time' | 'contract' | 'intern' | string;
   default_shift_id?: string;
   manager_id?: string;
+  epf_percentage?: number | string;
+  socso_percentage?: number | string;
+  tax_percentage?: number | string;
+  tax_regime?: string;
+  hra_percentage?: number | string;
+  transport_allowance?: number;
+  other_allowances?: number;
+  tax_config?: Record<string, any>;
 }): Promise<string> {
   // 0. Check Organization User Limit
-  const orgId = params.organization_id || '00000000-0000-0000-0000-000000000001';
-  const org = await getOrganization(orgId);
-  const currentUsers = await getOrgUsers(orgId);
+  let orgId = params.organization_id;
+  if (!orgId) {
+    const { data: defaultOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
+    orgId = defaultOrg?.id;
+  }
+  const org = orgId ? await getOrganization(orgId) : null;
+  const currentUsers = orgId ? await getOrgUsers(orgId) : [];
   const currentCount = currentUsers.filter(u => u.is_active).length; // Count active users
 
   const pkg = org?.package_type?.toLowerCase() || 'basic';
@@ -138,48 +178,18 @@ export async function createSystemUser(params: {
     throw new Error(`User limit reached for ${pkg.toUpperCase()} package (${currentCount}/${limit} users). Please upgrade to add more.`);
   }
 
-  // 1. Sign up user via isolated client so current admin session is NOT overwritten
-  let uid: string | null = null;
-  const { data: authData, error: authError } = await isolatedAuthClient.auth.signUp({
-    email: params.email,
-    password: params.password,
-    options: {
-      data: {
-        full_name: params.full_name,
-        role: params.role,
-        organization_id: orgId,
-        needs_password_change: true,
-      },
-    },
-  });
+  // 1. Check if profile exists by email or generate new profile identifier
+  let uid: string = '';
+  const { data: existingProf } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', params.email)
+    .maybeSingle();
 
-  if (authError) {
-    // If the account already exists in Auth from a previous attempt, recover profile ID
-    if (
-      authError.message?.toLowerCase().includes('already registered') ||
-      authError.message?.toLowerCase().includes('already exists') ||
-      authError.status === 422
-    ) {
-      const { data: existingProf } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', params.email)
-        .maybeSingle();
-
-      if (existingProf?.id) {
-        uid = existingProf.id;
-      } else {
-        throw new Error(`Authentication Error: ${authError.message}`);
-      }
-    } else {
-      throw new Error(`Authentication Error: ${authError.message}`);
-    }
+  if (existingProf?.id) {
+    uid = existingProf.id;
   } else {
-    uid = authData.user?.id || null;
-  }
-
-  if (!uid) {
-    throw new Error('Failed to create or obtain user account ID.');
+    uid = generateUuid();
   }
 
   // 2. Insert Profile
@@ -211,16 +221,31 @@ export async function createSystemUser(params: {
 
   // 3. Create employee record if requested
   if (params.create_employee_record) {
+    const taxConfig = {
+      ...(params.tax_config || {}),
+      epf_percentage: params.epf_percentage != null ? Number(params.epf_percentage) : 12,
+      socso_percentage: params.socso_percentage != null ? Number(params.socso_percentage) : 0.5,
+      tax_percentage: params.tax_percentage != null ? Number(params.tax_percentage) : 5,
+      tds_percentage: params.tax_percentage != null ? Number(params.tax_percentage) : 5,
+      tax_regime: params.tax_regime || 'custom',
+      hra_percentage: params.hra_percentage != null ? Number(params.hra_percentage) : 40,
+      transport_allowance: params.transport_allowance || 0,
+      other_allowances: params.other_allowances || 0,
+    };
+
     const empPayload: Record<string, any> = {
       profile_id: uid,
+      organization_id: orgId,
       employee_code: params.employee_code || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
       department_id: cleanUuid(params.department_id),
       designation: params.designation || (params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Staff'),
+      employment_type: params.employment_type || 'full_time',
       joining_date: params.joining_date || now.split('T')[0],
       workplace_id: cleanUuid(params.workplace_id),
       basic_salary: params.basic_salary || 0,
       default_shift_id: cleanUuid(params.default_shift_id),
       manager_id: cleanUuid(params.manager_id),
+      tax_config: taxConfig,
       employment_status: 'active',
       onboarding_completed: true,
       created_at: now,
@@ -228,40 +253,31 @@ export async function createSystemUser(params: {
     };
 
     let empRecord: any = null;
-    let { data: insData, error: empError } = await supabase
-      .from('employees')
-      .insert(empPayload)
-      .select()
-      .maybeSingle();
+    let attempts = 0;
+    while (attempts < 6) {
+      attempts++;
+      const { data: insData, error: empError } = await supabase
+        .from('employees')
+        .insert(empPayload)
+        .select()
+        .maybeSingle();
 
-    // If column doesn't exist in remote schema cache (PGRST204), omit it and retry
-    if (empError && empError.code === 'PGRST204') {
-      const missingColMatch = empError.message?.match(/Could not find the '([^']+)' column/);
-      if (missingColMatch && missingColMatch[1]) {
-        delete empPayload[missingColMatch[1]];
-        const retry = await supabase.from('employees').insert(empPayload).select().maybeSingle();
-        insData = retry.data;
-        empError = retry.error;
+      if (!empError) {
+        empRecord = insData;
+        break;
+      }
 
-        // Second retry if another column is also missing
-        if (empError && empError.code === 'PGRST204') {
-          const match2 = empError.message?.match(/Could not find the '([^']+)' column/);
-          if (match2 && match2[1]) {
-            delete empPayload[match2[1]];
-            const retry2 = await supabase.from('employees').insert(empPayload).select().maybeSingle();
-            insData = retry2.data;
-            empError = retry2.error;
-          }
+      if (empError.code === 'PGRST204' || empError.message?.includes('schema cache')) {
+        const missingColMatch = empError.message?.match(/Could not find the '([^']+)' column/);
+        if (missingColMatch && missingColMatch[1]) {
+          delete empPayload[missingColMatch[1]];
+          continue;
         }
       }
-    }
 
-    if (empError) {
       console.error('Failed to create employee row:', empError);
       throw new Error(`Failed to create employee record: ${empError.message}`);
     }
-
-    empRecord = insData;
 
     // If shift was selected, also link in employee_shifts for roster
     if (params.default_shift_id && empRecord?.id) {

@@ -2,15 +2,26 @@ import { supabase } from '@/lib/supabase';
 import { calculateDistance } from './location';
 import type { Attendance, GeofenceResponse, Employee, Workplace, Profile } from '@/types';
 
-async function getEmployeeData(): Promise<{ emp: Employee; wp: Workplace | null } | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+async function getEmployeeData(profileId?: string): Promise<{ emp: Employee; wp: Workplace | null } | null> {
+  let targetProfileId = profileId;
+
+  if (!targetProfileId) {
+    const { data: anyProf } = await supabase
+      .from('profiles')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    targetProfileId = anyProf?.id;
+  }
+
+  if (!targetProfileId) return null;
 
   // 1. Get employee record
-  let { data: emp, error: empErr } = await supabase
+  let { data: emp } = await supabase
     .from('employees')
     .select('*, workplace:workplaces(*)')
-    .eq('profile_id', user.id)
+    .eq('profile_id', targetProfileId)
     .maybeSingle();
 
   // If employee record is missing for this profile, auto-create one
@@ -18,12 +29,13 @@ async function getEmployeeData(): Promise<{ emp: Employee; wp: Workplace | null 
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', user.id)
+      .eq('id', targetProfileId)
       .maybeSingle();
 
     if (profile) {
       const newEmpPayload: Record<string, any> = {
-        profile_id: user.id,
+        profile_id: targetProfileId,
+        organization_id: profile.organization_id,
         employee_code: `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
         designation: profile.role === 'admin' ? 'Administrator' : profile.role === 'hr' ? 'HR Manager' : 'Staff',
         employment_status: 'active',
@@ -32,7 +44,7 @@ async function getEmployeeData(): Promise<{ emp: Employee; wp: Workplace | null 
         updated_at: new Date().toISOString(),
       };
 
-      const { data: createdEmp, error: insErr } = await supabase
+      const { data: createdEmp } = await supabase
         .from('employees')
         .insert(newEmpPayload)
         .select('*, workplace:workplaces(*)')
@@ -53,9 +65,10 @@ async function getEmployeeData(): Promise<{ emp: Employee; wp: Workplace | null 
 export async function clockIn(
   latitude: number,
   longitude: number,
-  faceSnapshot?: string
+  faceSnapshot?: string,
+  profileId?: string
 ): Promise<GeofenceResponse> {
-  const data = await getEmployeeData();
+  const data = await getEmployeeData(profileId);
   if (!data) {
     throw new Error('Employee record could not be loaded. Please try again.');
   }
@@ -115,6 +128,24 @@ export async function clockIn(
     throw new Error(upsertErr.message);
   }
 
+  // Audit log biometric attendance clock-in
+  try {
+    const { trackUserActivity } = await import('./userActivity');
+    await trackUserActivity({
+      userId: emp.profile_id || emp.id,
+      organizationId: emp.organization_id,
+      action: 'ATTENDANCE_CLOCK_IN',
+      entityType: 'attendance',
+      entityId: attendanceId,
+      description: `Employee clocked in with biometric verification (${isWithinGeofence ? 'On-site' : 'Remote'})`,
+      metadata: {
+        distance_meters: distance,
+        isWithinGeofence,
+        face_verified: true,
+      },
+    });
+  } catch (e) {}
+
   return {
     success: true,
     message: wp
@@ -130,9 +161,10 @@ export async function clockIn(
 export async function clockOut(
   latitude: number,
   longitude: number,
-  faceSnapshot?: string
+  faceSnapshot?: string,
+  profileId?: string
 ): Promise<GeofenceResponse> {
-  const data = await getEmployeeData();
+  const data = await getEmployeeData(profileId);
   if (!data) throw new Error('Employee record not found');
   const { emp, wp } = data;
 

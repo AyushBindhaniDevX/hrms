@@ -35,7 +35,7 @@ export interface NavItem {
 
 export const HR_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
-  { label: 'Employees', href: '/(hr)/employees', icon: Users },
+  { label: 'Users & Employees', href: '/(admin)/users', icon: Users },
   { label: 'Departments', href: '/(hr)/departments', icon: Network },
   { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },

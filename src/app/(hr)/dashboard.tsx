@@ -50,7 +50,7 @@ export default function HRDashboard() {
   const loadData = useCallback(async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
+      const orgId = tenantOrg?.id || profile?.organization_id;
 
       const [count, stats, leaves] = await Promise.all([
         getEmployeeCount(orgId),
@@ -92,7 +92,7 @@ export default function HRDashboard() {
   ];
 
   const hrQuickActions = [
-    { label: 'Employees', icon: Users, href: '/(hr)/employees', color: '#0D7377', bg: '#E6F4F4' },
+    { label: 'Users & Staff', icon: Users, href: '/(admin)/users', color: '#0D7377', bg: '#E6F4F4' },
     { label: 'Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
     { label: 'Leave', icon: Umbrella, href: '/(hr)/leave', color: '#7C3AED', bg: '#EDE9FE' },
     { label: 'Payroll', icon: CreditCard, href: '/(hr)/payroll', color: '#0369A1', bg: '#E0F2FE' },

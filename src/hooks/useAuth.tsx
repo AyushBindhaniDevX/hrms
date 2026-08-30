@@ -1,17 +1,39 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
-import { Session, User } from '@supabase/supabase-js';
-import * as AuthSession from 'expo-auth-session';
+import {
+  useUser as useClerkUser,
+  useAuth as useClerkAuth,
+  useSignIn as useClerkSignIn,
+  useOAuth,
+  useClerk,
+} from '@clerk/clerk-expo';
 import { supabase } from '@/lib/supabase';
-import type { Profile, UserRole } from '@/types';
+import { syncClerkUserToProfile, mapClerkRoleToUserRole, CLERK_ORG_ID } from '@/lib/services/clerkAuth';
+import { logUserLogin, logUserLogout } from '@/lib/services/userActivity';
+import type { Profile, UserRole, Organization } from '@/types';
+
+export interface AppUser {
+  id: string;
+  email?: string;
+  fullName?: string;
+  imageUrl?: string | null;
+  user_metadata?: {
+    full_name?: string;
+    role?: string;
+    organization_id?: string;
+    organization_slug?: string;
+    [key: string]: any;
+  };
+}
 
 interface AuthState {
-  session: Session | null;
-  user: User | null;
+  user: AppUser | null;
   profile: Profile | null;
   role: UserRole | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  clerkUser?: any;
+  clerkOrg?: any;
   signIn: (email: string, password: string, fallbackOrgId?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -21,10 +43,30 @@ interface AuthState {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [clerkOrg, setClerkOrg] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Safe Clerk Hooks
+  let clerkUserObj: any = null;
+  let isUserLoaded = true;
+  let clerkAuth: any = null;
+  let clerkSignInHook: any = null;
+  let clerkInstance: any = null;
+
+  try {
+    const u = useClerkUser();
+    clerkUserObj = u?.user;
+    isUserLoaded = u?.isLoaded ?? true;
+    clerkAuth = useClerkAuth();
+    clerkSignInHook = useClerkSignIn();
+    clerkInstance = useClerk();
+  } catch (e) {
+    // Graceful fallback if ClerkProvider is not ready
+  }
+
+  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -35,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching profile:', error);
+        console.error('Error fetching profile from Supabase:', error);
       }
 
       if (data) {
@@ -50,185 +92,233 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (!user?.id) {
+    if (!clerkUserObj?.id) {
       setProfile(null);
+      setUser(null);
       return;
     }
-    await fetchProfile(user.id);
-  }, [user, fetchProfile]);
+    await fetchProfile(clerkUserObj.id);
+  }, [clerkUserObj, fetchProfile]);
+
+  // Sync Clerk User & Organization to Supabase + Log User Activity
+  const syncedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+    let isMounted = true;
 
-    // 1. Initial Session check
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      if (!mounted) return;
-      setSession(initialSession);
-      const currentUser = initialSession?.user ?? null;
-      setUser(currentUser);
+    if (!isUserLoaded) {
+      return;
+    }
 
-      if (currentUser) {
-        await fetchProfile(currentUser.id);
+    if (clerkUserObj) {
+      const primaryEmail =
+        clerkUserObj.primaryEmailAddress?.emailAddress ||
+        clerkUserObj.emailAddresses?.[0]?.emailAddress ||
+        `${clerkUserObj.id}@clerk.user`;
+
+      // 1. Extract Clerk Organization info & Slug
+      const orgMembership = clerkUserObj.organizationMemberships?.[0];
+      const org = orgMembership?.organization;
+
+      // Detect org slug from Clerk organization, user metadata, web subdomain, or email domain
+      let detectedOrgSlug: string | undefined = org?.slug;
+
+      if (!detectedOrgSlug) {
+        detectedOrgSlug =
+          clerkUserObj.publicMetadata?.organization_slug ||
+          clerkUserObj.publicMetadata?.org_slug ||
+          clerkUserObj.unsafeMetadata?.organization_slug ||
+          clerkUserObj.unsafeMetadata?.org_slug;
       }
-      setIsLoading(false);
-    }).catch((err) => {
-      console.error('Get initial session error:', err);
-      if (mounted) setIsLoading(false);
-    });
 
-    // 2. Listen to Auth State Changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
-      if (!mounted) return;
-
-      setSession(currentSession);
-      const currentUser = currentSession?.user ?? null;
-      setUser(currentUser);
-
-      if (currentUser) {
-        await fetchProfile(currentUser.id);
-
-        // Session & IP Activity tracking
-        try {
-          const res = await fetch('https://api.ipify.org?format=json');
-          const data = await res.json();
-          const ip = data.ip;
-          const sessionId = 'sess_' + Math.random().toString(36).substring(2, 15);
-
-          await supabase.from('profiles').update({
-            last_login_ip: ip,
-            session_id: sessionId,
-            last_active: new Date().toISOString(),
-          }).eq('id', currentUser.id);
-        } catch (e) {
-          // silently ignore IP tracking errors
+      if (!detectedOrgSlug && Platform.OS === 'web' && typeof window !== 'undefined') {
+        const hostParts = window.location.hostname.split('.');
+        if (hostParts.length > 1 && hostParts[0] !== 'localhost' && hostParts[0] !== '127' && hostParts[0] !== 'www') {
+          detectedOrgSlug = hostParts[0];
         }
-      } else {
-        setProfile(null);
       }
+
+      if (!detectedOrgSlug && primaryEmail.includes('@') && !primaryEmail.endsWith('@clerk.user') && !primaryEmail.endsWith('@gmail.com') && !primaryEmail.endsWith('@yahoo.com') && !primaryEmail.endsWith('@outlook.com')) {
+        const domain = primaryEmail.split('@')[1];
+        detectedOrgSlug = domain.split('.')[0];
+      }
+
+      const orgRole =
+        orgMembership?.role ||
+        clerkUserObj.publicMetadata?.role ||
+        clerkUserObj.unsafeMetadata?.role;
+      const orgId = org?.id || (detectedOrgSlug ? `org_${detectedOrgSlug}` : CLERK_ORG_ID);
+
+      const resolvedOrgObj = {
+        id: orgId,
+        name: org?.name || (detectedOrgSlug ? detectedOrgSlug.charAt(0).toUpperCase() + detectedOrgSlug.slice(1) : 'Subedge Technology Pvt Ltd'),
+        slug: detectedOrgSlug || org?.slug || 'subedge',
+        imageUrl: org?.imageUrl || (org as any)?.logoUrl || null,
+        role: orgRole,
+      };
+
+      setClerkOrg(resolvedOrgObj);
+
+      const appUserObj: AppUser = {
+        id: clerkUserObj.id,
+        email: primaryEmail,
+        fullName:
+          clerkUserObj.fullName ||
+          `${clerkUserObj.firstName || ''} ${clerkUserObj.lastName || ''}`.trim() ||
+          'Clerk User',
+        imageUrl: clerkUserObj.imageUrl || null,
+        user_metadata: {
+          full_name:
+            clerkUserObj.fullName ||
+            `${clerkUserObj.firstName || ''} ${clerkUserObj.lastName || ''}`.trim() ||
+            'Clerk User',
+          role: mapClerkRoleToUserRole(orgRole),
+          organization_id: orgId,
+          organization_slug: resolvedOrgObj.slug,
+        },
+      };
+
+      setUser(appUserObj);
+
+      syncClerkUserToProfile({
+        id: clerkUserObj.id,
+        fullName: appUserObj.fullName,
+        email: primaryEmail,
+        imageUrl: clerkUserObj.imageUrl,
+        orgRole: String(orgRole || 'org:member'),
+        orgId: org?.id || undefined,
+        orgName: resolvedOrgObj.name,
+        orgSlug: resolvedOrgObj.slug,
+        orgImageUrl: resolvedOrgObj.imageUrl,
+      })
+        .then(async (res) => {
+          if (!isMounted) return;
+          if (res?.profile) {
+            setProfile(res.profile);
+
+            // If newly signed in, log session and IP activity
+            if (syncedUserIdRef.current !== clerkUserObj.id) {
+              syncedUserIdRef.current = clerkUserObj.id;
+              try {
+                let ipAddress: string | null = null;
+                if (Platform.OS === 'web') {
+                  const ipRes = await fetch('https://api.ipify.org?format=json');
+                  const ipData = await ipRes.json();
+                  ipAddress = ipData?.ip || null;
+                }
+                const sessionId = clerkAuth?.sessionId || `sess_${Math.random().toString(36).substring(2, 15)}`;
+                await logUserLogin(res.profile, ipAddress, sessionId);
+              } catch (ipErr) {
+                // Ignore IP lookup failures
+              }
+            }
+          }
+          setIsLoading(false);
+        })
+        .catch((err) => {
+          console.error('Failed to sync Clerk user to Supabase:', err);
+          if (isMounted) setIsLoading(false);
+        });
+    } else {
+      syncedUserIdRef.current = null;
+      setUser(null);
+      setProfile(null);
+      setClerkOrg(null);
       setIsLoading(false);
-    });
+    }
 
     return () => {
-      mounted = false;
-      subscription.unsubscribe();
+      isMounted = false;
     };
-  }, [fetchProfile]);
+  }, [clerkUserObj, isUserLoaded]);
 
-  const handleSignIn = useCallback(async (email: string, password: string, fallbackOrgId?: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-
-    if (data.user) {
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.user.id)
-        .maybeSingle();
-
-      if (!existingProfile) {
-        // Find a fallback organization if none exists in user_metadata
-        let orgId = data.user.user_metadata?.organization_id || fallbackOrgId;
-        
-        if (!orgId) {
-          const { data: firstOrg } = await supabase
-            .from('organizations')
-            .select('id')
-            .limit(1)
-            .maybeSingle();
-            
-          orgId = firstOrg?.id;
-        }
-
-        if (!orgId) {
-           console.error('No organization found in database to link the new profile.');
-           throw new Error('System error: No organizations exist in the database to link to your profile.');
-        }
-
-        // Auto-provision default demo employee profile if not existing
-        const { error: upsertError } = await supabase.from('profiles').upsert({
-          id: data.user.id,
-          full_name: data.user.user_metadata?.full_name || 'HRMS User',
-          email: data.user.email,
-          role: data.user.user_metadata?.role || 'employee',
-          organization_id: orgId,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
-        
-        if (upsertError) {
-          console.error('Failed to provision user profile:', upsertError);
-          throw new Error('Failed to create user profile. Please check database RLS policies.');
-        }
+  // Clerk Email/Password Sign-In
+  const handleSignIn = useCallback(
+    async (email: string, password: string, _fallbackOrgId?: string) => {
+      if (!clerkSignInHook?.signIn || !clerkSignInHook?.setActive) {
+        throw new Error('Clerk authentication is not ready. Please try again.');
       }
-      await fetchProfile(data.user.id);
-    }
-  }, [fetchProfile]);
 
-  const handleSignInWithGoogle = useCallback(async () => {
-    try {
-      if (Platform.OS === 'web') {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: window.location.origin,
-          },
-        });
-        if (error) throw error;
+      const { signIn, setActive } = clerkSignInHook;
+
+      const result = await signIn.create({
+        identifier: email.trim(),
+        password: password,
+      });
+
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+      } else if (result.status === 'needs_first_factor') {
+        throw new Error('Additional verification required for this account.');
+      } else if (result.status === 'needs_second_factor') {
+        throw new Error('Two-factor authentication is required. Please check your verification method.');
       } else {
-        const redirectUrl = AuthSession.makeRedirectUri();
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: redirectUrl,
-            skipBrowserRedirect: true,
-          },
-        });
-        if (error) throw error;
-        if (data.url) {
-          const result = await AuthSession.startAsync({ authUrl: data.url });
-          if (result.type === 'success' && result.params.access_token) {
-            await supabase.auth.setSession({
-              access_token: result.params.access_token,
-              refresh_token: result.params.refresh_token,
-            });
-          }
-        }
+        throw new Error(`Sign in status: ${result.status}`);
       }
-    } catch (error) {
-      console.error('Supabase Google Sign-In error:', error);
-      throw error;
+    },
+    [clerkSignInHook]
+  );
+
+  // Google OAuth via Clerk
+  const handleSignInWithGoogle = useCallback(async () => {
+    if (!startGoogleOAuth) {
+      throw new Error('Google Sign-In is initializing. Please try again.');
     }
-  }, []);
 
+    const redirectUrl = Platform.OS === 'web' && typeof window !== 'undefined'
+      ? `${window.location.origin}/oauth-native-callback`
+      : undefined;
+
+    const { createdSessionId, setActive } = await startGoogleOAuth({
+      redirectUrl,
+    });
+    if (createdSessionId && setActive) {
+      await setActive({ session: createdSessionId });
+    }
+  }, [startGoogleOAuth]);
+
+  // Sign Out
   const handleSignOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setUser(null);
-    setProfile(null);
-  }, []);
+    try {
+      if (profile) {
+        await logUserLogout(profile);
+      }
+      if (clerkInstance?.signOut) {
+        await clerkInstance.signOut();
+      }
+      syncedUserIdRef.current = null;
+      setUser(null);
+      setProfile(null);
+      setClerkOrg(null);
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
+  }, [profile, clerkInstance]);
 
-  const value: AuthState = {
-    session,
-    user,
-    profile,
-    role: profile?.role ?? null,
-    isLoading,
-    isAuthenticated: !!user && !!profile,
-    signIn: handleSignIn,
-    signInWithGoogle: handleSignInWithGoogle,
-    signOut: handleSignOut,
-    refreshProfile,
-  };
+  const effectiveRole: UserRole | null = profile?.role || (user?.user_metadata?.role as UserRole) || null;
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        role: effectiveRole,
+        isLoading,
+        isAuthenticated: !!user,
+        clerkUser: clerkUserObj,
+        clerkOrg,
+        signIn: handleSignIn,
+        signInWithGoogle: handleSignInWithGoogle,
+        signOut: handleSignOut,
+        refreshProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth(): AuthState {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');

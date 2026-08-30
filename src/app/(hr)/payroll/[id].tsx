@@ -2,6 +2,8 @@ import { HR_NAV } from '@/constants/navigation';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, FlatList, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -12,7 +14,8 @@ import { Input } from '@/components/ui/Input';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import {
-  getPayrollEntries, createPayrollEntry, processPayrollPeriod, distributePayroll, updatePayrollEntry
+  getPayrollEntries, createPayrollEntry, processPayrollPeriod, distributePayroll, updatePayrollEntry,
+  generatePayslipForEntry,
 } from '@/lib/services/payroll';
 import { getAllEmployees } from '@/lib/services/employee';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +26,8 @@ import type { Payroll, PayrollPeriod, Employee } from '@/types';
 export default function PayrollDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useTheme();
+  const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const [period, setPeriod] = useState<PayrollPeriod | null>(null);
   const [entries, setEntries] = useState<Payroll[]>([]);
@@ -32,6 +37,8 @@ export default function PayrollDetailScreen() {
   const [processing, setProcessing] = useState(false);
   const [distributing, setDistributing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generatingSlip, setGeneratingSlip] = useState<string | null>(null); // payroll entry id
+  const [generatedSlips, setGeneratedSlips] = useState<Set<string>>(new Set());
 
   // Form state
   const [selEmpId, setSelEmpId] = useState<string | null>(null);
@@ -89,20 +96,27 @@ export default function PayrollDetailScreen() {
     setLoading(true);
     setError(null);
     try {
+      const orgId = tenantOrg?.id || profile?.organization_id;
       const [periodRes, entriesData, emps] = await Promise.all([
         supabase.from('payroll_periods').select('*').eq('id', id!).single(),
         getPayrollEntries(id!),
-        getAllEmployees(),
+        getAllEmployees(orgId),
       ]);
       setPeriod(periodRes.data as PayrollPeriod);
       setEntries(entriesData);
       setEmployees(emps);
+      if (emps.length > 0 && !selEmpId) {
+        setSelEmpId(emps[0].id);
+        if (emps[0].basic_salary) {
+          setBasicSalary(String(emps[0].basic_salary));
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load payroll details. Please check your network connection.');
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, profile, tenantOrg, selEmpId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -155,6 +169,19 @@ export default function PayrollDetailScreen() {
     setDistributing(false);
   };
 
+  const handleGenerateSlip = async (entry: Payroll) => {
+    if (!period) return;
+    setGeneratingSlip(entry.id);
+    try {
+      await generatePayslipForEntry(entry, period.month, period.year);
+      setGeneratedSlips(prev => new Set([...prev, entry.id]));
+    } catch (e) {
+      console.error('Generate slip error:', e);
+    } finally {
+      setGeneratingSlip(null);
+    }
+  };
+
   if (loading) return <LoadingState />;
 
   const totalNet = entries.reduce((sum, e) => sum + e.net_salary, 0);
@@ -191,6 +218,7 @@ export default function PayrollDetailScreen() {
           {/* Entries */}
           {entries.map(entry => {
             const emp = entry.employee as any;
+            const slipGenerated = generatedSlips.has(entry.id);
             return (
               <Card key={entry.id}>
                 <View style={styles.entryRow}>
@@ -199,14 +227,29 @@ export default function PayrollDetailScreen() {
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
                       Basic: {formatCurrency(entry.basic_salary)} · Gross: {formatCurrency(entry.gross_salary)}
                     </Text>
+                    {entry.lop_days > 0 && (
+                      <Text style={{ color: colors.danger, fontSize: 11, marginTop: 2 }}>
+                        LOP: {entry.lop_days} day{entry.lop_days !== 1 ? 's' : ''} (−{formatCurrency(entry.lop_amount)})
+                      </Text>
+                    )}
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     <Text style={[{ color: colors.success, fontWeight: '700', fontSize: 16 }]}>
                       {formatCurrency(entry.net_salary)}
                     </Text>
-                    {period?.status === 'open' && (
-                      <Button title="Edit" onPress={() => openEdit(entry)} variant="ghost" size="sm" />
-                    )}
+                    <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {period?.status === 'open' && (
+                        <Button title="Edit" onPress={() => openEdit(entry)} variant="ghost" size="sm" />
+                      )}
+                      <Button
+                        title={slipGenerated ? '✓ Payslip' : (generatingSlip === entry.id ? 'Generating...' : 'Payslip')}
+                        onPress={() => handleGenerateSlip(entry)}
+                        variant={slipGenerated ? 'outline' : 'outline'}
+                        size="sm"
+                        loading={generatingSlip === entry.id}
+                        style={{ borderColor: slipGenerated ? colors.success : colors.primary }}
+                      />
+                    </View>
                   </View>
                 </View>
               </Card>
@@ -235,12 +278,15 @@ export default function PayrollDetailScreen() {
           <ScrollView style={{ maxHeight: 400 }}>
             <Select
               label="Employee"
-              options={employees.map(e => ({ label: e.profile?.full_name || e.employee_code || '', value: e.id }))}
+              options={employees.map(e => ({
+                label: `${e.profile?.full_name || e.employee_code || 'Employee'} (${e.designation || 'Staff'})`,
+                value: e.id,
+              }))}
               value={selEmpId}
               onValueChange={(v) => {
                 setSelEmpId(v);
                 const emp = employees.find(e => e.id === v);
-                if (emp) setBasicSalary(String(emp.basic_salary));
+                if (emp && emp.basic_salary) setBasicSalary(String(emp.basic_salary));
               }}
             />
             <Input label="Basic Salary" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" />

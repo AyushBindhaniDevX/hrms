@@ -27,39 +27,31 @@ export function SubedgeBrand({
   const logoHeight = isSmall ? 24 : isLarge ? 36 : 28;
 
   const isWeb = Platform.OS === 'web';
+  const [logoError, setLogoError] = React.useState(false);
+
+  const isValidLogo = !logoError && companyLogoUrl && (
+    companyLogoUrl.startsWith('http://') ||
+    companyLogoUrl.startsWith('https://') ||
+    companyLogoUrl.startsWith('data:image/') ||
+    companyLogoUrl.startsWith('/')
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.logoRow}>
-        {companyLogoUrl ? (
+        {isValidLogo ? (
           <Image
             source={{ uri: companyLogoUrl }}
             style={{ width: logoWidth, height: logoHeight, borderRadius: 6 }}
             resizeMode="contain"
+            onError={() => setLogoError(true)}
           />
-        ) : isWeb ? (
+        ) : (
           <Image
             source={DEFAULT_SUBEDGE_LOGO}
             style={{ width: logoWidth, height: logoHeight }}
             resizeMode="contain"
           />
-        ) : (
-          <View style={styles.appBrandRow}>
-            <View style={[styles.companyIconBox, { backgroundColor: colors.primary + '18' }]}>
-              <Building2 size={isSmall ? 14 : 18} color={colors.primary} />
-            </View>
-            <Text
-              style={[
-                styles.appCompanyName,
-                { color: colors.text },
-                isSmall && { fontSize: 13 },
-                isLarge && { fontSize: 18 },
-              ]}
-              numberOfLines={1}
-            >
-              {companyName}
-            </Text>
-          </View>
         )}
 
         <View style={[styles.tagPill, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '30' }]}>
@@ -69,84 +61,80 @@ export function SubedgeBrand({
         </View>
       </View>
 
-      <View style={styles.subRow}>
-        {!isWeb && officeName && (
-          <View style={styles.officeBadge}>
-            <MapPin size={10} color={colors.textSecondary} />
-            <Text style={[styles.officeText, { color: colors.textSecondary }]}>
-              {officeName}
+      {showCompany && (
+        <View style={styles.metaContainer}>
+          {subtitle ? (
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              {subtitle}
             </Text>
-          </View>
-        )}
+          ) : (
+            <View style={styles.companyRow}>
+              <Building2 size={12} color={colors.textSecondary} />
+              <Text style={[styles.companyText, { color: colors.textSecondary }]} numberOfLines={1}>
+                {companyName || 'Subedge Technology Pvt Ltd'}
+              </Text>
+            </View>
+          )}
 
-        <Text
-          style={[
-            styles.subtitleText,
-            { color: colors.textSecondary },
-            isSmall && { fontSize: 9 },
-            isLarge && { fontSize: 11 },
-          ]}
-          numberOfLines={1}
-        >
-          {subtitle || (showCompany ? companyName : 'Enterprise HRMS')}
-        </Text>
-      </View>
+          {!isWeb && officeName && (
+            <View style={styles.locationRow}>
+              <MapPin size={10} color={colors.primary} />
+              <Text style={[styles.locationText, { color: colors.primary }]} numberOfLines={1}>
+                {officeName}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    justifyContent: 'center',
+    gap: 4,
   },
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  appBrandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  companyIconBox: {
-    padding: 4,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  appCompanyName: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
   tagPill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
     borderWidth: 1,
   },
   tagPillText: {
     fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
-  subRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  officeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  metaContainer: {
     gap: 2,
   },
-  officeText: {
-    fontSize: 10,
-    fontWeight: '600',
+  companyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  subtitleText: {
+  companyText: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  subtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 1,
+  },
+  locationText: {
     fontSize: 10,
     fontWeight: '500',
   },

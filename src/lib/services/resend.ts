@@ -61,8 +61,10 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
   let status: 'delivered' | 'sent' | 'queued' | 'simulated' = 'delivered';
 
   try {
+    let sentViaApi = false;
+
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // In web browser (e.g. Vercel deployment), call serverless function to bypass browser CORS preflight
+      // 1. Try Next.js / Serverless proxy route first
       try {
         const proxyRes = await fetch('/api/send-email', {
           method: 'POST',
@@ -78,15 +80,15 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
         if (proxyRes.ok) {
           const json = await proxyRes.json();
           resendMessageId = json.id || resendMessageId;
-        } else {
-          status = 'simulated';
+          sentViaApi = true;
         }
       } catch (proxyErr) {
-        // Fallback gracefully without breaking UI
-        status = 'simulated';
+        // Fall through to direct fetch attempt
       }
-    } else if (RESEND_API_KEY && !RESEND_API_KEY.startsWith('re_demo_key')) {
-      // On React Native iOS/Android (no browser CORS)
+    }
+
+    // 2. Direct fetch with Resend API Key if proxy was not used/available
+    if (!sentViaApi && RESEND_API_KEY && !RESEND_API_KEY.startsWith('re_demo_key')) {
       try {
         const response = await fetch(RESEND_API_URL, {
           method: 'POST',
@@ -105,13 +107,14 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
         if (response.ok) {
           const json = await response.json();
           resendMessageId = json.id || resendMessageId;
+          sentViaApi = true;
         } else {
           status = 'simulated';
         }
-      } catch (nativeErr) {
+      } catch (directErr) {
         status = 'simulated';
       }
-    } else {
+    } else if (!sentViaApi) {
       status = 'simulated';
     }
 

@@ -56,11 +56,17 @@ const DEFAULT_COURSES: TrainingCourse[] = [
   },
 ];
 
-export async function getCourses(): Promise<TrainingCourse[]> {
-  const { data, error } = await supabase
+export async function getCourses(organizationId?: string): Promise<TrainingCourse[]> {
+  let query = supabase
     .from('courses')
     .select('*')
     .order('created_at', { ascending: false });
+
+  if (organizationId) {
+    query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
+  }
+
+  const { data, error } = await query;
 
   if (!error && data && data.length > 0) {
     return data as TrainingCourse[];
@@ -124,6 +130,46 @@ export async function createCourse(course: Omit<TrainingCourse, 'id' | 'created_
   }
 
   return data as TrainingCourse;
+}
+
+export async function addLessonToCourse(
+  courseId: string,
+  moduleId: string,
+  lesson: Omit<CourseLesson, 'id'>
+): Promise<void> {
+  const course = await getCourseById(courseId);
+  if (!course) return;
+
+  const newLesson: CourseLesson = {
+    ...lesson,
+    id: `les_${Date.now()}`,
+  };
+
+  let curriculum = [...(course.curriculum || [])];
+  let modIndex = curriculum.findIndex((m) => m.id === moduleId);
+
+  if (modIndex >= 0) {
+    curriculum[modIndex] = {
+      ...curriculum[modIndex],
+      lessons: [...(curriculum[modIndex].lessons || []), newLesson],
+    };
+  } else {
+    curriculum.push({
+      id: moduleId,
+      title: 'Module 1: General Curriculum',
+      description: 'Course lessons and learning materials',
+      lessons: [newLesson],
+    });
+  }
+
+  await supabase
+    .from('courses')
+    .update({
+      curriculum,
+      modules_count: curriculum.length,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', courseId);
 }
 
 export async function completeLesson(

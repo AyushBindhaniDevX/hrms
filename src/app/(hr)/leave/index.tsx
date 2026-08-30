@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/Badge';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { getAllLeaveRequests, processLeaveRequest } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
 import type { LeaveRequest } from '@/types';
@@ -40,6 +41,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 export default function HRLeaveWorkflowScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
@@ -58,14 +60,15 @@ export default function HRLeaveWorkflowScreen() {
 
   const load = useCallback(async () => {
     try {
-      const data = await getAllLeaveRequests();
+      const orgId = tenantOrg?.id || profile?.organization_id;
+      const data = await getAllLeaveRequests(orgId);
       setRequests(data);
     } catch (err) {
       console.error('Error loading HR leave requests:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile, tenantOrg]);
 
   useEffect(() => {
     load();

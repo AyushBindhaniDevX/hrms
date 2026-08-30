@@ -2,6 +2,8 @@ import { HR_NAV } from '@/constants/navigation';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -27,9 +29,18 @@ import { formatDate, formatCurrency } from '@/utils/format';
 import type { Employee, Department, Workplace, WorkShift, LeaveBalance, LeaveType } from '@/types';
 import { Edit3, AlertCircle, Umbrella, CheckCircle2 } from 'lucide-react-native';
 
+const statusVariant = (s: string): 'success' | 'danger' | 'warning' | 'neutral' => {
+  if (s === 'active') return 'success';
+  if (s === 'terminated' || s === 'suspended') return 'danger';
+  if (s === 'on_leave') return 'warning';
+  return 'neutral';
+};
+
 export default function EmployeeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useTheme();
+  const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const [emp, setEmp] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,19 +80,29 @@ export default function EmployeeDetailScreen() {
   const [status, setStatus] = useState<string>('active');
   const [joiningDate, setJoiningDate] = useState('');
 
+  // Tax Configuration State
+  const [taxRegime, setTaxRegime] = useState<string>('new');
+  const [tdsPercentage, setTdsPercentage] = useState('0');
+  const [epfPercentage, setEpfPercentage] = useState('12');
+  const [hraPercentage, setHraPercentage] = useState('40');
+  const [ptAmount, setPtAmount] = useState('200');
+  const [pfNumber, setPfNumber] = useState('');
+  const [epfExempt, setEpfExempt] = useState<string>('no');
+  const [esopValue, setEsopValue] = useState('');
+
   const loadData = useCallback(async () => {
     if (!id) return;
     try {
       const { data } = await supabase
         .from('employees')
-        .select('*, profile:profiles(*), department:departments(*), workplace:workplaces(*)')
+        .select('*, profile:profiles(*), department:departments!employees_department_id_fkey(*), workplace:workplaces(*)')
         .eq('id', id)
         .maybeSingle();
 
       const employeeData = (data || null) as Employee | null;
       setEmp(employeeData);
 
-      const orgId = employeeData?.profile?.organization_id || employeeData?.department?.organization_id;
+      const orgId = employeeData?.organization_id || employeeData?.profile?.organization_id || employeeData?.department?.organization_id || tenantOrg?.id || profile?.organization_id;
       if (orgId && id) {
         const [deptList, wpList, shiftList, empList, balances, lTypes] = await Promise.all([
           getDepartments(orgId),
@@ -103,7 +124,7 @@ export default function EmployeeDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, profile, tenantOrg]);
 
   useEffect(() => {
     loadData();
@@ -157,6 +178,18 @@ export default function EmployeeDetailScreen() {
     setBasicSalary(emp.basic_salary ? String(emp.basic_salary) : '0');
     setStatus(emp.employment_status || 'active');
     setJoiningDate(emp.joining_date || '');
+
+    // Populate tax config
+    const tc = emp.tax_config || {};
+    setTaxRegime(tc.tax_regime || 'new');
+    setTdsPercentage(tc.tds_percentage != null ? String(tc.tds_percentage) : '0');
+    setEpfPercentage(tc.epf_percentage != null ? String(tc.epf_percentage) : (tc.epf_exempt ? '0' : '12'));
+    setHraPercentage(tc.hra_percentage != null ? String(tc.hra_percentage) : (tc.hra_type === 'metro' ? '50' : '40'));
+    setPtAmount(tc.pt_amount != null ? String(tc.pt_amount) : '200');
+    setPfNumber(tc.pf_number || '');
+    setEpfExempt(tc.epf_exempt ? 'yes' : 'no');
+    setEsopValue(tc.esop_value != null ? String(tc.esop_value) : '');
+
     setSaveError('');
     setEditModalOpen(true);
   };
@@ -194,7 +227,7 @@ export default function EmployeeDetailScreen() {
         });
       }
 
-      // 2. Update Employee operational fields
+      // 2. Update Employee operational fields & custom tax configuration
       await updateEmployee(emp.id, {
         employee_code: empCode.trim(),
         designation: designation.trim() || null,
@@ -205,6 +238,17 @@ export default function EmployeeDetailScreen() {
         basic_salary: parseFloat(basicSalary) || 0,
         employment_status: status as any,
         joining_date: joiningDate || undefined,
+        tax_config: {
+          pf_number: pfNumber.trim() || null,
+          tax_regime: taxRegime as any,
+          tds_percentage: parseFloat(tdsPercentage) || 0,
+          epf_percentage: parseFloat(epfPercentage) || 0,
+          hra_percentage: parseFloat(hraPercentage) || 0,
+          pt_amount: parseFloat(ptAmount) || 0,
+          custom_tax_percentage: parseFloat(tdsPercentage) || 0,
+          esop_value: parseFloat(esopValue) || null,
+          epf_exempt: epfExempt === 'yes',
+        },
       });
 
       // 3. Link Shift into employee_shifts roster if shift selected
@@ -246,53 +290,43 @@ export default function EmployeeDetailScreen() {
   };
 
   if (loading) return <LoadingState />;
-  if (!emp) return <Text style={{ padding: 24, textAlign: 'center' }}>Employee record not found</Text>;
+  if (!emp) {
+    return (
+      <SidebarLayout>
+        <View style={[styles.container, { backgroundColor: colors.background, padding: 20, alignItems: 'center', justifyContent: 'center' }]}>
+          <Text style={{ color: colors.text, fontSize: 16 }}>Employee not found</Text>
+          <Button title="Back to Employees" onPress={() => router.back()} style={{ marginTop: 12 }} />
+        </View>
+      </SidebarLayout>
+    );
+  }
 
-  const currentShift = shifts.find(s => s.id === (emp as any).default_shift_id);
   const currentManager = managers.find(m => m.id === emp.manager_id);
+  const currentShift = shifts.find(s => s.id === (emp as any).default_shift_id);
+  const tc = emp.tax_config || {};
 
   return (
     <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <Button
-            title="← Back"
-            onPress={() => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace('/(hr)/employees' as never);
-              }
-            }}
-            variant="ghost"
-            size="sm"
-          />
-          <Text style={[styles.title, { color: colors.text }]}>Employee Profile</Text>
-          <Button
-            title="Edit"
-            onPress={openEditModal}
-            size="sm"
-            variant="outline"
-          />
+          <Button title="← Back" onPress={() => router.back()} variant="ghost" size="sm" />
+          <Text style={[styles.title, { color: colors.text }]}>Employee Details</Text>
+          <View style={{ width: 60 }} />
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: 16, maxWidth: 680, alignSelf: 'center', width: '100%' }}>
-          <Card style={{ alignItems: 'center', paddingVertical: 24, marginBottom: 16 }}>
-            <Avatar name={emp.profile?.full_name || ''} url={emp.profile?.avatar_url} size={72} />
-            <Text style={[styles.empName, { color: colors.text }]}>{emp.profile?.full_name}</Text>
-            <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>{emp.designation || 'Staff'}</Text>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <Badge
-                label={emp.employment_status}
-                variant={emp.employment_status === 'active' ? 'success' : 'danger'}
-              />
-              <Badge
-                label={(emp.profile?.role || 'employee').toUpperCase()}
-                variant="neutral"
-              />
+        <ScrollView contentContainerStyle={{ padding: 16, maxWidth: 800, alignSelf: 'center', width: '100%' }}>
+          {/* Header Card */}
+          <Card style={{ alignItems: 'center', padding: 24, marginBottom: 16 }}>
+            <Avatar name={emp.profile?.full_name || 'User'} size={72} url={emp.profile?.avatar_url} />
+            <Text style={[styles.empName, { color: colors.text }]}>{emp.profile?.full_name || 'Unnamed'}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 8 }}>{emp.designation || 'Staff'}</Text>
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <Badge label={emp.employment_status || 'active'} variant={statusVariant(emp.employment_status || 'active')} />
+              <Badge label={emp.profile?.role || 'employee'} variant="neutral" />
             </View>
           </Card>
 
+          {/* Details Card */}
           <Card style={{ marginBottom: 16 }}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Employment Information</Text>
             <Row label="Employee Code" value={emp.employee_code || 'N/A'} colors={colors} />
@@ -304,6 +338,17 @@ export default function EmployeeDetailScreen() {
             <Row label="Assigned Shift" value={currentShift ? `${currentShift.name} (${currentShift.start_time} - ${currentShift.end_time})` : 'Standard'} colors={colors} />
             <Row label="Basic Salary" value={formatCurrency(emp.basic_salary)} colors={colors} />
             <Row label="Joining Date" value={emp.joining_date ? formatDate(emp.joining_date) : 'N/A'} colors={colors} />
+          </Card>
+
+          {/* Statutory & Tax Settings Card */}
+          <Card style={{ marginBottom: 16 }}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Tax Regime & Deduction Percentages</Text>
+            <Row label="Tax Regime" value={String(tc.tax_regime || 'new').toUpperCase() + ' REGIME'} colors={colors} />
+            <Row label="TDS Deduction Rate" value={`${tc.tds_percentage ?? 0}%`} colors={colors} />
+            <Row label="EPF Rate" value={tc.epf_exempt ? 'Exempt (0%)' : `${tc.epf_percentage ?? 12}%`} colors={colors} />
+            <Row label="HRA Rate" value={`${tc.hra_percentage ?? (tc.hra_type === 'metro' ? 50 : 40)}%`} colors={colors} />
+            <Row label="Professional Tax (PT)" value={`₹${tc.pt_amount ?? 200}`} colors={colors} />
+            <Row label="PF / UAN Number" value={tc.pf_number || 'Not Assigned'} colors={colors} />
           </Card>
 
           {/* Leave Balances Card */}
@@ -546,6 +591,79 @@ export default function EmployeeDetailScreen() {
               value={joiningDate}
               onChangeText={setJoiningDate}
               placeholder="2026-08-27"
+            />
+
+            <Text style={[styles.groupLabel, { color: colors.textSecondary, marginTop: 14 }]}>Tax Regime & Custom Percentages</Text>
+
+            <Select
+              label="Tax Regime"
+              value={taxRegime}
+              onValueChange={(v) => setTaxRegime(v || 'new')}
+              options={[
+                { label: 'New Regime (Default 2024-25 Slabs)', value: 'new' },
+                { label: 'Old Regime (Standard Old Slabs)', value: 'old' },
+                { label: 'Custom Regime (Custom Percentages)', value: 'custom' },
+              ]}
+            />
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="TDS Rate (%)"
+                  value={tdsPercentage}
+                  onChangeText={setTdsPercentage}
+                  placeholder="0"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="EPF Rate (%)"
+                  value={epfPercentage}
+                  onChangeText={setEpfPercentage}
+                  placeholder="12"
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="HRA Rate (%)"
+                  value={hraPercentage}
+                  onChangeText={setHraPercentage}
+                  placeholder="40"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="PT Amount (₹)"
+                  value={ptAmount}
+                  onChangeText={setPtAmount}
+                  placeholder="200"
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
+            <Input
+              label="PF / EPF Number (UAN)"
+              value={pfNumber}
+              onChangeText={setPfNumber}
+              placeholder="100XXXXXXXXX"
+              autoCapitalize="characters"
+            />
+
+            <Select
+              label="EPF Exemption"
+              value={epfExempt}
+              onValueChange={(v) => setEpfExempt(v || 'no')}
+              options={[
+                { label: 'Applicable (Standard)', value: 'no' },
+                { label: 'Exempt (0% deduction)', value: 'yes' },
+              ]}
             />
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 20, marginBottom: 12 }}>

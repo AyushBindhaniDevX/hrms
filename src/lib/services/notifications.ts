@@ -3,16 +3,18 @@ import type { Notification } from '@/types';
 import * as ExpoNotifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Configure how notifications behave when the app is in foreground
-ExpoNotifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Configure how notifications behave when the app is in foreground (native only)
+if (Platform.OS !== 'web') {
+  ExpoNotifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export async function requestNotificationPermissions() {
   if (Platform.OS === 'web') return true;

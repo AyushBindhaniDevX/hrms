@@ -6,22 +6,28 @@
 import { supabase } from '@/lib/supabase';
 import { CompanyAsset, AssetStatus } from '@/types/database';
 
-export async function getAssets(): Promise<CompanyAsset[]> {
-  const { data, error } = await supabase
+export async function getAssets(organizationId?: string): Promise<CompanyAsset[]> {
+  let query = supabase
     .from('assets')
     .select('*')
     .order('created_at', { ascending: false });
 
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId);
+  }
+
+  const { data, error } = await query;
   if (error || !data) return [];
   return data as CompanyAsset[];
 }
 
 export function subscribeToAssets(
   onUpdate: (assets: CompanyAsset[]) => void,
-  onError?: (err: any) => void
+  onError?: (err: any) => void,
+  organizationId?: string
 ): () => void {
   // Initial fetch
-  getAssets().then(onUpdate).catch(onError);
+  getAssets(organizationId).then(onUpdate).catch(onError);
 
   const channel = supabase
     .channel('public:assets')
@@ -33,7 +39,7 @@ export function subscribeToAssets(
         table: 'assets',
       },
       () => {
-        getAssets().then(onUpdate).catch(onError);
+        getAssets(organizationId).then(onUpdate).catch(onError);
       }
     )
     .subscribe();
@@ -66,14 +72,55 @@ export async function createAsset(asset: Omit<CompanyAsset, 'id' | 'created_at'>
 export async function updateAssetStatus(
   assetId: string,
   status: AssetStatus,
-  assignedTo?: string | null
+  assignedTo?: string | null,
+  assignedToName?: string | null
 ): Promise<void> {
+  const now = new Date().toISOString();
+  const updatePayload: Record<string, any> = {
+    status,
+    assigned_to_id: assignedTo !== undefined ? assignedTo : null,
+    updated_at: now,
+  };
+  if (assignedToName !== undefined) {
+    updatePayload.assigned_employee_name = assignedToName;
+  }
+
+  const { error } = await supabase
+    .from('assets')
+    .update(updatePayload)
+    .eq('id', assetId);
+
+  if (error) throw error;
+}
+
+export async function verifyAndAuditAsset(assetId: string, auditorName: string): Promise<any> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('assets')
+    .update({
+      last_audited_at: now,
+      last_auditor_name: auditorName,
+      updated_at: now,
+    })
+    .eq('id', assetId)
+    .select('*')
+    .single();
+
+  if (error) {
+    console.warn('Audit update fallback:', error);
+  }
+  return data;
+}
+
+export async function disposeAsset(assetId: string, salvageValue: number, reason: string): Promise<void> {
   const now = new Date().toISOString();
   const { error } = await supabase
     .from('assets')
     .update({
-      status,
-      assigned_to: assignedTo !== undefined ? assignedTo : null,
+      status: 'retired',
+      salvage_value: salvageValue,
+      disposal_reason: reason,
+      disposed_at: now,
       updated_at: now,
     })
     .eq('id', assetId);

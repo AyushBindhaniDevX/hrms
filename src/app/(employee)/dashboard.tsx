@@ -93,7 +93,6 @@ export default function EmployeeDashboard() {
   const [clockLoading, setClockLoading] = useState(false);
   const [clockError, setClockError] = useState('');
   const [distance, setDistance] = useState<number | null>(null);
-  const [outOfBounds, setOutOfBounds] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // Face Verification Modal state
@@ -250,10 +249,15 @@ export default function EmployeeDashboard() {
   const annualLeave = leaveBalances.find(b => (b.leave_type?.name || '').toLowerCase().includes('annual'));
   const annualLeft = annualLeave?.remaining_days ?? 0;
 
+  // Geofence: compute outside state from current distance — warning-only, never blocks clock action
+  const geofenceRadius = employee?.workplace?.radius_meters ?? 200;
+  const isOutsideGeofence = distance !== null && employee?.workplace?.latitude && distance > geofenceRadius;
+
   // ─── Desktop KPI / Quick Links data ────────────────────────────────────────
   const kpis = [
     {
-      label: 'Today', value: todayAttendance ? formatMinutes(todayAttendance.working_minutes) : '—',
+      label: 'Today',
+      value: todayAttendance?.working_minutes != null ? formatMinutes(todayAttendance.working_minutes) : '—',
       sub: todayAttendance?.clock_in ? `In: ${formatTime(todayAttendance.clock_in)}` : 'Not clocked in',
       icon: <Clock size={20} color="#006a61" />, bg: '#edf8f6', border: '#c4ece7',
     },
@@ -263,7 +267,7 @@ export default function EmployeeDashboard() {
       icon: <CalendarDays size={20} color="#4f46e5" />, bg: '#eeebff', border: '#d5d0f5',
     },
     {
-      label: 'Net Salary', value: formatCurrency(netPay),
+      label: 'Net Salary', value: formatCurrency(netPay ?? 0),
       sub: latestPayslip?.period_month ? `Month ${latestPayslip.period_month}` : 'No payslip',
       icon: <Banknote size={20} color="#0369a1" />, bg: '#e0f2fe', border: '#b9e3fc',
     },
@@ -283,9 +287,9 @@ export default function EmployeeDashboard() {
 
   // ─── Mobile-specific data ────────────────────────────────────────────────
   const mobileKpis = [
-    { label: "Today's Hours", value: todayAttendance ? formatMinutes(todayAttendance.working_minutes) : '—', color: '#0D7377', bg: '#E6F4F4', icon: Clock },
+    { label: "Today's Hours", value: todayAttendance?.working_minutes != null ? formatMinutes(todayAttendance.working_minutes) : '—', color: '#0D7377', bg: '#E6F4F4', icon: Clock },
     { label: 'Leave Days', value: `${annualLeft}d`, color: '#4F46E5', bg: '#EEEBFF', icon: CalendarDays },
-    { label: 'Net Salary', value: formatCurrency(netPay), color: '#0369A1', bg: '#E0F2FE', icon: Banknote },
+    { label: 'Net Salary', value: formatCurrency(netPay ?? 0), color: '#0369A1', bg: '#E0F2FE', icon: Banknote },
     { label: 'Department', value: employee?.department?.name || '—', color: '#B45309', bg: '#FEF3C7', icon: Briefcase },
   ];
 
@@ -366,14 +370,16 @@ export default function EmployeeDashboard() {
           </View>
         </View>
 
-        {/* ── Out of Bounds Alert ────────────────────────────────────────────── */}
-        {outOfBounds && (
+        {/* ── Out of Bounds Alert — warning only, never blocks clock ──────── */}
+        {isOutsideGeofence && isClockedIn && (
           <Animated.View entering={FadeInDown.duration(300)}>
             <View style={mStyles.alertBanner}>
-              <AlertCircle color="#DC2626" size={18} />
+              <AlertCircle color="#D97706" size={18} />
               <View style={{ flex: 1 }}>
-                <Text style={mStyles.alertTitle}>Out of Office Boundary</Text>
-                <Text style={mStyles.alertSub}>Your shift has been auto-paused. Return to resume.</Text>
+                <Text style={mStyles.alertTitle}>Outside Office Zone</Text>
+                <Text style={mStyles.alertSub}>
+                  You are {Math.round(distance ?? 0)}m from {employee?.workplace?.name || 'workplace'}. Clocking as remote.
+                </Text>
               </View>
             </View>
           </Animated.View>
@@ -414,7 +420,7 @@ export default function EmployeeDashboard() {
                   longitude={employee.workplace.longitude}
                   radius={employee.workplace.radius_meters}
                   name={employee.workplace.name}
-                  outOfBounds={outOfBounds}
+                  outOfBounds={!!isOutsideGeofence}
                 />
               </Animated.View>
             )}
@@ -638,13 +644,13 @@ export default function EmployeeDashboard() {
       </Animated.View>
 
       {/* ── Main 2-column ──────────────────────────────────────────────────── */}
-      {outOfBounds && (
+      {isOutsideGeofence && isClockedIn && (
         <Animated.View entering={FadeInDown.duration(350).springify()}>
-          <View style={{ marginBottom: 16, padding: 16, backgroundColor: '#fff1f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecdd3', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <AlertCircle color="#e11d48" size={24} />
+          <View style={{ marginBottom: 16, padding: 16, backgroundColor: '#fffbeb', borderRadius: 12, borderWidth: 1, borderColor: '#fde68a', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <AlertCircle color="#D97706" size={24} />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontWeight: '700', color: '#be123c', fontSize: 15 }}>Out of Bounds</Text>
-              <Text style={{ color: '#e11d48', fontSize: 13, marginTop: 2 }}>You are outside the office radius. Your active clock-in has been automatically paused.</Text>
+              <Text style={{ fontWeight: '700', color: '#B45309', fontSize: 15 }}>Outside Office Zone</Text>
+              <Text style={{ color: '#D97706', fontSize: 13, marginTop: 2 }}>You are {Math.round(distance ?? 0)}m from {employee?.workplace?.name || 'workplace'}. Clocking as remote — attendance is still tracked.</Text>
             </View>
           </View>
         </Animated.View>

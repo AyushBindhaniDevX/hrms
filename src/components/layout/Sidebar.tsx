@@ -110,15 +110,15 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     if (effectiveRole === 'admin') {
       return [
         { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
-        { label: 'Users', href: '/(admin)/users', icon: Key },
-        { label: 'Employees', href: '/(hr)/employees', icon: Users },
-        { label: 'Shifts', href: '/(hr)/shifts', icon: Clock },
+        { label: 'Users & Staff', href: '/(admin)/users', icon: Users },
+        { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
+        { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
       ];
     }
     if (effectiveRole === 'hr') {
       return [
         { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
-        { label: 'Employees', href: '/(hr)/employees', icon: Users },
+        { label: 'Users & Staff', href: '/(admin)/users', icon: Users },
         { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
         { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
       ];
@@ -138,17 +138,15 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     if (effectiveRole === 'employee') {
       router.push(`/(employee)/directory?q=${q}` as never);
     } else {
-      router.push(`/(hr)/employees?q=${q}` as never);
+      router.push(`/(admin)/users?q=${q}` as never);
     }
   };
 
   const handleNewAction = () => {
     if (effectiveRole === 'employee') {
       router.push('/(employee)/leave/apply' as never);
-    } else if (effectiveRole === 'admin') {
-      router.push('/(admin)/users' as never);
     } else {
-      router.push('/(hr)/employees/create' as never);
+      router.push('/(admin)/users' as never);
     }
   };
 
@@ -440,7 +438,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
           <TouchableOpacity onPress={handleDashboardPress}>
             {companyName ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                {companyLogoUrl ? (
+                {companyLogoUrl && (companyLogoUrl.startsWith('http') || companyLogoUrl.startsWith('data:image/') || companyLogoUrl.startsWith('/')) ? (
                   <Image
                     source={{ uri: companyLogoUrl }}
                     style={{ width: 44, height: 44, borderRadius: 8 }}

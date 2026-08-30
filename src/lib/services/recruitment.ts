@@ -633,21 +633,6 @@ let CUSTOM_PIPELINES_STORE: CustomPipeline[] = [
 // SERVICE METHODS: JOBS
 // ----------------------------------------------------
 export async function getJobs(): Promise<JobOpening[]> {
-  try {
-    if (db) {
-      const q = query(collection(db, 'job_openings'), orderBy('created_at', 'desc'));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const firestoreJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as JobOpening));
-        // Merge with store to prevent dropping seed entries
-        const existingIds = new Set(firestoreJobs.map((j) => j.id));
-        const merged = [...firestoreJobs, ...JOBS_STORE.filter((j) => !existingIds.has(j.id))];
-        return merged;
-      }
-    }
-  } catch (err) {
-    // fallback gracefully to in-memory store
-  }
   return [...JOBS_STORE];
 }
 
@@ -661,18 +646,6 @@ export async function createJob(job: Omit<JobOpening, 'id' | 'applicants_count' 
   };
 
   JOBS_STORE.unshift(newJob);
-
-  try {
-    if (db) {
-      await setDoc(doc(db, 'job_openings', newJob.id), {
-        ...newJob,
-        created_at: serverTimestamp(),
-      });
-    }
-  } catch (err) {
-    console.warn('Firestore job write skipped/cached:', err);
-  }
-
   return newJob;
 }
 
@@ -692,16 +665,6 @@ export async function toggleJobPortalPublishing(
     job.published_portals = job.published_portals.filter((p) => p !== portal);
   }
 
-  try {
-    if (db) {
-      await updateDoc(doc(db, 'job_openings', jobId), {
-        published_portals: job.published_portals,
-      });
-    }
-  } catch (err) {
-    // silent fallback
-  }
-
   return { ...job };
 }
 
@@ -709,23 +672,6 @@ export async function toggleJobPortalPublishing(
 // SERVICE METHODS: CANDIDATES
 // ----------------------------------------------------
 export async function getCandidates(jobId?: string): Promise<Candidate[]> {
-  try {
-    if (db) {
-      const q = jobId
-        ? query(collection(db, 'candidates'), where('job_id', '==', jobId), orderBy('applied_at', 'desc'))
-        : query(collection(db, 'candidates'), orderBy('applied_at', 'desc'));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const firestoreCandidates = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate));
-        const existingIds = new Set(firestoreCandidates.map((c) => c.id));
-        const merged = [...firestoreCandidates, ...CANDIDATES_STORE.filter((c) => !existingIds.has(c.id))];
-        return jobId ? merged.filter((c) => c.job_id === jobId) : merged;
-      }
-    }
-  } catch (err) {
-    // fallback gracefully
-  }
-
   if (jobId) {
     return CANDIDATES_STORE.filter((c) => c.job_id === jobId);
   }
@@ -733,20 +679,7 @@ export async function getCandidates(jobId?: string): Promise<Candidate[]> {
 }
 
 export async function getCandidateById(candidateId: string): Promise<Candidate | undefined> {
-  const cand = CANDIDATES_STORE.find((c) => c.id === candidateId);
-  if (cand) return cand;
-
-  try {
-    if (db) {
-      const snap = await getDoc(doc(db, 'candidates', candidateId));
-      if (snap.exists()) {
-        return { id: snap.id, ...snap.data() } as Candidate;
-      }
-    }
-  } catch (err) {
-    // fallback
-  }
-  return undefined;
+  return CANDIDATES_STORE.find((c) => c.id === candidateId);
 }
 
 export async function updateCandidateStage(candidateId: string, stage: CandidateStage): Promise<Candidate> {
@@ -762,17 +695,6 @@ export async function updateCandidateStage(candidateId: string, stage: Candidate
     actor_name: 'HR Recruiter',
     created_at: new Date().toISOString(),
   });
-
-  try {
-    if (db) {
-      await updateDoc(doc(db, 'candidates', candidateId), {
-        stage,
-        timeline: candidate.timeline,
-      });
-    }
-  } catch (err) {
-    // offline fallback
-  }
 
   return candidate;
 }
@@ -792,18 +714,6 @@ export async function submitCandidateEvaluation(candidateId: string, evaluation:
     actor_name: evaluation.evaluator_name || 'Interviewer',
     created_at: new Date().toISOString(),
   });
-
-  try {
-    if (db) {
-      await updateDoc(doc(db, 'candidates', candidateId), {
-        evaluation,
-        rating: candidate.rating,
-        timeline: candidate.timeline,
-      });
-    }
-  } catch (err) {
-    // fallback
-  }
 
   return candidate;
 }
@@ -867,23 +777,6 @@ export async function submitJobApplication(
   // Increment applicants count on job
   if (job) job.applicants_count += 1;
 
-  // Direct Ingestion to Firestore
-  try {
-    if (db) {
-      await setDoc(doc(db, 'candidates', newCandId), {
-        ...newCand,
-        created_at: serverTimestamp(),
-      });
-      if (job) {
-        await updateDoc(doc(db, 'job_openings', job.id), {
-          applicants_count: job.applicants_count,
-        });
-      }
-    }
-  } catch (firestoreErr) {
-    console.warn('Firestore candidate direct ingestion warning:', firestoreErr);
-  }
-
   // Automatic Resend Trigger: Dispatch confirmation receipt email
   try {
     await sendApplicationReceivedEmail(
@@ -915,17 +808,6 @@ export async function bulkAdvanceCandidates(candidateIds: string[], targetStage:
         actor_name: 'Recruiter Admin',
         created_at: new Date().toISOString(),
       });
-
-      try {
-        if (db) {
-          await updateDoc(doc(db, 'candidates', id), {
-            stage: targetStage,
-            timeline: c.timeline,
-          });
-        }
-      } catch (e) {
-        // offline fallback
-      }
     }
   }
 }
@@ -951,19 +833,6 @@ export async function bulkRejectCandidates(
         actor_name: 'Recruiter Admin',
         created_at: new Date().toISOString(),
       });
-
-      try {
-        if (db) {
-          await updateDoc(doc(db, 'candidates', id), {
-            stage: 'rejected',
-            rejection_reason: reasonCode,
-            rejection_notes: reasonNotes,
-            timeline: c.timeline,
-          });
-        }
-      } catch (e) {
-        // fallback
-      }
 
       if (sendEmail) {
         try {
@@ -1019,19 +888,6 @@ export async function archiveToTalentPool(
     created_at: new Date().toISOString(),
   });
 
-  try {
-    if (db) {
-      await updateDoc(doc(db, 'candidates', candidateId), {
-        stage: 'talent_pool',
-        is_silver_medalist: isSilverMedalist,
-        talent_pool_tags: candidate.talent_pool_tags,
-        timeline: candidate.timeline,
-      });
-    }
-  } catch (err) {
-    // fallback
-  }
-
   return candidate;
 }
 
@@ -1052,17 +908,6 @@ export async function restoreFromTalentPool(
     actor_name: 'Recruiter Admin',
     created_at: new Date().toISOString(),
   });
-
-  try {
-    if (db) {
-      await updateDoc(doc(db, 'candidates', candidateId), {
-        stage: targetStage,
-        timeline: candidate.timeline,
-      });
-    }
-  } catch (err) {
-    // fallback
-  }
 
   return candidate;
 }

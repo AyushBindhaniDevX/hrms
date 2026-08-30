@@ -19,7 +19,7 @@ interface TenantContextState {
 const TenantContext = createContext<TenantContextState | undefined>(undefined);
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
-  const { profile, isAuthenticated } = useAuth();
+  const { profile, isAuthenticated, clerkOrg } = useAuth();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [workplace, setWorkplace] = useState<Workplace | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -43,6 +43,19 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // 2. Match by Clerk organization slug if not resolved by ID
+      if (!resolvedOrg && clerkOrg?.slug) {
+        const { data: orgBySlug } = await supabase
+          .from('organizations')
+          .select('*')
+          .ilike('slug', clerkOrg.slug.toLowerCase().trim())
+          .maybeSingle();
+
+        if (orgBySlug) {
+          resolvedOrg = orgBySlug as Organization;
+        }
+      }
+
       setOrganization(resolvedOrg);
 
       const targetOrgId = resolvedOrg?.id || profile?.organization_id;
@@ -51,7 +64,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       if (profile?.id) {
         const { data: empData } = await supabase
           .from('employees')
-          .select('*, department:departments(*), workplace:workplaces(*)')
+          .select('*, department:departments!employees_department_id_fkey(*), workplace:workplaces(*)')
           .eq('profile_id', profile.id)
           .maybeSingle();
 
@@ -86,7 +99,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoadingTenant(false);
     }
-  }, [profile]);
+  }, [profile, clerkOrg]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -98,8 +111,12 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, fetchTenantData]);
 
-  const companyName = organization?.name || COMPANY_NAME;
-  const companyLogoUrl = organization?.logo_url || (organization?.settings as any)?.logo_url || null;
+  // Dynamically prioritize Clerk Organization branding & icon
+  const clerkOrgName = clerkOrg?.name || clerkOrg?.organization?.name;
+  const clerkOrgLogo = clerkOrg?.imageUrl || clerkOrg?.organization?.imageUrl || (clerkOrg as any)?.logoUrl;
+
+  const companyName = organization?.name || clerkOrgName || COMPANY_NAME;
+  const companyLogoUrl = organization?.logo_url || clerkOrgLogo || (organization?.settings as any)?.logo_url || null;
   const officeName = workplace?.name || 'Main Office';
 
   const value: TenantContextState = {

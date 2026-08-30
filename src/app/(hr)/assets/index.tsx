@@ -17,6 +17,8 @@ import {
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { isWebCameraAvailable } from '@/utils/mediaDevicesPolyfill';
 import { SidebarLayout } from '@/components/layout/Sidebar';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { LoadingState } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
@@ -78,6 +80,8 @@ const CATEGORIES: { key: AssetCategory; label: string; prefix: string }[] = [
 
 export default function HRAssetsScreen() {
   const colors = useTheme();
+  const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const { width, height } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const isTablet = width >= 768 && width < 1024;
@@ -167,22 +171,23 @@ export default function HRAssetsScreen() {
     }
   }, [showScannerModal]);
 
-  // Real-time Firestore Subscription & Employee Fetching
+  // Real-time Subscription & Employee Fetching
   useEffect(() => {
+    const orgId = tenantOrg?.id || profile?.organization_id;
     const unsubscribe = subscribeToAssets((liveAssets) => {
       setAssets(liveAssets);
       setLoading(false);
       setRefreshing(false);
-    });
+    }, undefined, orgId);
 
-    getEmployees().then((data) => {
+    getEmployees(orgId ? { organization_id: orgId } : undefined).then((data) => {
       setEmployees(data);
     }).catch((err) => console.error('Error fetching employees:', err));
 
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [profile, tenantOrg]);
 
   // Web BarcodeDetector Fallback for HTML5 video
   useEffect(() => {
@@ -228,9 +233,10 @@ export default function HRAssetsScreen() {
 
   const loadData = async () => {
     try {
+      const orgId = tenantOrg?.id || profile?.organization_id;
       const [assetsData, empsData] = await Promise.all([
-        getAssets(),
-        getEmployees(),
+        getAssets(orgId),
+        getEmployees(orgId ? { organization_id: orgId } : undefined),
       ]);
       setAssets(assetsData);
       setEmployees(empsData);
@@ -248,8 +254,9 @@ export default function HRAssetsScreen() {
     const catObj = CATEGORIES.find((c) => c.key === category);
     const generatedTag = `${catObj?.prefix || 'SUB-AST'}-${Math.floor(100 + Math.random() * 900)}`;
 
+    const orgId = tenantOrg?.id || profile?.organization_id || '';
     await createAsset({
-      organization_id: 'subedge_org',
+      organization_id: orgId,
       name: name.trim(),
       asset_tag: generatedTag,
       category,

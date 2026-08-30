@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -34,6 +35,7 @@ import {
 export default function LocationsScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -59,14 +61,15 @@ export default function LocationsScreen() {
 
   const load = useCallback(async () => {
     try {
-      const data = await getWorkplaces();
+      const orgId = tenantOrg?.id || profile?.organization_id;
+      const data = await getWorkplaces(orgId);
       setWorkplaces(data);
     } catch (e) {
       console.error('Failed to load workplaces:', e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile, tenantOrg]);
 
   useEffect(() => {
     load();
@@ -99,8 +102,9 @@ export default function LocationsScreen() {
     setCreating(true);
     setFormError('');
     try {
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
       await createWorkplace({
-        organization_id: profile?.organization_id || '00000000-0000-0000-0000-000000000001',
+        organization_id: orgId,
         name: name.trim(),
         address: address.trim() || undefined,
         latitude: parseFloat(lat),

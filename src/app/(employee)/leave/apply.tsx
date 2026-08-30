@@ -85,11 +85,15 @@ export default function ApplyLeaveScreen() {
   useEffect(() => {
     (async () => {
       if (!profile) return;
+      const orgId = profile.organization_id;
       const [types, emp] = await Promise.all([
-        getLeaveTypes(),
+        getLeaveTypes(orgId),
         getEmployeeByProfileId(profile.id),
       ]);
       setLeaveTypes(types);
+      if (types.length > 0 && !leaveTypeId) {
+        setLeaveTypeId(types[0].id);
+      }
       if (emp) setEmployeeId(emp.id);
       setLoading(false);
     })();
@@ -122,8 +126,17 @@ export default function ApplyLeaveScreen() {
     setError('');
     setSubmitting(true);
     try {
+      let resolvedEmpId = employeeId;
+      if (!resolvedEmpId && profile?.id) {
+        const emp = await getEmployeeByProfileId(profile.id);
+        if (emp?.id) {
+          resolvedEmpId = emp.id;
+          setEmployeeId(emp.id);
+        }
+      }
+
       await applyLeave({
-        employee_id: employeeId,
+        employee_id: resolvedEmpId,
         leave_type_id: leaveTypeId!,
         start_date: startDate!.toISOString().split('T')[0],
         end_date: endDate!.toISOString().split('T')[0],

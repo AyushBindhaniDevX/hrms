@@ -24,17 +24,40 @@ export async function getLeaveTypes(organizationId?: string): Promise<LeaveType[
       const unique = Array.from(new Map((data as LeaveType[]).map((item) => [item.name, item])).values());
       return unique;
     }
+
+    // Auto-seed real leave types into the database if table is empty
+    let resolvedOrgId = organizationId;
+    if (!resolvedOrgId) {
+      const { data: orgData } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
+      if (orgData?.id) resolvedOrgId = orgData.id;
+    }
+
+    const insertPayload = DEFAULT_LEAVE_TYPES.map((lt) => ({
+      organization_id: resolvedOrgId || null,
+      name: lt.name,
+      annual_days: lt.annual_days,
+      is_paid: lt.is_paid,
+    }));
+
+    const { data: seeded, error: seedError } = await supabase
+      .from('leave_types')
+      .insert(insertPayload)
+      .select('*');
+
+    if (!seedError && seeded && seeded.length > 0) {
+      return seeded as LeaveType[];
+    }
   } catch (err) {
     console.warn('Could not query remote leave_types, using defaults:', err);
   }
 
-  // Safe fallback to default leave types with valid UUID structure
+  // Safe fallback to default leave types
   return DEFAULT_LEAVE_TYPES.map((lt, idx) => ({
     id: `00000000-0000-0000-0000-00000000000${idx + 1}`,
     name: lt.name,
     annual_days: lt.annual_days,
     is_paid: lt.is_paid,
-    organization_id: organizationId || '00000000-0000-0000-0000-000000000001',
+    organization_id: organizationId || '190b952b-df91-4011-8e48-a5e02fad80fe',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   })) as LeaveType[];
@@ -91,49 +114,89 @@ export async function applyLeave(params: {
 }): Promise<LeaveRequest> {
   const now = new Date().toISOString();
 
-  // 1. Ensure employee_id is valid
+  // 1. Ensure employee_id is valid and resolve organization
   let empId = params.employee_id;
-  if (!empId) {
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData?.user?.id) {
-      const { data: empRecord } = await supabase
-        .from('employees')
-        .select('id')
-        .eq('profile_id', userData.user.id)
-        .maybeSingle();
-      if (empRecord?.id) empId = empRecord.id;
+  let empOrgId: string | null = null;
+
+  if (empId) {
+    const { data: empRecord } = await supabase
+      .from('employees')
+      .select('id, organization_id, profile:profiles(organization_id), department:departments(organization_id)')
+      .eq('id', empId)
+      .maybeSingle();
+    if (empRecord) {
+      empOrgId = empRecord.organization_id || (empRecord.profile as any)?.organization_id || (empRecord.department as any)?.organization_id || null;
     }
+  }
+
+  if (!empId) {
+    const { data: empRecord } = await supabase
+      .from('employees')
+      .select('id, organization_id, profile:profiles(organization_id), department:departments(organization_id)')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (empRecord?.id) {
+      empId = empRecord.id;
+      empOrgId = empRecord.organization_id || (empRecord.profile as any)?.organization_id || (empRecord.department as any)?.organization_id || null;
+    }
+  }
+
+  if (!empOrgId) {
+    const { data: anyOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
+    if (anyOrg?.id) empOrgId = anyOrg.id;
   }
 
   if (!empId) {
     throw new Error('Employee record could not be identified. Please ensure your profile is active.');
   }
 
-  // 2. Ensure leave_type_id exists in leave_types table
-  let validLeaveTypeId = params.leave_type_id;
-  const { data: matchedType } = await supabase
-    .from('leave_types')
-    .select('id')
-    .eq('id', validLeaveTypeId)
-    .maybeSingle();
+  // 2. Ensure leave_type_id exists in leave_types table to satisfy foreign key constraint
+  let validLeaveTypeId: string | null = null;
 
-  if (!matchedType) {
-    const { data: anyType } = await supabase.from('leave_types').select('id').limit(1).maybeSingle();
-    if (anyType?.id) {
-      validLeaveTypeId = anyType.id;
-    } else {
-      const { data: insType } = await supabase
-        .from('leave_types')
-        .insert({
-          name: 'Annual Leave',
-          annual_days: 18,
-          is_paid: true,
-          organization_id: '00000000-0000-0000-0000-000000000001',
-        })
-        .select('id')
-        .maybeSingle();
-      if (insType?.id) validLeaveTypeId = insType.id;
+  if (params.leave_type_id && !params.leave_type_id.startsWith('00000000-0000-0000-0000-')) {
+    const { data: matchedType } = await supabase
+      .from('leave_types')
+      .select('id')
+      .eq('id', params.leave_type_id)
+      .maybeSingle();
+    if (matchedType?.id) {
+      validLeaveTypeId = matchedType.id;
     }
+  }
+
+  // If not found by ID (e.g. fallback dummy ID was sent), find any existing leave_type in DB
+  if (!validLeaveTypeId) {
+    const { data: existingTypes } = await supabase
+      .from('leave_types')
+      .select('id, name')
+      .limit(10);
+
+    if (existingTypes && existingTypes.length > 0) {
+      validLeaveTypeId = existingTypes[0].id;
+    } else {
+      // Seed default leave types with valid organization ID
+      const { data: insTypes } = await supabase
+        .from('leave_types')
+        .insert(
+          DEFAULT_LEAVE_TYPES.map((lt) => ({
+            name: lt.name,
+            annual_days: lt.annual_days,
+            is_paid: lt.is_paid,
+            organization_id: empOrgId,
+          }))
+        )
+        .select('id')
+        .limit(1);
+
+      if (insTypes && insTypes.length > 0) {
+        validLeaveTypeId = insTypes[0].id;
+      }
+    }
+  }
+
+  if (!validLeaveTypeId) {
+    throw new Error('Leave type configuration not found. Please contact your HR administrator.');
   }
 
   const { data, error } = await supabase
@@ -179,7 +242,7 @@ export async function getPendingLeaveRequests(organizationId?: string): Promise<
     .select(`
       *,
       leave_type:leave_types(*),
-      employee:employees!inner(*, profile:profiles!inner(*), department:departments(*))
+      employee:employees!inner(*, profile:profiles!inner(*), department:departments!employees_department_id_fkey(*))
     `)
     .eq('status', 'pending');
 
@@ -199,7 +262,7 @@ export async function getAllLeaveRequests(organizationId?: string): Promise<Leav
     .select(`
       *,
       leave_type:leave_types(*),
-      employee:employees!inner(*, profile:profiles!inner(*), department:departments(*))
+      employee:employees!inner(*, profile:profiles!inner(*), department:departments!employees_department_id_fkey(*))
     `);
 
   if (organizationId) {
@@ -239,12 +302,34 @@ export async function processLeaveRequest(
       .maybeSingle();
 
     if (balData) {
+      // Row exists — update used/remaining days
       const newUsed = (balData.used_days || 0) + reqData.days;
-      const newRem = (balData.allocated_days || 0) - newUsed;
+      const newRem = Math.max(0, (balData.allocated_days || 0) - newUsed);
       await supabase
         .from('leave_balances')
         .update({ used_days: newUsed, remaining_days: newRem, updated_at: now })
         .eq('id', balData.id);
+    } else {
+      // No DB row yet — look up the leave type's annual allocation and insert a fresh balance row
+      const { data: ltData } = await supabase
+        .from('leave_types')
+        .select('annual_days')
+        .eq('id', reqData.leave_type_id)
+        .maybeSingle();
+      const allocated = ltData?.annual_days ?? 12;
+      const newUsed = reqData.days;
+      const newRem = Math.max(0, allocated - newUsed);
+      await supabase
+        .from('leave_balances')
+        .insert({
+          employee_id: reqData.employee_id,
+          leave_type_id: reqData.leave_type_id,
+          year: y,
+          allocated_days: allocated,
+          used_days: newUsed,
+          remaining_days: newRem,
+          updated_at: now,
+        });
     }
   }
 

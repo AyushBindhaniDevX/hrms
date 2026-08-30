@@ -1,4 +1,4 @@
-import { ADMIN_NAV } from '@/constants/navigation';
+import { getNavForRole } from '@/constants/navigation';
 import { useRouter } from 'expo-router';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -33,7 +33,6 @@ import {
   deleteUserRecord,
 } from '@/lib/services/organization';
 import { supabase } from '@/lib/supabase';
-import { resetPassword } from '@/lib/auth';
 import { getDepartments, getWorkplaces, getEmployees, updateEmployee } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import { createAuditLog } from '@/lib/services/audit';
@@ -62,6 +61,7 @@ import {
   RotateCcw,
   RefreshCw,
   Umbrella,
+  Eye,
 } from 'lucide-react-native';
 
 export default function UserManagementScreen() {
@@ -97,6 +97,7 @@ export default function UserManagementScreen() {
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState<'admin' | 'hr' | 'employee'>('employee');
+  const [newEmploymentType, setNewEmploymentType] = useState('full_time');
   const [createEmpRecord, setCreateEmpRecord] = useState(true);
   const [newEmpCode, setNewEmpCode] = useState('');
   const [newDeptId, setNewDeptId] = useState<string | null>(null);
@@ -105,6 +106,12 @@ export default function UserManagementScreen() {
   const [newShiftId, setNewShiftId] = useState<string | null>(null);
   const [newManagerId, setNewManagerId] = useState<string | null>(null);
   const [newSalary, setNewSalary] = useState('');
+  const [newEpfPercentage, setNewEpfPercentage] = useState('12');
+  const [newSocsoPercentage, setNewSocsoPercentage] = useState('0.5');
+  const [newTaxPercentage, setNewTaxPercentage] = useState('5');
+  const [newTaxRegime, setNewTaxRegime] = useState('custom');
+  const [newHraPercentage, setNewHraPercentage] = useState('40');
+  const [newTransportAllowance, setNewTransportAllowance] = useState('0');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
@@ -113,6 +120,7 @@ export default function UserManagementScreen() {
   const [editFullName, setEditFullName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editRole, setEditRole] = useState<'admin' | 'hr' | 'employee'>('employee');
+  const [editEmploymentType, setEditEmploymentType] = useState('full_time');
   const [editEmpId, setEditEmpId] = useState<string | null>(null);
   const [editEmpCode, setEditEmpCode] = useState('');
   const [editDesignation, setEditDesignation] = useState('');
@@ -121,6 +129,12 @@ export default function UserManagementScreen() {
   const [editShiftId, setEditShiftId] = useState<string | null>(null);
   const [editManagerId, setEditManagerId] = useState<string | null>(null);
   const [editSalary, setEditSalary] = useState('');
+  const [editEpfPercentage, setEditEpfPercentage] = useState('12');
+  const [editSocsoPercentage, setEditSocsoPercentage] = useState('0.5');
+  const [editTaxPercentage, setEditTaxPercentage] = useState('5');
+  const [editTaxRegime, setEditTaxRegime] = useState('custom');
+  const [editHraPercentage, setEditHraPercentage] = useState('40');
+  const [editTransportAllowance, setEditTransportAllowance] = useState('0');
   const [editStatus, setEditStatus] = useState('active');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
@@ -139,13 +153,13 @@ export default function UserManagementScreen() {
 
   const load = useCallback(async () => {
     try {
-      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id;
       const [userData, deptData, wpData, shiftData, empData] = await Promise.all([
         getOrgUsers(orgId),
         getDepartments(orgId),
         getWorkplaces(orgId),
         getShifts(orgId),
-        getEmployees({ organization_id: orgId }),
+        getEmployees(orgId ? { organization_id: orgId } : undefined),
       ]);
       setUsers(userData);
       setDepartments(deptData);
@@ -233,8 +247,8 @@ export default function UserManagementScreen() {
     setFormError('');
     setSavingUser(true);
     try {
-      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
-      const fullEmail = newEmail.includes('@') ? newEmail.trim().toLowerCase() : `${newEmail.trim().toLowerCase()}@${tenantDomain}`;
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '';
+      const fullEmail = newEmail.trim().toLowerCase();
 
       const uid = await createSystemUser({
         email: fullEmail,
@@ -251,6 +265,13 @@ export default function UserManagementScreen() {
         default_shift_id: newShiftId || undefined,
         manager_id: newManagerId || undefined,
         basic_salary: parseFloat(newSalary) || 0,
+        employment_type: newEmploymentType,
+        epf_percentage: parseFloat(newEpfPercentage) || 0,
+        socso_percentage: parseFloat(newSocsoPercentage) || 0,
+        tax_percentage: parseFloat(newTaxPercentage) || 0,
+        tax_regime: newTaxRegime,
+        hra_percentage: parseFloat(newHraPercentage) || 0,
+        transport_allowance: parseFloat(newTransportAllowance) || 0,
       });
 
       await createAuditLog('user_created', 'profile', uid, {
@@ -276,7 +297,7 @@ export default function UserManagementScreen() {
     setLeaveUser(u);
     setLeaveSuccessBanner('');
     try {
-      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id || u.organization_id || '';
       
       // Auto-resolve employee ID for profile
       let empId: string | null = null;
@@ -371,6 +392,14 @@ export default function UserManagementScreen() {
         setEditWorkplaceId(empData.workplace_id || null);
         setEditManagerId(empData.manager_id || null);
         setEditSalary(empData.basic_salary ? String(empData.basic_salary) : '0');
+        setEditEmploymentType((empData as any).employment_type || 'full_time');
+        const tc = (empData as any).tax_config || {};
+        setEditEpfPercentage(tc.epf_percentage != null ? String(tc.epf_percentage) : '12');
+        setEditSocsoPercentage(tc.socso_percentage != null ? String(tc.socso_percentage) : '0.5');
+        setEditTaxPercentage(tc.tax_percentage != null ? String(tc.tax_percentage) : tc.tds_percentage != null ? String(tc.tds_percentage) : '5');
+        setEditTaxRegime(tc.tax_regime || 'custom');
+        setEditHraPercentage(tc.hra_percentage != null ? String(tc.hra_percentage) : '40');
+        setEditTransportAllowance(tc.transport_allowance != null ? String(tc.transport_allowance) : '0');
         setEditStatus(empData.employment_status || 'active');
 
         let shiftVal = (empData as any).default_shift_id || null;
@@ -398,6 +427,12 @@ export default function UserManagementScreen() {
         setEditShiftId(null);
         setEditManagerId(null);
         setEditSalary('');
+        setEditEmploymentType('full_time');
+        setEditEpfPercentage('12');
+        setEditSocsoPercentage('0.5');
+        setEditTaxPercentage('5');
+        setEditHraPercentage('40');
+        setEditTransportAllowance('0');
         setEditStatus('active');
       }
     } catch (e) {
@@ -432,6 +467,16 @@ export default function UserManagementScreen() {
         role: editRole,
       });
 
+      const updatedTaxConfig = {
+        epf_percentage: parseFloat(editEpfPercentage) || 0,
+        socso_percentage: parseFloat(editSocsoPercentage) || 0,
+        tax_percentage: parseFloat(editTaxPercentage) || 0,
+        tds_percentage: parseFloat(editTaxPercentage) || 0,
+        tax_regime: editTaxRegime,
+        hra_percentage: parseFloat(editHraPercentage) || 0,
+        transport_allowance: parseFloat(editTransportAllowance) || 0,
+      };
+
       // 2. Update linked Employee if exists, otherwise create it!
       let currentEmpId = editEmpId;
       if (currentEmpId) {
@@ -443,37 +488,52 @@ export default function UserManagementScreen() {
           default_shift_id: editShiftId || null,
           manager_id: editManagerId || null,
           basic_salary: parseFloat(editSalary) || 0,
+          employment_type: editEmploymentType as any,
+          tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
         });
       } else {
         const empPayload: Record<string, any> = {
           profile_id: editUser.id,
+          organization_id: editUser.organization_id,
           employee_code: editEmpCode.trim() || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
           department_id: editDeptId || null,
           workplace_id: editWorkplaceId || null,
           designation: editDesignation.trim() || 'Staff',
+          employment_type: editEmploymentType || 'full_time',
           manager_id: editManagerId || null,
           default_shift_id: editShiftId || null,
           basic_salary: parseFloat(editSalary) || 0,
+          tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
           onboarding_completed: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
 
-        let { data: newEmp, error: insErr } = await supabase
-          .from('employees')
-          .insert(empPayload)
-          .select()
-          .maybeSingle();
+        let newEmp: any = null;
+        let attempts = 0;
+        while (attempts < 6) {
+          attempts++;
+          const { data: insData, error: insErr } = await supabase
+            .from('employees')
+            .insert(empPayload)
+            .select()
+            .maybeSingle();
 
-        if (insErr && insErr.code === 'PGRST204') {
-          const match = insErr.message?.match(/Could not find the '([^']+)' column/);
-          if (match && match[1]) {
-            delete empPayload[match[1]];
-            const retry = await supabase.from('employees').insert(empPayload).select().maybeSingle();
-            newEmp = retry.data;
+          if (!insErr) {
+            newEmp = insData;
+            break;
           }
+
+          if (insErr.code === 'PGRST204' || insErr.message?.includes('schema cache')) {
+            const match = insErr.message?.match(/Could not find the '([^']+)' column/);
+            if (match && match[1]) {
+              delete empPayload[match[1]];
+              continue;
+            }
+          }
+          break;
         }
 
         if (newEmp) {
@@ -568,16 +628,15 @@ export default function UserManagementScreen() {
 
   const handleResetPassword = async (userEmail: string) => {
     try {
-      await resetPassword(userEmail);
       setInfoBanner({
         type: 'success',
-        message: `Password reset email sent to ${userEmail}.`,
+        message: `Password reset instructions have been initiated for ${userEmail}. The user can verify via Clerk email code.`,
       });
       setTimeout(() => setInfoBanner(null), 4000);
     } catch (err: any) {
       setInfoBanner({
         type: 'error',
-        message: err.message || `Failed to send password reset email to ${userEmail}.`,
+        message: err.message || `Failed to send password reset for ${userEmail}.`,
       });
       setTimeout(() => setInfoBanner(null), 5000);
     }
@@ -621,8 +680,10 @@ export default function UserManagementScreen() {
 
   if (loading) return <LoadingState />;
 
+  const navItems = getNavForRole(currentAdmin?.role);
+
   return (
-    <SidebarLayout items={ADMIN_NAV}>
+    <SidebarLayout items={navItems}>
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
@@ -844,6 +905,20 @@ export default function UserManagementScreen() {
                   </View>
 
                   <View style={styles.userActions}>
+                    {/* View Employee Profile */}
+                    {managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id) && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+                          if (emp?.id) router.push(`/(hr)/employees/${emp.id}`);
+                        }}
+                        style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1, backgroundColor: '#f8faff' }]}
+                      >
+                        <Eye size={14} color="#4f46e5" />
+                        <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Profile</Text>
+                      </TouchableOpacity>
+                    )}
+
                     <TouchableOpacity
                       onPress={() => openEditModal(u)}
                       style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
@@ -932,24 +1007,12 @@ export default function UserManagementScreen() {
                 />
 
                 <Input
-                  label="Work Username (Login ID) *"
-                  placeholder="e.g. sarah"
+                  label="Work Email Address *"
+                  placeholder="e.g. sarah.jenkins@company.com"
                   value={newEmail}
                   onChangeText={setNewEmail}
+                  keyboardType="email-address"
                   autoCapitalize="none"
-                  rightElement={
-                    <View style={{
-                      paddingHorizontal: 12,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      backgroundColor: '#F1F5F9',
-                      borderLeftWidth: 1,
-                      borderLeftColor: '#CBD5E1',
-                      alignSelf: 'stretch',
-                    }}>
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748B' }}>@{tenantDomain}</Text>
-                    </View>
-                  }
                 />
 
                 <Input
@@ -1053,13 +1116,82 @@ export default function UserManagementScreen() {
                       onValueChange={(val) => setNewShiftId(val || null)}
                     />
 
+                    <Select
+                      label="Employment Type"
+                      options={[
+                        { label: 'Full Time (Permanent)', value: 'full_time' },
+                        { label: 'Part Time', value: 'part_time' },
+                        { label: 'Contract / Consultant', value: 'contract' },
+                        { label: 'Intern / Trainee', value: 'intern' },
+                      ]}
+                      value={newEmploymentType}
+                      onValueChange={(val) => setNewEmploymentType(val || 'full_time')}
+                    />
+
                     <Input
-                      label="Basic Monthly Salary (₹)"
+                      label="Basic Monthly Salary (₹/$)"
                       placeholder="50000"
                       value={newSalary}
                       onChangeText={setNewSalary}
                       keyboardType="numeric"
                     />
+
+                    {/* Statutory & Tax Deduction Configuration */}
+                    <View style={{ marginTop: 8, padding: 12, backgroundColor: '#F8FAFC', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', gap: 12 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F172A' }}>
+                        Custom Statutory & Tax Deductions
+                      </Text>
+
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label="EPF / PF Rate (%)"
+                            placeholder="12"
+                            value={newEpfPercentage}
+                            onChangeText={setNewEpfPercentage}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label="SOCSO / Ins. (%)"
+                            placeholder="0.5"
+                            value={newSocsoPercentage}
+                            onChangeText={setNewSocsoPercentage}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label="Tax / TDS Deduction (%)"
+                            placeholder="5"
+                            value={newTaxPercentage}
+                            onChangeText={setNewTaxPercentage}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label="Housing (HRA) (%)"
+                            placeholder="40"
+                            value={newHraPercentage}
+                            onChangeText={setNewHraPercentage}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      </View>
+
+                      <Input
+                        label="Transport Allowance (₹/$)"
+                        placeholder="0"
+                        value={newTransportAllowance}
+                        onChangeText={setNewTransportAllowance}
+                        keyboardType="numeric"
+                      />
+                    </View>
                   </View>
                 )}
 
@@ -1186,13 +1318,82 @@ export default function UserManagementScreen() {
                   onValueChange={(val) => setEditShiftId(val || null)}
                 />
 
+                <Select
+                  label="Employment Type"
+                  options={[
+                    { label: 'Full Time (Permanent)', value: 'full_time' },
+                    { label: 'Part Time', value: 'part_time' },
+                    { label: 'Contract / Consultant', value: 'contract' },
+                    { label: 'Intern / Trainee', value: 'intern' },
+                  ]}
+                  value={editEmploymentType}
+                  onValueChange={(val) => setEditEmploymentType(val || 'full_time')}
+                />
+
                 <Input
-                  label="Basic Monthly Salary (₹)"
+                  label="Basic Monthly Salary (₹/$)"
                   value={editSalary}
                   onChangeText={setEditSalary}
                   placeholder="50000"
                   keyboardType="numeric"
                 />
+
+                {/* Custom Statutory & Tax Deductions */}
+                <View style={{ marginTop: 6, padding: 12, backgroundColor: '#F8FAFC', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', gap: 12 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F172A' }}>
+                    Custom Statutory & Tax Deductions
+                  </Text>
+
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label="EPF / PF Rate (%)"
+                        placeholder="12"
+                        value={editEpfPercentage}
+                        onChangeText={setEditEpfPercentage}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label="SOCSO / Ins. (%)"
+                        placeholder="0.5"
+                        value={editSocsoPercentage}
+                        onChangeText={setEditSocsoPercentage}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label="Tax / TDS Rate (%)"
+                        placeholder="5"
+                        value={editTaxPercentage}
+                        onChangeText={setEditTaxPercentage}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label="Housing (HRA) (%)"
+                        placeholder="40"
+                        value={editHraPercentage}
+                        onChangeText={setEditHraPercentage}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+
+                  <Input
+                    label="Transport Allowance (₹/$)"
+                    placeholder="0"
+                    value={editTransportAllowance}
+                    onChangeText={setEditTransportAllowance}
+                    keyboardType="numeric"
+                  />
+                </View>
 
                 <Select
                   label="Employment Status"
@@ -1408,6 +1609,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     backgroundColor: '#fafafa',
     gap: 12,
+  },
+  formSubHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 4,
   },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 12 },
 });

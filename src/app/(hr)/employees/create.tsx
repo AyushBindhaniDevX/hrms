@@ -7,13 +7,12 @@ import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { DatePicker } from '@/components/ui/DatePicker';
 import { Button } from '@/components/ui/Button';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getDepartments, createEmployee, getEmployees, getWorkplaces } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import type { Department, Employee, WorkShift, Workplace } from '@/types';
-import { RefreshCw, Sparkles } from 'lucide-react-native';
+import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders } from 'lucide-react-native';
 
 export default function CreateEmployeeScreen() {
   const colors = useTheme();
@@ -26,7 +25,9 @@ export default function CreateEmployeeScreen() {
   const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showTaxSection, setShowTaxSection] = useState(false);
 
+  // Basic fields
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
@@ -38,6 +39,17 @@ export default function CreateEmployeeScreen() {
   const [role, setRole] = useState<string>('employee');
   const [designation, setDesignation] = useState('');
   const [basicSalary, setBasicSalary] = useState('');
+
+  // Tax config & custom percentages
+  const [pfNumber, setPfNumber] = useState('');
+  const [taxRegime, setTaxRegime] = useState<string>('new');
+  const [tdsPercentage, setTdsPercentage] = useState('');
+  const [epfPercentage, setEpfPercentage] = useState('12');
+  const [hraPercentage, setHraPercentage] = useState('40');
+  const [ptAmount, setPtAmount] = useState('200');
+  const [esopValue, setEsopValue] = useState('');
+  const [hraType, setHraType] = useState<string>('non-metro');
+  const [epfExempt, setEpfExempt] = useState<string>('no');
 
   const tenantDomain = (tenantOrg?.settings as any)?.domain || (typeof window !== 'undefined' && window.location.hostname.includes('shanti') ? 'shantimemorialhospital.com' : 'subedge.com');
 
@@ -51,11 +63,11 @@ export default function CreateEmployeeScreen() {
     setEmpCode(generateRandomCode());
   }, [tenantDomain]);
 
-    useFocusEffect(
+  useFocusEffect(
     React.useCallback(() => {
       let isActive = true;
       (async () => {
-        const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
+        const orgId = tenantOrg?.id || profile?.organization_id || '';
         const [d, m, s, wp] = await Promise.all([
           getDepartments(orgId),
           getEmployees({ organization_id: orgId }),
@@ -73,24 +85,60 @@ export default function CreateEmployeeScreen() {
     }, [profile, tenantOrg])
   );
 
+  // When HRA type changes, update HRA percentage default unless custom
+  useEffect(() => {
+    if (hraType === 'metro') {
+      setHraPercentage('50');
+    } else if (hraType === 'non-metro') {
+      setHraPercentage('40');
+    }
+  }, [hraType]);
+
+  // When EPF exemption changes, update EPF percentage
+  useEffect(() => {
+    if (epfExempt === 'yes') {
+      setEpfPercentage('0');
+    } else if (epfPercentage === '0') {
+      setEpfPercentage('12');
+    }
+  }, [epfExempt]);
+
+  // Auto-suggest TDS based on basic salary & regime when salary changes
+  useEffect(() => {
+    if (!basicSalary) return;
+    const basic = parseFloat(basicSalary) || 0;
+    const annual = basic * 12;
+    let suggested = 0;
+    if (taxRegime === 'old') {
+      if (annual > 1000000) suggested = 30;
+      else if (annual > 500000) suggested = 20;
+      else if (annual > 250000) suggested = 5;
+    } else if (taxRegime === 'new') {
+      if (annual > 1500000) suggested = 30;
+      else if (annual > 1200000) suggested = 20;
+      else if (annual > 1000000) suggested = 15;
+      else if (annual > 700000) suggested = 10;
+      else if (annual > 300000) suggested = 5;
+    }
+    if (taxRegime !== 'custom') {
+      setTdsPercentage(suggested > 0 ? String(suggested) : '0');
+    }
+  }, [basicSalary, taxRegime]);
+
   const handleNameChange = (name: string) => {
     setFullName(name);
     const words = name.trim().split(/\s+/);
     const cleanWords = words.filter((w) => !/^(dr|mr|mrs|ms|prof)\.?$/i.test(w));
     const mainName = cleanWords[0] || words[0] || '';
     const usernamePrefix = mainName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (usernamePrefix) {
-      setUsername(usernamePrefix);
-    }
+    if (usernamePrefix) setUsername(usernamePrefix);
   };
 
   const handleDeptChange = (val: string | null) => {
     setDeptId(val);
     if (val) {
       const dept = departments.find(d => d.id === val);
-      if (dept && dept.manager_id) {
-        setManagerId(dept.manager_id);
-      }
+      if (dept && dept.manager_id) setManagerId(dept.manager_id);
     }
   };
 
@@ -106,8 +154,8 @@ export default function CreateEmployeeScreen() {
     setError('');
     setLoading(true);
     try {
-      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
-      const fullEmail = username.includes('@') ? username.trim().toLowerCase() : `${username.trim().toLowerCase()}@${tenantDomain}`;
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
+      const fullEmail = username.trim().toLowerCase();
 
       await createEmployee({
         full_name: fullName.trim(),
@@ -123,6 +171,18 @@ export default function CreateEmployeeScreen() {
         role: role,
         designation: designation.trim() || undefined,
         basic_salary: parseFloat(basicSalary) || 0,
+        tax_config: {
+          pf_number: pfNumber.trim() || null,
+          tax_regime: taxRegime as any,
+          tds_percentage: parseFloat(tdsPercentage) || 0,
+          epf_percentage: parseFloat(epfPercentage) || 0,
+          hra_percentage: parseFloat(hraPercentage) || 0,
+          pt_amount: parseFloat(ptAmount) || 0,
+          custom_tax_percentage: parseFloat(tdsPercentage) || 0,
+          esop_value: parseFloat(esopValue) || null,
+          hra_type: hraType as any,
+          epf_exempt: epfExempt === 'yes',
+        },
       });
       router.replace('/(hr)/employees' as never);
     } catch (err: unknown) {
@@ -131,6 +191,19 @@ export default function CreateEmployeeScreen() {
       setLoading(false);
     }
   };
+
+  // Dynamic Live Calculation
+  const basic = parseFloat(basicSalary) || 0;
+  const epfPct = parseFloat(epfPercentage) || 0;
+  const epf = epfExempt === 'yes' ? 0 : Math.round((basic * epfPct) / 100);
+  const tdsPct = parseFloat(tdsPercentage) || 0;
+  const tds = Math.round((basic * tdsPct) / 100);
+  const pt = parseFloat(ptAmount) || 0;
+  const hraPct = parseFloat(hraPercentage) || 0;
+  const hra = Math.round((basic * hraPct) / 100);
+  const esop = parseFloat(esopValue) ? Math.round(parseFloat(esopValue) / 12) : 0;
+  const totalDeductions = epf + tds + pt;
+  const netEstimate = basic + hra - totalDeductions;
 
   return (
     <SidebarLayout>
@@ -148,6 +221,9 @@ export default function CreateEmployeeScreen() {
             </View>
           ) : null}
 
+          {/* ─── Basic Info ─────────────────────────────────────────────── */}
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>PERSONAL INFORMATION</Text>
+
           <Input
             label="Full Name *"
             placeholder="e.g. Rahul Sharma"
@@ -156,16 +232,12 @@ export default function CreateEmployeeScreen() {
           />
 
           <Input
-            label="Work Username (Login ID) *"
-            placeholder="e.g. rahul"
+            label="Work Email Address *"
+            placeholder="e.g. rahul.sharma@company.com"
             value={username}
             onChangeText={setUsername}
+            keyboardType="email-address"
             autoCapitalize="none"
-            rightElement={
-              <View style={styles.domainBadge}>
-                <Text style={styles.domainText}>@{tenantDomain}</Text>
-              </View>
-            }
           />
 
           <Input
@@ -186,7 +258,10 @@ export default function CreateEmployeeScreen() {
 
           <Input label="Phone Number (used as default password) *" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
           <Input label="Designation / Position" placeholder="e.g. Chief Medical Officer" value={designation} onChangeText={setDesignation} />
-          <Input label="Monthly Base Salary (INR)" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" placeholder="50000" />
+          <Input label="Monthly Base Salary (INR) *" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" placeholder="50000" />
+
+          {/* ─── Org Structure ──────────────────────────────────────────── */}
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 8 }]}>ORGANISATION</Text>
 
           <Select
             label="Department"
@@ -228,12 +303,181 @@ export default function CreateEmployeeScreen() {
             onValueChange={(val) => setRole(val || 'employee')}
           />
 
+          {/* ─── Tax & Statutory Configuration ──────────────────────────── */}
+          <TouchableOpacity
+            style={[styles.taxToggle, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={() => setShowTaxSection(!showTaxSection)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.taxToggleLeft}>
+              <View style={styles.taxIconWrap}>
+                <ShieldCheck size={18} color="#0D7377" />
+              </View>
+              <View>
+                <Text style={[styles.taxToggleTitle, { color: colors.text }]}>Custom Tax Regime & Percentages</Text>
+                <Text style={[styles.taxToggleSub, { color: colors.textSecondary }]}>Configure & edit custom TDS, EPF, HRA, and PT</Text>
+              </View>
+            </View>
+            {showTaxSection
+              ? <ChevronUp size={18} color={colors.textSecondary} />
+              : <ChevronDown size={18} color={colors.textSecondary} />}
+          </TouchableOpacity>
+
+          {showTaxSection && (
+            <View style={[styles.taxCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Select
+                label="Tax Regime Configuration"
+                options={[
+                  { label: 'New Regime (Standard 2024-25 Default Slabs)', value: 'new' },
+                  { label: 'Old Regime (Standard Old Tax Slabs & Exemptions)', value: 'old' },
+                  { label: 'Custom Regime (Fully Editable Custom Percentages)', value: 'custom' },
+                ]}
+                value={taxRegime}
+                onValueChange={(v) => setTaxRegime(v || 'new')}
+              />
+
+              <View style={styles.customGrid}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="TDS Deduction (%)"
+                    placeholder="e.g. 10"
+                    value={tdsPercentage}
+                    onChangeText={setTdsPercentage}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="EPF Contribution (%)"
+                    placeholder="12"
+                    value={epfPercentage}
+                    onChangeText={setEpfPercentage}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.customGrid}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="HRA Rate (%)"
+                    placeholder="40"
+                    value={hraPercentage}
+                    onChangeText={setHraPercentage}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Professional Tax (₹)"
+                    placeholder="200"
+                    value={ptAmount}
+                    onChangeText={setPtAmount}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <Input
+                label="PF / EPF Member Number (UAN)"
+                placeholder="e.g. 100XXXXXXXXX"
+                value={pfNumber}
+                onChangeText={setPfNumber}
+                autoCapitalize="characters"
+              />
+
+              <Select
+                label="EPF Exemption Status"
+                options={[
+                  { label: 'Applicable — standard deduction', value: 'no' },
+                  { label: 'Exempt (contractual or salary opt-out)', value: 'yes' },
+                ]}
+                value={epfExempt}
+                onValueChange={(v) => setEpfExempt(v || 'no')}
+              />
+
+              <Select
+                label="City Classification (HRA Presets)"
+                options={[
+                  { label: 'Non-Metro City (40% Default)', value: 'non-metro' },
+                  { label: 'Metro City (50% Default)', value: 'metro' },
+                  { label: 'Custom Percentage Set Above', value: 'custom' },
+                ]}
+                value={hraType}
+                onValueChange={(v) => setHraType(v || 'non-metro')}
+              />
+
+              <Input
+                label="Annual ESOP Value (INR)"
+                placeholder="e.g. 120000"
+                value={esopValue}
+                onChangeText={setEsopValue}
+                keyboardType="numeric"
+              />
+
+              {/* Live payroll estimate */}
+              {basic > 0 && (
+                <View style={[styles.estimateBox, { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={styles.estimateTitle}>📊 Live Payroll Calculation</Text>
+                    <Text style={{ fontSize: 11, color: '#006a61', fontWeight: '700' }}>
+                      {taxRegime.toUpperCase()} REGIME
+                    </Text>
+                  </View>
+
+                  <View style={styles.estimateRow}>
+                    <Text style={styles.estimateLabel}>Basic Salary</Text>
+                    <Text style={styles.estimateVal}>₹{basic.toLocaleString('en-IN')}</Text>
+                  </View>
+
+                  <View style={styles.estimateRow}>
+                    <Text style={styles.estimateLabel}>HRA ({hraPct}%)</Text>
+                    <Text style={[styles.estimateVal, { color: '#006a61' }]}>+₹{hra.toLocaleString('en-IN')}</Text>
+                  </View>
+
+                  {esop > 0 && (
+                    <View style={styles.estimateRow}>
+                      <Text style={styles.estimateLabel}>ESOP (Monthly Spread)</Text>
+                      <Text style={[styles.estimateVal, { color: '#006a61' }]}>+₹{esop.toLocaleString('en-IN')}</Text>
+                    </View>
+                  )}
+
+                  <View style={[styles.estimateDivider]} />
+
+                  <View style={styles.estimateRow}>
+                    <Text style={styles.estimateLabel}>EPF ({epfPct}%)</Text>
+                    <Text style={[styles.estimateVal, { color: '#dc2626' }]}>-₹{epf.toLocaleString('en-IN')}</Text>
+                  </View>
+
+                  <View style={styles.estimateRow}>
+                    <Text style={styles.estimateLabel}>TDS / Income Tax ({tdsPct}%)</Text>
+                    <Text style={[styles.estimateVal, { color: '#dc2626' }]}>-₹{tds.toLocaleString('en-IN')}</Text>
+                  </View>
+
+                  <View style={styles.estimateRow}>
+                    <Text style={styles.estimateLabel}>Professional Tax</Text>
+                    <Text style={[styles.estimateVal, { color: '#dc2626' }]}>-₹{pt.toLocaleString('en-IN')}</Text>
+                  </View>
+
+                  <View style={[styles.estimateDivider]} />
+
+                  <View style={styles.estimateRow}>
+                    <Text style={[styles.estimateLabel, { fontWeight: '800', color: '#006a61' }]}>Estimated Net Salary</Text>
+                    <Text style={[styles.estimateVal, { fontWeight: '800', color: '#006a61', fontSize: 16 }]}>
+                      ₹{Math.max(netEstimate, 0).toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+
           <Button
             title="Create & Onboard Employee"
             onPress={handleCreate}
             loading={loading}
             size="lg"
-            style={{ marginTop: 12 }}
+            style={{ marginTop: 16 }}
           />
         </ScrollView>
       </View>
@@ -245,8 +489,18 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
   title: { fontSize: 20, fontWeight: '700' },
-  form: { padding: 24, maxWidth: 640, width: '100%', alignSelf: 'center', gap: 6 },
+  form: { padding: 24, maxWidth: 680, width: '100%', alignSelf: 'center', gap: 6, paddingBottom: 48 },
   errorBox: { padding: 12, borderRadius: 8, marginBottom: 12 },
+
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: 16,
+    marginBottom: 4,
+  },
+
   domainBadge: {
     paddingHorizontal: 12,
     justifyContent: 'center',
@@ -256,11 +510,8 @@ const styles = StyleSheet.create({
     borderLeftColor: '#CBD5E1',
     alignSelf: 'stretch',
   },
-  domainText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
-  },
+  domainText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+
   randomBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -272,9 +523,45 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     justifyContent: 'center',
   },
-  randomBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0D7377',
+  randomBtnText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
+
+  taxToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 12,
   },
+  taxToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  taxIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#edf8f6', alignItems: 'center', justifyContent: 'center' },
+  taxToggleTitle: { fontSize: 14, fontWeight: '700' },
+  taxToggleSub: { fontSize: 12, marginTop: 1 },
+
+  taxCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    marginTop: 4,
+  },
+
+  customGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  estimateBox: {
+    padding: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
+    gap: 6,
+  },
+  estimateTitle: { fontSize: 13, fontWeight: '700', color: '#0D7377', marginBottom: 4 },
+  estimateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },
+  estimateLabel: { fontSize: 13, color: '#475569', fontWeight: '500' },
+  estimateVal: { fontSize: 13, fontWeight: '600', color: '#0F172A' },
+  estimateDivider: { height: 1, backgroundColor: '#c4ece7', marginVertical: 4 },
 });

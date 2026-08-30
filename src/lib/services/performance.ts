@@ -20,6 +20,7 @@ export async function getGoals(options?: {
   departmentId?: string;
   category?: string;
   status?: string;
+  organizationId?: string;
 }): Promise<Goal[]> {
   let query = supabase.from('goals').select('*, employee:employees(*, profile:profiles(*)), department:departments(*)');
 
@@ -27,6 +28,7 @@ export async function getGoals(options?: {
   if (options?.departmentId) query = query.eq('department_id', options.departmentId);
   if (options?.category) query = query.eq('category', options.category);
   if (options?.status) query = query.eq('status', options.status);
+  if (options?.organizationId) query = query.or(`organization_id.eq.${options.organizationId},organization_id.is.null`);
 
   const { data, error } = await query.order('created_at', { ascending: false });
   if (error || !data) return [];
@@ -57,6 +59,14 @@ export async function createGoal(
   });
 
   return result as Goal;
+}
+
+export async function deleteGoal(goalId: string, userId?: string): Promise<boolean> {
+  const { error } = await supabase.from('goals').delete().eq('id', goalId);
+  if (!error && userId) {
+    await createAuditLog('DELETE_GOAL', 'goal', goalId, { deleted_by: userId });
+  }
+  return !error;
 }
 
 export async function updateGoal(
@@ -109,12 +119,14 @@ export async function getAppraisals(options?: {
   employeeId?: string;
   status?: string;
   period?: string;
+  organizationId?: string;
 }): Promise<AppraisalReview[]> {
   let query = supabase.from('appraisal_reviews').select('*, employee:employees(*, profile:profiles(*)), reviewer:profiles(*)');
 
   if (options?.employeeId) query = query.eq('employee_id', options.employeeId);
   if (options?.status) query = query.eq('status', options.status);
   if (options?.period) query = query.eq('period', options.period);
+  if (options?.organizationId) query = query.or(`organization_id.eq.${options.organizationId},organization_id.is.null`);
 
   const { data, error } = await query.order('created_at', { ascending: false });
   if (error || !data) return [];

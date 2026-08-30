@@ -89,8 +89,10 @@ export function FaceVerificationModal({
           const photo: any = await Promise.race([capturePromise, timeoutPromise]);
 
           if (photo) {
-            snapshotBase64 = photo.base64 ? `data:image/jpeg;base64,${photo.base64}` : photo.uri;
-            setCapturedPhoto(snapshotBase64);
+            snapshotBase64 = photo.base64 ? `data:image/jpeg;base64,${photo.base64}` : (photo.uri || undefined);
+            if (snapshotBase64) {
+              setCapturedPhoto(snapshotBase64);
+            }
           }
         } catch (camErr) {
           console.warn('Camera takePictureAsync warning:', camErr);

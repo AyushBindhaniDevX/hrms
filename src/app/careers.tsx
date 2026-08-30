@@ -353,7 +353,7 @@ export default function PublicCareersPage() {
         <View style={styles.navBarInner}>
           <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.logoContainer}>
             <Image
-              source={require('@/../assets/images/subedge-logo.png')}
+              source={require('../../assets/images/subedge-logo.png')}
               style={styles.navLogo}
               resizeMode="contain"
             />
@@ -547,7 +547,7 @@ export default function PublicCareersPage() {
               {/* Brand & Address Column */}
               <View style={styles.footerBrandCol}>
                 <Image
-                  source={require('@/../assets/images/subedge-logo.png')}
+                  source={require('../../assets/images/subedge-logo.png')}
                   style={styles.footerLogo}
                   resizeMode="contain"
                 />

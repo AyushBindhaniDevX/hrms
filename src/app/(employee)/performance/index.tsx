@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
@@ -62,6 +63,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 export default function EmployeePerformanceScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -107,14 +109,15 @@ export default function EmployeePerformanceScreen() {
   const loadData = useCallback(async () => {
     if (!profile) return;
     try {
+      const orgId = tenantOrg?.id || profile.organization_id;
       const emp = await getEmployeeByProfileId(profile.id);
       setEmployee(emp);
 
       const [gList, aList, kList, eList] = await Promise.all([
-        getGoals(),
-        getAppraisals(),
+        getGoals(orgId ? { organizationId: orgId } : undefined),
+        getAppraisals(orgId ? { organizationId: orgId } : undefined),
         getKudos(),
-        getEmployees(),
+        getEmployees(orgId ? { organization_id: orgId } : undefined),
       ]);
 
       setGoals(gList);
@@ -130,7 +133,7 @@ export default function EmployeePerformanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [profile, kudosReceiverId]);
+  }, [profile, tenantOrg, kudosReceiverId]);
 
   useEffect(() => {
     loadData();
@@ -169,9 +172,10 @@ export default function EmployeePerformanceScreen() {
           completed: false,
         });
       }
+      const orgId = tenantOrg?.id || profile?.organization_id || employee?.organization_id || '';
       await createGoal(
         {
-          organization_id: '00000000-0000-0000-0000-000000000001',
+          organization_id: orgId,
           employee_id: employee?.id || null,
           title: newGoalTitle.trim(),
           description: newGoalDesc.trim() || null,

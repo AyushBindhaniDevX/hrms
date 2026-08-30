@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
@@ -70,6 +71,7 @@ import {
 export default function HRPerformanceScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
@@ -132,11 +134,12 @@ export default function HRPerformanceScreen() {
 
   const loadData = useCallback(async () => {
     try {
+      const orgId = tenantOrg?.id || profile?.organization_id;
       const [gList, aList, kList, eList] = await Promise.all([
-        getGoals(),
-        getAppraisals(),
+        getGoals(orgId ? { organizationId: orgId } : undefined),
+        getAppraisals(orgId ? { organizationId: orgId } : undefined),
         getKudos(),
-        getEmployees(),
+        getEmployees(orgId ? { organization_id: orgId } : undefined),
       ]);
       setGoals(gList);
       setAppraisals(aList);
@@ -153,7 +156,7 @@ export default function HRPerformanceScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile, tenantOrg, newAppraisalEmpId, kudosReceiverId]);
 
   useEffect(() => {
     loadData();
@@ -187,9 +190,10 @@ export default function HRPerformanceScreen() {
         });
       }
 
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
       await createGoal(
         {
-          organization_id: '00000000-0000-0000-0000-000000000001',
+          organization_id: orgId,
           title: newGoalTitle.trim(),
           description: newGoalDesc.trim() || null,
           category: newGoalCategory,
@@ -246,9 +250,10 @@ export default function HRPerformanceScreen() {
     }
     setSavingAppraisal(true);
     try {
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
       await createAppraisal(
         {
-          organization_id: '00000000-0000-0000-0000-000000000001',
+          organization_id: orgId,
           employee_id: newAppraisalEmpId,
           cycle_name: newAppraisalCycle,
           period: newAppraisalPeriod,

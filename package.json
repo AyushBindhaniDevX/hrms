@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@clerk/clerk-expo": "^2.20.0",
     "@google/generative-ai": "^0.24.1",
     "@gorhom/bottom-sheet": "^5.2.14",
     "@hookform/resolvers": "^5.9.1",
@@ -28,6 +29,7 @@
     "expo-glass-effect": "~0.1.10",
     "expo-image": "~3.0.11",
     "expo-linking": "~8.0.12",
+    "expo-local-authentication": "~17.0.9",
     "expo-location": "~19.0.8",
     "expo-notifications": "^0.32.17",
     "expo-print": "~15.0.8",

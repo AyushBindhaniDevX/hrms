@@ -5,19 +5,19 @@ import {
   Modal,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/lib/supabase';
+import { trackUserActivity } from '@/lib/services/userActivity';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Lock, ShieldCheck, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react-native';
+import { ShieldCheck, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react-native';
 
 export function ForcePasswordChangeModal() {
   const colors = useTheme();
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, clerkUser } = useAuth();
 
   const needsChange = Boolean(
     (profile as any)?.needs_password_change ||
@@ -46,17 +46,18 @@ export function ForcePasswordChangeModal() {
 
     setLoading(true);
     try {
-      // 1. Update Supabase Auth user password and metadata
-      const { error: authErr } = await supabase.auth.updateUser({
-        password: newPassword.trim(),
-        data: {
-          needs_password_change: false,
-        },
-      });
+      // 1. Update Clerk user password
+      if (clerkUser?.updatePassword) {
+        await clerkUser.updatePassword({
+          newPassword: newPassword.trim(),
+        });
+      } else if (clerkUser?.createPassword) {
+        await clerkUser.createPassword({
+          newPassword: newPassword.trim(),
+        });
+      }
 
-      if (authErr) throw authErr;
-
-      // 2. Update profiles table
+      // 2. Update Supabase profiles table
       try {
         await supabase
           .from('profiles')
@@ -66,8 +67,21 @@ export function ForcePasswordChangeModal() {
           } as any)
           .eq('id', user.id);
       } catch (profErr) {
-        // If column doesn't exist, ignore
+        // ignore if column doesn't exist
       }
+
+      // 3. Log user activity
+      await trackUserActivity({
+        userId: user.id,
+        organizationId: profile?.organization_id,
+        action: 'USER_PASSWORD_CHANGE',
+        entityType: 'auth',
+        entityId: user.id,
+        description: 'User completed forced initial password change',
+        actorName: profile?.full_name,
+        actorEmail: profile?.email,
+        actorRole: profile?.role,
+      });
 
       setSuccess(true);
       setTimeout(async () => {
@@ -76,7 +90,8 @@ export function ForcePasswordChangeModal() {
       }, 1200);
     } catch (err: any) {
       console.error('Password update error:', err);
-      setError(err.message || 'Failed to update password. Please try again.');
+      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err.message || 'Failed to update password. Please try again.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -93,8 +108,7 @@ export function ForcePasswordChangeModal() {
             </View>
             <Text style={[styles.title, { color: colors.text }]}>Set Your New Password</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Welcome, {profile?.full_name || 'Team Member'}! Your temporary password is your phone number.
-              For security, please create a secure personal password to proceed.
+              Welcome, {profile?.full_name || 'Team Member'}! For security, please create a secure personal password to proceed.
             </Text>
           </View>
 

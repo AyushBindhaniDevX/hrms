@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
 import {
   COMPANY_NAME,
@@ -8,15 +9,17 @@ import {
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantBranding } from '@/hooks/useTenantBranding';
+import { useBiometrics } from '@/hooks/useBiometrics';
 import { supabase } from '@/lib/supabase';
 import type { Organization } from '@/types';
 import { useRouter } from 'expo-router';
-import LottieView from 'lottie-react-native';
 import {
-  Zap, Building2
+  Zap, Building2, ShieldCheck, UserCheck, Clock, Award,
+  Fingerprint, ScanFace, Sparkles, Check, AlertCircle, PlusCircle
 } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -28,6 +31,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useOAuth } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const SUBEDGE_LOGO = require('../../../assets/images/subedge-logo.png');
 
@@ -37,17 +44,41 @@ export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
-  const { tenant, loading: tenantLoading } = useTenantBranding();
-
+  const { tenant } = useTenantBranding();
   const { signIn } = useAuth();
   const router = useRouter();
+
+  const {
+    hasHardware,
+    isEnrolled,
+    biometricType,
+    isEnabled: isBiometricEnabled,
+    savedEmail,
+    authenticateWithBiometrics,
+    registerBiometrics,
+  } = useBiometrics();
+
+  let startOAuthFlow: any = null;
+  try {
+    const oauth = useOAuth({ strategy: 'oauth_google' });
+    startOAuthFlow = oauth.startOAuthFlow;
+  } catch (e) {}
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [rememberBiometric, setRememberBiometric] = useState(true);
 
-  const [orgCode, setOrgCode] = useState('');
+  // Biometric Registration Modal
+  const [regModalOpen, setRegModalOpen] = useState(false);
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regError, setRegError] = useState('');
+  const [regLoading, setRegLoading] = useState(false);
+
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [fetchingOrgs, setFetchingOrgs] = useState(true);
   const [manualTenant, setManualTenant] = useState<Organization | null>(null);
@@ -56,11 +87,90 @@ export default function LoginScreen() {
   const activeTenant = manualTenant || tenant;
   const tenantDomain = (activeTenant?.settings as any)?.domain as string | undefined;
 
+  // Biometric Quick Login (1-Tap)
+  const handleBiometricLogin = async () => {
+    setError('');
+    setBiometricLoading(true);
+    try {
+      const result = await authenticateWithBiometrics();
+      if (!result.success && result.error) {
+        setError(result.error);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Biometric login failed.');
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
+
+  // Open Biometric Registration Modal
+  const handleOpenRegisterBiometrics = () => {
+    setRegEmail(email || savedEmail || '');
+    setRegPassword('');
+    setRegError('');
+    setRegModalOpen(true);
+  };
+
+  // Confirm Biometric Registration & Sign In
+  const handleConfirmRegisterBiometrics = async () => {
+    if (!regEmail || !regPassword) {
+      setRegError('Please enter your email and password to register biometrics.');
+      return;
+    }
+    setRegError('');
+    setRegLoading(true);
+    try {
+      const finalEmail = regEmail.trim();
+      const regResult = await registerBiometrics(finalEmail, regPassword);
+
+      if (!regResult.success) {
+        setRegError(regResult.error || 'Biometric scan was not confirmed. Please ensure Face ID / Touch ID is enrolled in iOS Settings.');
+        return;
+      }
+
+      setRegModalOpen(false);
+      // Automatically complete login
+      await signIn(finalEmail, regPassword, activeTenant?.id);
+    } catch (err: any) {
+      setRegError(err?.message || 'Failed to register biometrics on this device.');
+    } finally {
+      setRegLoading(false);
+    }
+  };
+
+  // Google OAuth via Clerk
+  const handleClerkOAuth = async () => {
+    if (!startOAuthFlow) {
+      setError('Clerk authentication service is initializing. Please try again.');
+      return;
+    }
+    setError('');
+    setOauthLoading(true);
+    try {
+      const redirectUrl = Platform.OS === 'web' && typeof window !== 'undefined'
+        ? `${window.location.origin}/oauth-native-callback`
+        : undefined;
+
+      const { createdSessionId, setActive } = await startOAuthFlow({
+        redirectUrl,
+      });
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+      }
+    } catch (err: any) {
+      console.error('Clerk OAuth error:', err);
+      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Google sign-in failed. Please try again.';
+      setError(msg);
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
   useEffect(() => {
     async function loadOrgs() {
       try {
-        const { data, error } = await supabase.from('organizations').select('*');
-        if (!error && data) {
+        const { data, error: orgErr } = await supabase.from('organizations').select('*');
+        if (!orgErr && data) {
           setOrganizations(data);
         }
       } catch (err) {
@@ -73,7 +183,7 @@ export default function LoginScreen() {
   }, []);
 
   const handleSelectOrg = (org: Organization) => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && org.slug) {
       const currentHost = window.location.hostname;
       if (!currentHost.includes(org.slug) && currentHost === 'localhost') {
         const port = window.location.port ? `:${window.location.port}` : '';
@@ -85,20 +195,25 @@ export default function LoginScreen() {
     setOrgResolved(true);
   };
 
-  // Legacy manual check function can be removed or kept
-
+  // Clerk Email/Password Login
   const handleLogin = async () => {
     if (!email || !password) {
-      setError(tenantDomain ? 'Please enter username and password' : 'Please enter email and password');
+      setError('Please enter your email and password');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      const finalEmail = tenantDomain && !email.includes('@') ? `${email}@${tenantDomain}` : email;
+      const finalEmail = email.trim();
       await signIn(finalEmail, password, activeTenant?.id);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Login failed';
+
+      // If user opted to register biometrics, enroll in vault
+      if (hasHardware && rememberBiometric) {
+        registerBiometrics(finalEmail, password).catch(() => {});
+      }
+    } catch (err: any) {
+      console.error('Clerk login error:', err);
+      const message = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || (err instanceof Error ? err.message : 'Invalid credentials. Please check your email and password.');
       setError(message);
     } finally {
       setLoading(false);
@@ -118,76 +233,126 @@ export default function LoginScreen() {
           <ScrollView
             contentContainerStyle={[
               styles.mobileScroll,
-              { paddingTop: Math.max(insets.top + 20, 40), paddingBottom: Math.max(insets.bottom + 20, 40) },
+              { paddingTop: Math.max(insets.top + 20, 40), paddingBottom: Math.max(insets.bottom + 20, 40) }
             ]}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
           >
-            {/* Mobile Hero */}
-            <View style={styles.mobileHero}>
-              {activeTenant ? (
-                <View style={{ alignItems: 'center', marginBottom: 16 }}>
-                  {activeTenant.logo_url ? (
-                    <Image source={{ uri: activeTenant.logo_url }} style={{ width: 120, height: 120, borderRadius: 12 }} resizeMode="contain" />
-                  ) : null}
-                  <Text style={[styles.mobileHeroTitle, { marginTop: 16, fontSize: 24, textAlign: 'center' }]}>{activeTenant.name}</Text>
-                </View>
-              ) : (
-                <Image
-                  source={SUBEDGE_LOGO}
-                  style={styles.mobileLogo}
-                  resizeMode="contain"
-                />
-              )}
-
-              <View style={styles.mobileLottieContainer}>
-                <LottieView
-                  source={require('../../../assets/lottie/wired-outline-187-briefcase-hover-pinch.json')}
-                  autoPlay
-                  loop
-                  style={styles.mobileLottie}
-                />
+            {/* Header / Brand */}
+            <View style={styles.mobileHeader}>
+              <View style={styles.mobileLogoBox}>
+                {activeTenant?.logo_url ? (
+                  <Image
+                    source={{ uri: activeTenant.logo_url }}
+                    style={styles.mobileLogo}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <Image
+                    source={SUBEDGE_LOGO}
+                    style={styles.mobileLogo}
+                    resizeMode="contain"
+                  />
+                )}
               </View>
-
-              <Text style={styles.mobileHeroTitle}>Welcome Back</Text>
-              <Text style={styles.mobileHeroSub}>
-                Sign in to your workplace account to continue.
+              <Text style={styles.mobileTitle}>
+                {activeTenant ? activeTenant.name : COMPANY_NAME}
+              </Text>
+              <Text style={styles.mobileSubtitle}>
+                {activeTenant ? 'Sign in to access your workplace portal' : 'Enterprise Human Capital Management'}
               </Text>
             </View>
 
-            {/* Mobile Form */}
-            <View style={styles.mobileForm}>
-              {error ? (
-                <View style={[styles.errorBox, { backgroundColor: '#FEE2E2', marginBottom: 16 }]}>
-                  <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '500' }}>{error}</Text>
-                </View>
-              ) : null}
+            {/* Error Banner */}
+            {error ? (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
 
+            {/* Biometric Card: 1-Tap Login OR Register Biometrics */}
+            {isBiometricEnabled ? (
+              <TouchableOpacity
+                onPress={handleBiometricLogin}
+                disabled={biometricLoading}
+                activeOpacity={0.85}
+                style={styles.biometricCard}
+              >
+                <View style={styles.biometricIconBox}>
+                  {biometricType === 'Face ID' ? (
+                    <ScanFace size={24} color="#0D7377" />
+                  ) : (
+                    <Fingerprint size={24} color="#0D7377" />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.biometricCardTitle}>
+                    1-Tap Sign in with {biometricType}
+                  </Text>
+                  {savedEmail && (
+                    <Text style={styles.biometricCardEmail} numberOfLines={1}>
+                      {savedEmail}
+                    </Text>
+                  )}
+                </View>
+                {biometricLoading ? (
+                  <ActivityIndicator size="small" color="#0D7377" />
+                ) : (
+                  <ShieldCheck size={20} color="#0D7377" />
+                )}
+              </TouchableOpacity>
+            ) : hasHardware ? (
+              <TouchableOpacity
+                onPress={handleOpenRegisterBiometrics}
+                activeOpacity={0.85}
+                style={styles.registerBioCard}
+              >
+                <View style={styles.biometricIconBox}>
+                  {biometricType === 'Face ID' ? (
+                    <ScanFace size={22} color="#0D7377" />
+                  ) : (
+                    <Fingerprint size={22} color="#0D7377" />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.biometricCardTitle}>
+                    Register {biometricType} for Quick Sign-In
+                  </Text>
+                  <Text style={styles.biometricCardEmail}>
+                    Set up 1-tap biometric login for this device
+                  </Text>
+                </View>
+                <PlusCircle size={18} color="#0D7377" />
+              </TouchableOpacity>
+            ) : null}
+
+            {/* Form */}
+            <View style={styles.mobileForm}>
               {!activeTenant && !orgResolved ? (
                 <View style={{ gap: 12 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginBottom: 4 }}>Select Your Organization</Text>
+                  <Text style={styles.orgPickerHeader}>Select Your Workspace</Text>
                   {fetchingOrgs ? (
-                    <Text style={{ color: '#64748B', textAlign: 'center', padding: 20 }}>Loading organizations...</Text>
+                    <Text style={styles.orgPickerLoading}>Loading organizations...</Text>
                   ) : (
-                    organizations.map(org => (
+                    organizations.map((org) => (
                       <TouchableOpacity
                         key={org.id}
+                        style={styles.orgItem}
                         onPress={() => handleSelectOrg(org)}
-                        style={{
-                          flexDirection: 'row', alignItems: 'center', padding: 16,
-                          backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0'
-                        }}
                       >
                         {org.logo_url ? (
-                          <Image source={{ uri: org.logo_url }} style={{ width: 40, height: 40, borderRadius: 8, marginRight: 12 }} />
+                          <Image
+                            source={{ uri: org.logo_url }}
+                            style={styles.orgItemLogo}
+                            resizeMode="contain"
+                          />
                         ) : (
-                          <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                            <Building2 size={20} color="#64748B" />
+                          <View style={styles.orgIconFallback}>
+                            <Building2 size={20} color="#0D7377" />
                           </View>
                         )}
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 15, fontWeight: '600', color: '#0F172A' }}>{org.name}</Text>
-                          <Text style={{ fontSize: 13, color: '#64748B' }}>{org.slug}</Text>
+                          <Text style={styles.orgItemName}>{org.name}</Text>
+                          {org.slug && <Text style={styles.orgItemSlug}>{org.slug}.localhost</Text>}
                         </View>
                       </TouchableOpacity>
                     ))
@@ -196,18 +361,13 @@ export default function LoginScreen() {
               ) : (
                 <>
                   <Input
-                    label={tenantDomain ? "Username" : "Work Email"}
-                    placeholder={tenantDomain ? "username" : "name@subedge.com"}
+                    label="Work Email"
+                    placeholder="name@company.com"
                     value={email}
                     onChangeText={setEmail}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
-                    rightElement={tenantDomain ? (
-                      <View style={{ backgroundColor: '#F1F5F9', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', paddingHorizontal: 12, height: '100%', justifyContent: 'center' }}>
-                        <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>@{tenantDomain}</Text>
-                      </View>
-                    ) : undefined}
                   />
 
                   <Input
@@ -218,11 +378,45 @@ export default function LoginScreen() {
                     secureTextEntry
                   />
 
+                  {hasHardware && (
+                    <TouchableOpacity
+                      onPress={() => setRememberBiometric(!rememberBiometric)}
+                      style={styles.rememberBioRow}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.checkbox, rememberBiometric && styles.checkboxChecked]}>
+                        {rememberBiometric && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                      </View>
+                      <Text style={styles.rememberBioText}>
+                        Register {biometricType} on this device upon sign-in
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
                   <Button
                     title="Sign In"
                     onPress={handleLogin}
                     loading={loading}
                     style={styles.mobileLoginBtn}
+                  />
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 10 }}>
+                    <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
+                    <Text style={{ marginHorizontal: 10, fontSize: 12, color: '#94A3B8', fontWeight: '600' }}>OR</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
+                  </View>
+
+                  <Button
+                    title="Continue with Google"
+                    onPress={handleClerkOAuth}
+                    loading={oauthLoading}
+                    variant="outline"
+                    style={{
+                      borderColor: '#4F46E5',
+                      borderRadius: 12,
+                      paddingVertical: 12,
+                    }}
+                    textStyle={{ color: '#4F46E5', fontWeight: '700' }}
                   />
 
                   <Button
@@ -240,10 +434,71 @@ export default function LoginScreen() {
               onPress={() => router.push('/careers' as any)}
               style={styles.mobileCareersBtn}
             >
-
+              <Text style={styles.mobileCareersText}>View Open Positions & Careers →</Text>
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* Biometric Registration Modal */}
+        <Modal
+          visible={regModalOpen}
+          onClose={() => setRegModalOpen(false)}
+          title={`Register ${biometricType || 'Biometrics'}`}
+        >
+          <View style={{ gap: 14 }}>
+            <View style={{ alignItems: 'center', marginVertical: 4 }}>
+              <View style={styles.modalIconBox}>
+                {biometricType === 'Face ID' ? (
+                  <ScanFace size={32} color="#0D7377" />
+                ) : (
+                  <Fingerprint size={32} color="#0D7377" />
+                )}
+              </View>
+              <Text style={styles.modalSubtitle}>
+                Enter your password once to authorize and register {biometricType || 'biometrics'} for instant 1-tap login.
+              </Text>
+            </View>
+
+            {regError ? (
+              <View style={styles.alertBox}>
+                <AlertCircle size={16} color="#DC2626" />
+                <Text style={styles.alertText}>{regError}</Text>
+              </View>
+            ) : null}
+
+            <Input
+              label="Work Email"
+              value={regEmail}
+              onChangeText={setRegEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholder="name@subedge.com"
+            />
+
+            <Input
+              label="Account Password"
+              value={regPassword}
+              onChangeText={setRegPassword}
+              secureTextEntry
+              placeholder="Enter your password"
+            />
+
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+              <Button
+                title="Cancel"
+                onPress={() => setRegModalOpen(false)}
+                variant="outline"
+                style={{ flex: 1, borderRadius: 8 }}
+              />
+              <Button
+                title="Verify & Register"
+                onPress={handleConfirmRegisterBiometrics}
+                loading={regLoading}
+                style={{ flex: 1, backgroundColor: '#0D7377', borderRadius: 8 }}
+              />
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   }
@@ -251,7 +506,6 @@ export default function LoginScreen() {
   // ---------------------------------------------------------------------------
   // DESKTOP WEB LAYOUT
   // ---------------------------------------------------------------------------
-
   return (
     <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
       <KeyboardAvoidingView
@@ -261,157 +515,190 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            isDesktop ? styles.desktopLayout : styles.mobileLayout,
+            styles.desktopLayout,
             { paddingTop: insets.top, paddingBottom: insets.bottom },
           ]}
           keyboardShouldPersistTaps="handled"
         >
           {/* Left Hero Section */}
-          <View style={[styles.heroSection, isDesktop && styles.heroDesktop]}>
+          <View style={[styles.heroSection, styles.heroDesktop]}>
             <View style={styles.heroBrandHeader}>
-              <Image
-                source={SUBEDGE_LOGO}
-                style={styles.heroLogoImage}
-                resizeMode="contain"
-              />
+              {activeTenant?.logo_url ? (
+                <Image source={{ uri: activeTenant.logo_url }} style={styles.heroLogoImage} resizeMode="contain" />
+              ) : (
+                <Image source={SUBEDGE_LOGO} style={styles.heroLogoImage} resizeMode="contain" />
+              )}
               <View style={styles.platformBadge}>
-                <Text style={styles.platformBadgeText}>OASIS PLATFORM</Text>
+                <Text style={styles.platformBadgeText}>
+                  {activeTenant?.slug ? `${activeTenant.slug.toUpperCase()} ENTERPRISE` : 'ENTERPRISE SUITE'}
+                </Text>
               </View>
+            </View>
+
+            <View style={styles.heroPill}>
+              <Zap size={14} color="#0D7377" />
+              <Text style={styles.heroPillText}>Next-Gen AI & HR Platform</Text>
             </View>
 
             <View style={styles.heroTextContainer}>
-              <View style={styles.heroPill}>
-                <Zap size={13} color="#0D7377" />
-                <Text style={styles.heroPillText}>ENTERPRISE WORKFORCE INTELLIGENCE</Text>
-              </View>
-
               <Text style={styles.heroTitle}>
-                Next-Generation{'\n'}
-                <Text style={{ color: '#0D7377' }}>Workforce & HRMS</Text>
+                Human Capital{'\n'}Management, Elevated.
               </Text>
-
               <Text style={styles.heroSubtitle}>
-                {PRODUCT_NAME} by {COMPANY_NAME}. An all-in-one Human Capital Management platform built for speed, compliance, and scale.
+                Unified workforce intelligence with geofenced attendance, AI appraisals, automated multi-tier payroll, and biometric security.
               </Text>
             </View>
 
-            {/* Feature Capabilities Grid */}
             <View style={styles.featureGrid}>
               <View style={styles.featureCard}>
                 <View style={styles.featureIconBox}>
-                  <LottieView
-                    source={require('../../../assets/lottie/wired-outline-966-file-policy-hover-swipe.json')}
-                    autoPlay
-                    loop
-                    style={{ width: 28, height: 28 }}
-                  />
+                  <Zap size={20} color="#0D7377" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.featureTitle}>Cybersecurity & Governance</Text>
-                  <Text style={styles.featureSub}>SOC 2 Ready & Strict Role Access Controls</Text>
+                  <Text style={styles.featureTitle}>AI Appraisals</Text>
+                  <Text style={styles.featureDescription}>Automated 9-box grading, KPI intelligence & performance scoring</Text>
                 </View>
               </View>
 
               <View style={styles.featureCard}>
                 <View style={styles.featureIconBox}>
-                  <LottieView
-                    source={require('../../../assets/lottie/wired-flat-18-location-pin-hover-jump.json')}
-                    autoPlay
-                    loop
-                    style={{ width: 28, height: 28 }}
-                  />
+                  <UserCheck size={20} color="#0D7377" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.featureTitle}>Geofenced Smart Attendance</Text>
-                  <Text style={styles.featureSub}>Precise Radius & Hardware-Verified Clocking</Text>
+                  <Text style={styles.featureTitle}>Biometric Clerk Auth</Text>
+                  <Text style={styles.featureDescription}>Instant Face ID / Touch ID authentication with Supabase audit logging</Text>
                 </View>
               </View>
 
               <View style={styles.featureCard}>
                 <View style={styles.featureIconBox}>
-                  <LottieView
-                    source={require('../../../assets/lottie/wired-outline-1092-hands-applause-hover-pinch.json')}
-                    autoPlay
-                    loop
-                    style={{ width: 28, height: 28 }}
-                  />
+                  <Clock size={20} color="#0D7377" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.featureTitle}>Performance & OKR Reviews</Text>
-                  <Text style={styles.featureSub}>Continuous 360 Appraisals & Peer Kudos</Text>
+                  <Text style={styles.featureTitle}>Geofenced Clock-In</Text>
+                  <Text style={styles.featureDescription}>Sub-meter workplace perimeter verification with beacon support</Text>
                 </View>
               </View>
 
               <View style={styles.featureCard}>
                 <View style={styles.featureIconBox}>
-                  <LottieView
-                    source={require('../../../assets/lottie/wired-outline-403-bank-hover-pinch.json')}
-                    autoPlay
-                    loop
-                    style={{ width: 28, height: 28 }}
-                  />
+                  <ShieldCheck size={20} color="#0D7377" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.featureTitle}>Automated Payroll Engine</Text>
-                  <Text style={styles.featureSub}>Taxes, Allowances & Instant Payslip Generation</Text>
+                  <Text style={styles.featureTitle}>Enterprise Payroll</Text>
+                  <Text style={styles.featureDescription}>Multi-tier approval workflows & encrypted payslips</Text>
                 </View>
               </View>
+            </View>
+
+            <View style={styles.securitySeal}>
+              <ShieldCheck size={16} color="#0D7377" />
+              <Text style={styles.securitySealText}>SOC2 TYPE II CERTIFIED • 256-BIT AES ENCRYPTION</Text>
             </View>
           </View>
 
           {/* Right Form Section */}
-          <View style={[styles.formSection, isDesktop && styles.formDesktop]}>
-            <View style={styles.formWrapper}>
+          <View style={styles.formDesktopContainer}>
+            <View style={styles.formCard}>
               <View style={styles.formHeader}>
-                {activeTenant ? (
-                  <View style={{ alignItems: 'flex-start', marginBottom: 24 }}>
-                    {activeTenant.logo_url ? (
-                      <Image source={{ uri: activeTenant.logo_url }} style={{ width: 140, height: 140, borderRadius: 16 }} resizeMode="contain" />
-                    ) : null}
-                    <Text style={{ fontSize: 28, fontWeight: '800', color: '#1E293B', marginTop: 16 }}>
-                      {activeTenant.name}
-                    </Text>
-                    <Text style={{ fontSize: 15, color: '#64748B', marginTop: 8 }}>
-                      Sign in to your workplace account
-                    </Text>
-                  </View>
-                ) : (
-                  <SubedgeBrand size="md" subtitle="Sign in to your workplace account" />
-                )}
+                <Text style={styles.formTitle}>
+                  {activeTenant ? activeTenant.name : 'Welcome Back'}
+                </Text>
+                <Text style={styles.formSubtitle}>
+                  {activeTenant ? 'Sign in to access your workplace portal' : 'Enter your credentials or use biometrics'}
+                </Text>
               </View>
 
-              <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }]}>
-                {error ? (
-                  <View style={[styles.errorBox, { backgroundColor: '#FEE2E2' }]}>
-                    <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '500' }}>{error}</Text>
-                  </View>
-                ) : null}
+              {/* Error Banner */}
+              {error ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
 
+              {/* Biometric Quick Login on Desktop / Web */}
+              {isBiometricEnabled ? (
+                <TouchableOpacity
+                  onPress={handleBiometricLogin}
+                  disabled={biometricLoading}
+                  activeOpacity={0.85}
+                  style={styles.biometricCard}
+                >
+                  <View style={styles.biometricIconBox}>
+                    {biometricType === 'Face ID' ? (
+                      <ScanFace size={22} color="#0D7377" />
+                    ) : (
+                      <Fingerprint size={22} color="#0D7377" />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.biometricCardTitle}>
+                      1-Tap Sign In with {biometricType}
+                    </Text>
+                    {savedEmail && (
+                      <Text style={styles.biometricCardEmail} numberOfLines={1}>
+                        {savedEmail}
+                      </Text>
+                    )}
+                  </View>
+                  {biometricLoading ? (
+                    <ActivityIndicator size="small" color="#0D7377" />
+                  ) : (
+                    <ShieldCheck size={18} color="#0D7377" />
+                  )}
+                </TouchableOpacity>
+              ) : hasHardware ? (
+                <TouchableOpacity
+                  onPress={handleOpenRegisterBiometrics}
+                  activeOpacity={0.85}
+                  style={styles.registerBioCard}
+                >
+                  <View style={styles.biometricIconBox}>
+                    {biometricType === 'Face ID' ? (
+                      <ScanFace size={20} color="#0D7377" />
+                    ) : (
+                      <Fingerprint size={20} color="#0D7377" />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.biometricCardTitle}>
+                      Register {biometricType} Quick Login
+                    </Text>
+                    <Text style={styles.biometricCardEmail}>
+                      Set up 1-tap biometric login for this device
+                    </Text>
+                  </View>
+                  <PlusCircle size={18} color="#0D7377" />
+                </TouchableOpacity>
+              ) : null}
+
+              <View style={styles.formBody}>
                 {!activeTenant && !orgResolved ? (
                   <View style={{ gap: 12 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginBottom: 8 }}>Select Your Organization</Text>
+                    <Text style={styles.orgPickerHeader}>Select Your Workspace</Text>
                     {fetchingOrgs ? (
-                      <Text style={{ color: '#64748B', textAlign: 'center', padding: 20 }}>Loading organizations...</Text>
+                      <Text style={styles.orgPickerLoading}>Loading organizations...</Text>
                     ) : (
-                      organizations.map(org => (
+                      organizations.map((org) => (
                         <TouchableOpacity
                           key={org.id}
+                          style={styles.orgItem}
                           onPress={() => handleSelectOrg(org)}
-                          style={{
-                            flexDirection: 'row', alignItems: 'center', padding: 16,
-                            backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0'
-                          }}
                         >
                           {org.logo_url ? (
-                            <Image source={{ uri: org.logo_url }} style={{ width: 40, height: 40, borderRadius: 8, marginRight: 12 }} />
+                            <Image
+                              source={{ uri: org.logo_url }}
+                              style={styles.orgItemLogo}
+                              resizeMode="contain"
+                            />
                           ) : (
-                            <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                              <Building2 size={20} color="#64748B" />
+                            <View style={styles.orgIconFallback}>
+                              <Building2 size={20} color="#0D7377" />
                             </View>
                           )}
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 15, fontWeight: '600', color: '#0F172A' }}>{org.name}</Text>
-                            <Text style={{ fontSize: 13, color: '#64748B' }}>{org.slug}</Text>
+                            <Text style={styles.orgItemName}>{org.name}</Text>
+                            {org.slug && <Text style={styles.orgItemSlug}>{org.slug}.localhost</Text>}
                           </View>
                         </TouchableOpacity>
                       ))
@@ -420,18 +707,13 @@ export default function LoginScreen() {
                 ) : (
                   <>
                     <Input
-                      label={tenantDomain ? "Username" : "Work Email"}
-                      placeholder={tenantDomain ? "username" : "name@subedge.com"}
+                      label="Work Email"
+                      placeholder="name@company.com"
                       value={email}
                       onChangeText={setEmail}
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
-                      rightElement={tenantDomain ? (
-                        <View style={{ backgroundColor: '#F1F5F9', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', paddingHorizontal: 12, height: '100%', justifyContent: 'center' }}>
-                          <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>@{tenantDomain}</Text>
-                        </View>
-                      ) : undefined}
                     />
 
                     <Input
@@ -442,8 +724,23 @@ export default function LoginScreen() {
                       secureTextEntry
                     />
 
+                    {hasHardware && (
+                      <TouchableOpacity
+                        onPress={() => setRememberBiometric(!rememberBiometric)}
+                        style={styles.rememberBioRow}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.checkbox, rememberBiometric && styles.checkboxChecked]}>
+                          {rememberBiometric && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                        </View>
+                        <Text style={styles.rememberBioText}>
+                          Register {biometricType} on this device upon sign-in
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
                     <Button
-                      title="Sign In with Credentials"
+                      title="Sign In"
                       onPress={handleLogin}
                       loading={loading}
                       style={{
@@ -454,6 +751,24 @@ export default function LoginScreen() {
                         shadowRadius: 5,
                         elevation: 3,
                       }}
+                    />
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 12 }}>
+                      <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
+                      <Text style={{ marginHorizontal: 10, fontSize: 12, color: '#94A3B8', fontWeight: '600' }}>OR</Text>
+                      <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
+                    </View>
+
+                    <Button
+                      title="Continue with Google"
+                      onPress={handleClerkOAuth}
+                      loading={oauthLoading}
+                      variant="outline"
+                      style={{
+                        borderColor: '#4F46E5',
+                        borderRadius: 10,
+                      }}
+                      textStyle={{ color: '#4F46E5', fontWeight: '700' }}
                     />
 
                     <Button
@@ -471,7 +786,7 @@ export default function LoginScreen() {
                 onPress={() => router.push('/careers' as any)}
                 style={{ marginTop: 16, alignItems: 'center' }}
               >
-
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>View Open Positions & Careers →</Text>
               </TouchableOpacity>
 
               <Text style={styles.copyrightText}>
@@ -481,6 +796,67 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Desktop Biometric Registration Modal */}
+      <Modal
+        visible={regModalOpen}
+        onClose={() => setRegModalOpen(false)}
+        title={`Register ${biometricType || 'Biometrics'}`}
+      >
+        <View style={{ gap: 14 }}>
+          <View style={{ alignItems: 'center', marginVertical: 4 }}>
+            <View style={styles.modalIconBox}>
+              {biometricType === 'Face ID' ? (
+                <ScanFace size={32} color="#0D7377" />
+              ) : (
+                <Fingerprint size={32} color="#0D7377" />
+              )}
+            </View>
+            <Text style={styles.modalSubtitle}>
+              Enter your password once to authorize and register {biometricType || 'biometrics'} for instant 1-tap login.
+            </Text>
+          </View>
+
+          {regError ? (
+            <View style={styles.alertBox}>
+              <AlertCircle size={16} color="#DC2626" />
+              <Text style={styles.alertText}>{regError}</Text>
+            </View>
+          ) : null}
+
+          <Input
+            label="Work Email"
+            value={regEmail}
+            onChangeText={setRegEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            placeholder="name@subedge.com"
+          />
+
+          <Input
+            label="Account Password"
+            value={regPassword}
+            onChangeText={setRegPassword}
+            secureTextEntry
+            placeholder="Enter your password"
+          />
+
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+            <Button
+              title="Cancel"
+              onPress={() => setRegModalOpen(false)}
+              variant="outline"
+              style={{ flex: 1, borderRadius: 8 }}
+            />
+            <Button
+              title="Verify & Register"
+              onPress={handleConfirmRegisterBiometrics}
+              loading={regLoading}
+              style={{ flex: 1, backgroundColor: '#0D7377', borderRadius: 8 }}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -492,95 +868,22 @@ const styles = StyleSheet.create({
     minHeight: '100%',
   },
 
-  // Layout Variations
   desktopLayout: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 36,
-    gap: 52,
-  },
-  mobileLayout: {
-    flexDirection: 'column',
-    justifyContent: 'center',
-    padding: 20,
-    gap: 28,
+    gap: 48,
   },
 
-  // Mobile Native Styles
-  mobileScroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    justifyContent: 'center',
-  },
-  mobileHero: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  mobileLogo: {
-    width: 160,
-    height: 36,
-    marginBottom: 24,
-  },
-  mobileLottieContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#F0F7F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  mobileLottie: {
-    width: 70,
-    height: 70,
-  },
-  mobileHeroTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 8,
-    letterSpacing: -0.5,
-  },
-  mobileHeroSub: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
-  mobileForm: {
-    width: '100%',
-    gap: 16,
-  },
-  mobileLoginBtn: {
-    marginTop: 12,
-    backgroundColor: '#0D7377',
-    paddingVertical: 14,
-    borderRadius: 12,
-    shadowColor: '#0D7377',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  mobileCareersBtn: {
-    marginTop: 32,
-    alignItems: 'center',
-  },
-  mobileCareersText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0D7377',
-  },
-
-  // Hero Section
   heroSection: {
-    flex: 1,
-    maxWidth: 600,
+    padding: 32,
     justifyContent: 'center',
   },
   heroDesktop: {
-    paddingRight: 24,
+    flex: 1.1,
+    maxWidth: 580,
+    paddingRight: 20,
   },
   heroBrandHeader: {
     flexDirection: 'row',
@@ -589,131 +892,349 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   heroLogoImage: {
-    width: 180,
+    width: 140,
     height: 38,
   },
   platformBadge: {
-    backgroundColor: '#F0F7F7',
+    backgroundColor: '#E6F4F1',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#CCECEC',
+    borderColor: '#0D7377',
   },
   platformBadgeText: {
-    color: '#0D7377',
     fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '800',
+    color: '#0D7377',
+    letterSpacing: 0.8,
   },
   heroPill: {
     flexDirection: 'row',
+    alignSelf: 'flex-start',
     alignItems: 'center',
     gap: 6,
-    alignSelf: 'flex-start',
-    backgroundColor: '#F0F7F7',
-    borderWidth: 1,
-    borderColor: '#CCECEC',
+    backgroundColor: '#E6F4F1',
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 20,
-    marginBottom: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#BFE6E0',
   },
   heroPillText: {
-    color: '#0D7377',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  heroTextContainer: {
-    marginBottom: 28,
+    color: '#0D7377',
   },
   heroTitle: {
     fontSize: 38,
     fontWeight: '800',
-    color: '#1A1A2E',
-    letterSpacing: -1,
+    color: '#0F172A',
     lineHeight: 46,
     marginBottom: 14,
+    letterSpacing: -0.5,
   },
   heroSubtitle: {
     fontSize: 15,
+    color: '#475569',
     lineHeight: 23,
-    color: '#64748B',
+    marginBottom: 32,
   },
-
+  heroTextContainer: {
+    marginBottom: 8,
+  },
   featureGrid: {
-    gap: 12,
+    gap: 14,
+    marginBottom: 32,
   },
   featureCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    padding: 14,
     backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
     elevation: 1,
   },
   featureIconBox: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: 10,
-    backgroundColor: '#F0F7F7',
+    backgroundColor: '#E6F4F1',
     alignItems: 'center',
     justifyContent: 'center',
   },
   featureTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A2E',
+    color: '#0F172A',
+    marginBottom: 2,
   },
-  featureSub: {
+  featureDescription: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  securitySeal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  securitySealText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0D7377',
+    letterSpacing: 0.6,
+  },
+
+  formDesktopContainer: {
+    flex: 0.9,
+    maxWidth: 440,
+    width: '100%',
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 36,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 4,
+  },
+  formHeader: {
+    marginBottom: 20,
+  },
+  formTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  formSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  formBody: {
+    gap: 14,
+  },
+
+  biometricCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F0FDF9',
+    borderWidth: 1.5,
+    borderColor: '#0D7377',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  registerBioCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  biometricIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#E6F4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  biometricCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0D7377',
+  },
+  biometricCardEmail: {
     fontSize: 12,
     color: '#64748B',
     marginTop: 2,
   },
 
-  // Form Section
-  formSection: {
-    width: '100%',
-    maxWidth: 440,
-    justifyContent: 'center',
-  },
-  formDesktop: {
-    paddingLeft: 12,
-  },
-  formWrapper: {
-    width: '100%',
-  },
-  formHeader: {
-    marginBottom: 20,
+  rememberBioRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
   },
-  card: {
-    padding: 28,
-    borderRadius: 16,
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  checkboxChecked: {
+    backgroundColor: '#0D7377',
+    borderColor: '#0D7377',
+  },
+  rememberBioText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '500',
+  },
+
+  errorBanner: {
+    backgroundColor: '#FEF2F2',
     borderWidth: 1,
-    gap: 16,
-    shadowColor: '#0D7377',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  errorBox: {
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
     padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+
+  orgPickerHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  orgPickerLoading: {
+    fontSize: 13,
+    color: '#64748B',
+    fontStyle: 'italic',
+  },
+  orgItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  orgItemLogo: {
+    width: 38,
+    height: 38,
     borderRadius: 8,
   },
+  orgIconFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: '#E6F4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orgItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  orgItemSlug: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+
   copyrightText: {
-    textAlign: 'center',
-    fontSize: 11,
+    fontSize: 12,
     color: '#94A3B8',
+    textAlign: 'center',
     marginTop: 24,
+  },
+
+  modalIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#E6F4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  alertBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    padding: 10,
+    borderRadius: 8,
+  },
+  alertText: {
+    color: '#DC2626',
+    fontSize: 13,
+    flex: 1,
+  },
+
+  // Mobile Styles
+  mobileScroll: {
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+  },
+  mobileHeader: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  mobileLogoBox: {
+    marginBottom: 16,
+  },
+  mobileLogo: {
+    width: 160,
+    height: 44,
+  },
+  mobileTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  mobileSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  mobileForm: {
+    gap: 14,
+  },
+  mobileLoginBtn: {
+    marginTop: 8,
+    backgroundColor: '#0D7377',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  mobileCareersBtn: {
+    marginTop: 28,
+    alignItems: 'center',
+  },
+  mobileCareersText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0D7377',
   },
 });

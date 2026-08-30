@@ -270,7 +270,7 @@ export default function DepartmentsAndHierarchyScreen() {
     setSavingDept(true);
     setFormError('');
     try {
-      const orgId = profile?.organization_id || '00000000-0000-0000-0000-000000000001';
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
       const newDept = await createDepartment({
         organization_id: orgId,
         name: deptName.trim(),

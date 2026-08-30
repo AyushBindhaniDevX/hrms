@@ -16,7 +16,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { LoadingState } from '@/components/ui/States';
-import { getShifts, createShift, getRoster, assignEmployeeShift } from '@/lib/services/shifts';
+import { getShifts, createShift, updateShift, getRoster, assignEmployeeShift } from '@/lib/services/shifts';
 import { getEmployees } from '@/lib/services/employee';
 import { WorkShift, EmployeeShift, Employee } from '@/types';
 import { formatCurrency } from '@/utils/format';
@@ -92,7 +92,7 @@ export default function ShiftsScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
       const startDate = weekDates[0].dateStr;
       const endDate = weekDates[weekDates.length - 1].dateStr;
 
@@ -144,7 +144,7 @@ export default function ShiftsScreen() {
 
   const handleAssignShift = async (shiftId: string | null) => {
     if (!assignModal.employee) return;
-    const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
+    const orgId = tenantOrg?.id || profile?.organization_id || '';
     const key = `${assignModal.employee.id}_${assignModal.date}`;
 
     // Optimistic update

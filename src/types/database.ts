@@ -29,6 +29,7 @@ export interface Profile {
   session_id?: string;
   last_login_ip?: string;
   last_active?: string;
+  biometric_enrolled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +49,7 @@ export interface Department {
 export interface Employee {
   id: string;
   profile_id: string;
+  organization_id?: string | null;
   employee_code: string | null;
   department_id: string | null;
   designation: string | null;
@@ -63,6 +65,18 @@ export interface Employee {
     bank_name: string;
     account_number: string;
     routing_number: string;
+  } | null;
+  tax_config?: {
+    pf_number?: string | null;
+    tax_regime?: 'old' | 'new' | 'custom' | string;
+    tds_percentage?: number | null;
+    epf_percentage?: number | null;
+    pt_amount?: number | null;
+    hra_percentage?: number | null;
+    custom_tax_percentage?: number | null;
+    esop_value?: number | null;
+    hra_type?: 'metro' | 'non-metro' | 'custom';
+    epf_exempt?: boolean;
   } | null;
   emergency_contact?: {
     name: string;
@@ -234,6 +248,7 @@ export interface GeofenceResponse {
   attendance_id?: string;
   status?: AttendanceStatus;
   distance_meters?: number;
+  face_verified?: boolean;
   clock_in?: string;
   clock_out?: string;
   working_minutes?: number;
@@ -243,7 +258,9 @@ export interface LeaveProcessResponse {
   success: boolean;
   message?: string;
   error?: string;
+  request_id?: string;
   status?: LeaveRequestStatus;
+  new_status?: LeaveRequestStatus;
 }
 
 // Performance & OKRs Management Types
