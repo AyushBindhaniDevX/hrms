@@ -1,23 +1,28 @@
 import { supabase } from '@/lib/supabase';
 import type { Notification } from '@/types';
-import * as ExpoNotifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Configure how notifications behave when the app is in foreground (native only)
+// Safely lazy-load ExpoNotifications only on native devices (iOS/Android)
+let ExpoNotifications: typeof import('expo-notifications') | null = null;
 if (Platform.OS !== 'web') {
-  ExpoNotifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+  try {
+    ExpoNotifications = require('expo-notifications');
+    ExpoNotifications?.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (e) {
+    // Native notifications module not available in this environment
+  }
 }
 
 export async function requestNotificationPermissions() {
-  if (Platform.OS === 'web') return true;
+  if (Platform.OS === 'web' || !ExpoNotifications) return true;
   try {
     const { status: existingStatus } = await ExpoNotifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -34,7 +39,7 @@ export async function requestNotificationPermissions() {
 }
 
 export async function sendClockInNotification(startTime: string) {
-  if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
+  if ((Platform.OS !== 'android' && Platform.OS !== 'ios') || !ExpoNotifications) return;
   try {
     const hasPermission = await requestNotificationPermissions();
     if (!hasPermission) return;
@@ -56,7 +61,7 @@ export async function sendClockInNotification(startTime: string) {
 }
 
 export async function cancelClockInNotification() {
-  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+  if ((Platform.OS === 'android' || Platform.OS === 'ios') && ExpoNotifications) {
     try {
       await ExpoNotifications.dismissAllNotificationsAsync();
       await ExpoNotifications.cancelAllScheduledNotificationsAsync();
@@ -121,7 +126,7 @@ export async function createNotification(
 
   await supabase.from('notifications').insert(notifObj);
 
-  if (Platform.OS !== 'web') {
+  if (Platform.OS !== 'web' && ExpoNotifications) {
     try {
       await ExpoNotifications.scheduleNotificationAsync({
         content: {
