@@ -4,7 +4,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
@@ -50,28 +49,26 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <PaperProvider>
-            <BottomSheetModalProvider>
-              <AuthProvider>
-                <TenantProvider>
-                  <NotificationProvider>
-                    <AuthLayoutWrapper>
-                      <SessionManager>
-                        <Stack screenOptions={{ headerShown: false }}>
-                          <Stack.Screen name="index" />
-                          <Stack.Screen name="careers" />
-                          <Stack.Screen name="(auth)" />
-                          <Stack.Screen name="(employee)" />
-                          <Stack.Screen name="(hr)" />
-                          <Stack.Screen name="(admin)" />
-                        </Stack>
-                      </SessionManager>
-                    </AuthLayoutWrapper>
-                  </NotificationProvider>
-                </TenantProvider>
-              </AuthProvider>
-            </BottomSheetModalProvider>
-          </PaperProvider>
+          <BottomSheetModalProvider>
+            <AuthProvider>
+              <TenantProvider>
+                <NotificationProvider>
+                  <AuthLayoutWrapper>
+                    <SessionManager>
+                      <Stack screenOptions={{ headerShown: false }}>
+                        <Stack.Screen name="index" />
+                        <Stack.Screen name="careers" />
+                        <Stack.Screen name="(auth)" />
+                        <Stack.Screen name="(employee)" />
+                        <Stack.Screen name="(hr)" />
+                        <Stack.Screen name="(admin)" />
+                      </Stack>
+                    </SessionManager>
+                  </AuthLayoutWrapper>
+                </NotificationProvider>
+              </TenantProvider>
+            </AuthProvider>
+          </BottomSheetModalProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
