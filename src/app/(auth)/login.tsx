@@ -1,23 +1,28 @@
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
 import {
-  COMPANY_NAME,
-  PRODUCT_NAME
+  COMPANY_NAME
 } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
-import { useTenantBranding } from '@/hooks/useTenantBranding';
 import { useBiometrics } from '@/hooks/useBiometrics';
+import { useTenantBranding } from '@/hooks/useTenantBranding';
 import { supabase } from '@/lib/supabase';
 import type { Organization } from '@/types';
 import { useRouter } from 'expo-router';
 import {
-  Zap, Building2, ShieldCheck, UserCheck, Clock, Award,
-  Fingerprint, ScanFace, Sparkles, Check, AlertCircle, PlusCircle
+  AlertCircle,
+  Building2,
+  Check,
+  Clock,
+  Fingerprint,
+  PlusCircle,
+  ScanFace,
+  ShieldCheck, UserCheck,
+  Zap
 } from 'lucide-react-native';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -31,10 +36,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useOAuth } from '@clerk/clerk-expo';
-import * as WebBrowser from 'expo-web-browser';
-
-WebBrowser.maybeCompleteAuthSession();
 
 const SUBEDGE_LOGO = require('../../../assets/images/subedge-logo.png');
 
@@ -45,7 +46,7 @@ export default function LoginScreen() {
   const isDesktop = width >= 1024;
 
   const { tenant } = useTenantBranding();
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const router = useRouter();
 
   const {
@@ -57,12 +58,6 @@ export default function LoginScreen() {
     authenticateWithBiometrics,
     registerBiometrics,
   } = useBiometrics();
-
-  let startOAuthFlow: any = null;
-  try {
-    const oauth = useOAuth({ strategy: 'oauth_google' });
-    startOAuthFlow = oauth.startOAuthFlow;
-  } catch (e) {}
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -138,29 +133,15 @@ export default function LoginScreen() {
     }
   };
 
-  // Google OAuth via Clerk
-  const handleClerkOAuth = async () => {
-    if (!startOAuthFlow) {
-      setError('Clerk authentication service is initializing. Please try again.');
-      return;
-    }
+  // Google OAuth via Supabase
+  const handleGoogleOAuth = async () => {
     setError('');
     setOauthLoading(true);
     try {
-      const redirectUrl = Platform.OS === 'web' && typeof window !== 'undefined'
-        ? `${window.location.origin}/oauth-native-callback`
-        : undefined;
-
-      const { createdSessionId, setActive } = await startOAuthFlow({
-        redirectUrl,
-      });
-      if (createdSessionId && setActive) {
-        await setActive({ session: createdSessionId });
-      }
+      await signInWithGoogle();
     } catch (err: any) {
-      console.error('Clerk OAuth error:', err);
-      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Google sign-in failed. Please try again.';
-      setError(msg);
+      console.error('Google OAuth error:', err);
+      setError(err?.message || 'Google sign-in failed. Please try again.');
     } finally {
       setOauthLoading(false);
     }
@@ -195,7 +176,7 @@ export default function LoginScreen() {
     setOrgResolved(true);
   };
 
-  // Clerk Email/Password Login
+  // Supabase Email/Password Login
   const handleLogin = async () => {
     if (!email || !password) {
       setError('Please enter your email and password');
@@ -209,11 +190,11 @@ export default function LoginScreen() {
 
       // If user opted to register biometrics, enroll in vault
       if (hasHardware && rememberBiometric) {
-        registerBiometrics(finalEmail, password).catch(() => {});
+        registerBiometrics(finalEmail, password).catch(() => { });
       }
     } catch (err: any) {
-      console.error('Clerk login error:', err);
-      const message = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || (err instanceof Error ? err.message : 'Invalid credentials. Please check your email and password.');
+      console.error('Login error:', err);
+      const message = err?.message || 'Invalid credentials. Please check your email and password.';
       setError(message);
     } finally {
       setLoading(false);
@@ -408,7 +389,7 @@ export default function LoginScreen() {
 
                   <Button
                     title="Continue with Google"
-                    onPress={handleClerkOAuth}
+                    onPress={handleGoogleOAuth}
                     loading={oauthLoading}
                     variant="outline"
                     style={{
@@ -430,12 +411,6 @@ export default function LoginScreen() {
               )}
             </View>
 
-            <TouchableOpacity
-              onPress={() => router.push('/careers' as any)}
-              style={styles.mobileCareersBtn}
-            >
-              <Text style={styles.mobileCareersText}>View Open Positions & Careers →</Text>
-            </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
 
@@ -565,7 +540,7 @@ export default function LoginScreen() {
                   <UserCheck size={20} color="#0D7377" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.featureTitle}>Biometric Clerk Auth</Text>
+                  <Text style={styles.featureTitle}>Biometric Instant Login</Text>
                   <Text style={styles.featureDescription}>Instant Face ID / Touch ID authentication with Supabase audit logging</Text>
                 </View>
               </View>
@@ -761,7 +736,7 @@ export default function LoginScreen() {
 
                     <Button
                       title="Continue with Google"
-                      onPress={handleClerkOAuth}
+                      onPress={handleGoogleOAuth}
                       loading={oauthLoading}
                       variant="outline"
                       style={{
@@ -782,12 +757,7 @@ export default function LoginScreen() {
                 )}
               </View>
 
-              <TouchableOpacity
-                onPress={() => router.push('/careers' as any)}
-                style={{ marginTop: 16, alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>View Open Positions & Careers →</Text>
-              </TouchableOpacity>
+
 
               <Text style={styles.copyrightText}>
                 © 2026 {COMPANY_NAME}. All rights reserved.

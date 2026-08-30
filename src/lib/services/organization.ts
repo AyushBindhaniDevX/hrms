@@ -178,32 +178,42 @@ export async function createSystemUser(params: {
     throw new Error(`User limit reached for ${pkg.toUpperCase()} package (${currentCount}/${limit} users). Please upgrade to add more.`);
   }
 
-  // 1. Check if user exists in Clerk or can be provisioned via Clerk Backend API
+  // 1. Check if user already exists in profiles or register in Supabase Auth
   let uid: string = '';
-  try {
-    const { provisionClerkUser } = await import('./clerkAuth');
-    const clerkRes = await provisionClerkUser({
-      email: params.email,
-      name: params.full_name,
-      role: params.role,
-      password: params.password,
-      organizationId: orgId,
-    });
-    if (clerkRes?.id) {
-      uid = clerkRes.id;
+  const cleanEmail = params.email.trim().toLowerCase();
+
+  const { data: existingProf } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', cleanEmail)
+    .maybeSingle();
+
+  if (existingProf?.id) {
+    uid = existingProf.id;
+  } else {
+    // Register user account in Supabase Auth
+    try {
+      const defaultPassword = params.password || (params.phone ? `Pass@${params.phone.slice(-4)}` : 'Welcome@123');
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: defaultPassword,
+        options: {
+          data: {
+            full_name: params.full_name,
+            role: params.role,
+            organization_id: orgId,
+          },
+        },
+      });
+
+      if (authData?.user?.id) {
+        uid = authData.user.id;
+      }
+    } catch (authErr) {
+      console.warn('Supabase Auth pre-registration notice:', authErr);
     }
-  } catch (cErr) {}
 
-  if (!uid) {
-    const { data: existingProf } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', params.email)
-      .maybeSingle();
-
-    if (existingProf?.id) {
-      uid = existingProf.id;
-    } else {
+    if (!uid) {
       uid = generateUuid();
     }
   }
@@ -213,7 +223,7 @@ export async function createSystemUser(params: {
   const profPayload: Record<string, any> = {
     id: uid,
     full_name: params.full_name,
-    email: params.email,
+    email: cleanEmail,
     role: params.role,
     organization_id: orgId,
     phone: params.phone || null,

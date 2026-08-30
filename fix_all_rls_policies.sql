@@ -1,5 +1,5 @@
 -- ==============================================================================
--- OASIS HCM: MASTER RLS POLICY REPAIR SCRIPT (CLERK AUTH + SUPABASE MULTI-TENANT)
+-- OASIS HCM: MASTER RLS POLICY REPAIR SCRIPT (SUPABASE AUTH + MULTI-TENANT)
 -- Run this script in Supabase Dashboard > SQL Editor > New Query > Run
 -- ==============================================================================
 

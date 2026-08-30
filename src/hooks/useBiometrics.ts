@@ -45,7 +45,7 @@ export function useBiometrics() {
   }, [refreshStatus]);
 
   /**
-   * Authenticates using device biometrics (Face ID / Touch ID) and signs into Clerk
+   * Authenticates using device biometrics (Face ID / Touch ID) and signs into Supabase Auth
    */
   const authenticateWithBiometrics = useCallback(async (): Promise<{
     success: boolean;
@@ -79,7 +79,7 @@ export function useBiometrics() {
         };
       }
 
-      // Execute Clerk sign in with secure credentials
+      // Execute sign in with secure credentials
       await signIn(creds.email, creds.secret);
 
       // Track biometric login in Supabase
@@ -114,7 +114,7 @@ export function useBiometrics() {
   const registerBiometrics = useCallback(
     async (email: string, passwordSecret: string): Promise<{ success: boolean; error?: string }> => {
       try {
-        const currentUserId = user?.id || profile?.id || 'clerk_user';
+        const currentUserId = user?.id || profile?.id || 'supabase_user';
         const result = await registerDeviceBiometrics(
           currentUserId,
           email,

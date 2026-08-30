@@ -583,7 +583,7 @@ export default function UserManagementScreen() {
       );
       setInfoBanner({
         type: 'success',
-        message: `Welcome & Clerk sign-in invitation sent to ${u.email} successfully.`,
+        message: `Welcome & login invitation sent to ${u.email} successfully.`,
       });
       setTimeout(() => setInfoBanner(null), 4000);
     } catch (err: any) {
@@ -652,9 +652,14 @@ export default function UserManagementScreen() {
 
   const handleResetPassword = async (userEmail: string) => {
     try {
+      const { supabase } = await import('@/lib/supabase');
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(userEmail.trim().toLowerCase());
+      if (resetErr) {
+        throw new Error(resetErr.message);
+      }
       setInfoBanner({
         type: 'success',
-        message: `Password reset instructions have been initiated for ${userEmail}. The user can verify via Clerk email code.`,
+        message: `Password reset email has been sent to ${userEmail}.`,
       });
       setTimeout(() => setInfoBanner(null), 4000);
     } catch (err: any) {
@@ -908,17 +913,6 @@ export default function UserManagementScreen() {
                         label={u.is_active ? 'ACTIVE' : 'INACTIVE'}
                         variant={u.is_active ? 'successLight' : 'dangerLight'}
                       />
-                      {u.id.startsWith('user_') ? (
-                        <Badge
-                          label="CLERK SYNCED"
-                          variant="purple"
-                        />
-                      ) : (
-                        <Badge
-                          label="PENDING CLERK LOGIN"
-                          variant="warning"
-                        />
-                      )}
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 2 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

@@ -19,7 +19,7 @@ interface TenantContextState {
 const TenantContext = createContext<TenantContextState | undefined>(undefined);
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
-  const { profile, isAuthenticated, clerkOrg } = useAuth();
+  const { profile, isAuthenticated } = useAuth();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [workplace, setWorkplace] = useState<Workplace | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -43,36 +43,31 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 2. Match by Clerk organization slug if not resolved by ID
-      if (!resolvedOrg && clerkOrg?.slug) {
-        const { data: orgBySlug } = await supabase
+      if (!resolvedOrg) {
+        const { data: defaultOrg } = await supabase
           .from('organizations')
           .select('*')
-          .ilike('slug', clerkOrg.slug.toLowerCase().trim())
+          .limit(1)
           .maybeSingle();
 
-        if (orgBySlug) {
-          resolvedOrg = orgBySlug as Organization;
+        if (defaultOrg) {
+          resolvedOrg = defaultOrg as Organization;
         }
       }
 
       setOrganization(resolvedOrg);
 
-      const targetOrgId = resolvedOrg?.id || profile?.organization_id;
-
-      // 3. Fetch Employee record for current user if authenticated
+      // Fetch employee record
       if (profile?.id) {
         const { data: empData } = await supabase
           .from('employees')
-          .select('*, department:departments!employees_department_id_fkey(*), workplace:workplaces(*)')
+          .select('*')
           .eq('profile_id', profile.id)
           .maybeSingle();
 
         if (empData) {
           setEmployee(empData as Employee);
-          if (empData.workplace) {
-            setWorkplace(empData.workplace as Workplace);
-          } else if (empData.workplace_id) {
+          if (empData.workplace_id) {
             const { data: wpData } = await supabase
               .from('workplaces')
               .select('*')
@@ -83,15 +78,14 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 4. Fallback workplace if not resolved yet
-      if (targetOrgId && !workplace) {
+      // Default workplace fallback if not assigned
+      if (!workplace && resolvedOrg) {
         const { data: defaultWp } = await supabase
           .from('workplaces')
           .select('*')
-          .eq('organization_id', targetOrgId)
+          .eq('organization_id', resolvedOrg.id)
           .limit(1)
           .maybeSingle();
-
         if (defaultWp) setWorkplace(defaultWp as Workplace);
       }
     } catch (err) {
@@ -99,7 +93,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoadingTenant(false);
     }
-  }, [profile, clerkOrg]);
+  }, [profile]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -111,12 +105,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, fetchTenantData]);
 
-  // Dynamically prioritize Clerk Organization branding & icon
-  const clerkOrgName = clerkOrg?.name || clerkOrg?.organization?.name;
-  const clerkOrgLogo = clerkOrg?.imageUrl || clerkOrg?.organization?.imageUrl || (clerkOrg as any)?.logoUrl;
-
-  const companyName = organization?.name || clerkOrgName || COMPANY_NAME;
-  const companyLogoUrl = organization?.logo_url || clerkOrgLogo || (organization?.settings as any)?.logo_url || null;
+  const companyName = organization?.name || COMPANY_NAME;
+  const companyLogoUrl = organization?.logo_url || (organization?.settings as any)?.logo_url || null;
   const officeName = workplace?.name || 'Main Office';
 
   const value: TenantContextState = {

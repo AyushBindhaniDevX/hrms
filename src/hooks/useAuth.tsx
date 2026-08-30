@@ -1,14 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
-import {
-  useUser as useClerkUser,
-  useAuth as useClerkAuth,
-  useSignIn as useClerkSignIn,
-  useOAuth,
-  useClerk,
-} from '@clerk/clerk-expo';
 import { supabase } from '@/lib/supabase';
-import { syncClerkUserToProfile, mapClerkRoleToUserRole, CLERK_ORG_ID } from '@/lib/services/clerkAuth';
 import { logUserLogin, logUserLogout } from '@/lib/services/userActivity';
 import type { Profile, UserRole, Organization } from '@/types';
 
@@ -32,9 +24,8 @@ interface AuthState {
   role: UserRole | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  clerkUser?: any;
-  clerkOrg?: any;
   signIn: (email: string, password: string, fallbackOrgId?: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, role?: string, orgId?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -45,160 +36,128 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [clerkOrg, setClerkOrg] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const loggedInUserIdRef = useRef<string | null>(null);
 
-  // Safe Clerk Hooks
-  let clerkUserObj: any = null;
-  let isUserLoaded = true;
-  let clerkAuth: any = null;
-  let clerkSignInHook: any = null;
-  let clerkInstance: any = null;
+  // Helper: Fetch or auto-create profile row from Supabase Auth User
+  const syncProfileForAuthUser = useCallback(async (authUser: any): Promise<Profile | null> => {
+    if (!authUser?.id) return null;
 
-  try {
-    const u = useClerkUser();
-    clerkUserObj = u?.user;
-    isUserLoaded = u?.isLoaded ?? true;
-    clerkAuth = useClerkAuth();
-    clerkSignInHook = useClerkSignIn();
-    clerkInstance = useClerk();
-  } catch (e) {
-    // Graceful fallback if ClerkProvider is not ready
-  }
-
-  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
-
-  const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      // 1. Check profile by auth ID
+      const { data: profById, error: idErr } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('id', authUser.id)
         .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching profile from Supabase:', error);
+      if (profById) {
+        return profById as Profile;
       }
 
-      if (data) {
-        setProfile(data as Profile);
-      } else {
-        setProfile(null);
-      }
-    } catch (err) {
-      console.error('Error in fetchProfile:', err);
-      setProfile(null);
-    }
-  }, []);
+      // 2. Check profile by email (if pre-created by admin)
+      if (authUser.email) {
+        const { data: profByEmail } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', authUser.email.toLowerCase().trim())
+          .maybeSingle();
 
-  const refreshProfile = useCallback(async () => {
-    if (!clerkUserObj?.id) {
-      setProfile(null);
-      setUser(null);
-      return;
-    }
-    await fetchProfile(clerkUserObj.id);
-  }, [clerkUserObj, fetchProfile]);
-
-  // Sync Clerk User & Organization to Supabase + Log User Activity
-  const syncedUserIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    if (!isUserLoaded) {
-      return;
-    }
-
-    if (clerkUserObj) {
-      const primaryEmail =
-        clerkUserObj.primaryEmailAddress?.emailAddress ||
-        clerkUserObj.emailAddresses?.[0]?.emailAddress ||
-        `${clerkUserObj.id}@clerk.user`;
-
-      // 1. Extract Clerk Organization info & Slug
-      const orgMembership = clerkUserObj.organizationMemberships?.[0];
-      const org = orgMembership?.organization;
-
-      // Detect org slug from Clerk organization, user metadata, web subdomain, or email domain
-      let detectedOrgSlug: string | undefined = org?.slug;
-
-      if (!detectedOrgSlug) {
-        detectedOrgSlug =
-          clerkUserObj.publicMetadata?.organization_slug ||
-          clerkUserObj.publicMetadata?.org_slug ||
-          clerkUserObj.unsafeMetadata?.organization_slug ||
-          clerkUserObj.unsafeMetadata?.org_slug;
-      }
-
-      if (!detectedOrgSlug && Platform.OS === 'web' && typeof window !== 'undefined') {
-        const hostParts = window.location.hostname.split('.');
-        if (hostParts.length > 1 && hostParts[0] !== 'localhost' && hostParts[0] !== '127' && hostParts[0] !== 'www') {
-          detectedOrgSlug = hostParts[0];
+        if (profByEmail) {
+          // If profile existed under a different ID, update it to the auth user ID
+          if (profByEmail.id !== authUser.id) {
+            const oldId = profByEmail.id;
+            const updatedProf = { ...profByEmail, id: authUser.id, updated_at: new Date().toISOString() };
+            await supabase.from('profiles').upsert(updatedProf);
+            await supabase.from('employees').update({ profile_id: authUser.id }).eq('profile_id', oldId);
+            await supabase.from('departments').update({ manager_id: authUser.id }).eq('manager_id', oldId);
+            await supabase.from('notifications').update({ profile_id: authUser.id }).eq('profile_id', oldId);
+            await supabase.from('audit_logs').update({ user_id: authUser.id }).eq('user_id', oldId);
+            await supabase.from('profiles').delete().eq('id', oldId);
+            return updatedProf as Profile;
+          }
+          return profByEmail as Profile;
         }
       }
 
-      if (!detectedOrgSlug && primaryEmail.includes('@') && !primaryEmail.endsWith('@clerk.user') && !primaryEmail.endsWith('@gmail.com') && !primaryEmail.endsWith('@yahoo.com') && !primaryEmail.endsWith('@outlook.com')) {
-        const domain = primaryEmail.split('@')[1];
-        detectedOrgSlug = domain.split('.')[0];
+      // 3. Auto-provision profile from auth user metadata
+      const { data: defaultOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
+      const orgId = authUser.user_metadata?.organization_id || defaultOrg?.id || '00000000-0000-0000-0000-000000000001';
+      const role = (authUser.user_metadata?.role as UserRole) || 'employee';
+      const fullName = authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'HRMS User';
+      const now = new Date().toISOString();
+
+      const newProfPayload: Record<string, any> = {
+        id: authUser.id,
+        email: authUser.email,
+        full_name: fullName,
+        role,
+        organization_id: orgId,
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      };
+
+      const { data: insertedProf, error: insErr } = await supabase
+        .from('profiles')
+        .upsert(newProfPayload)
+        .select('*')
+        .maybeSingle();
+
+      if (!insErr && insertedProf) {
+        return insertedProf as Profile;
       }
+    } catch (err) {
+      console.error('Error syncing profile for auth user:', err);
+    }
 
-      const orgRole =
-        orgMembership?.role ||
-        clerkUserObj.publicMetadata?.role ||
-        clerkUserObj.unsafeMetadata?.role;
-      const orgId = org?.id || (detectedOrgSlug ? `org_${detectedOrgSlug}` : CLERK_ORG_ID);
+    return null;
+  }, []);
 
-      const resolvedOrgObj = {
-        id: orgId,
-        name: org?.name || (detectedOrgSlug ? detectedOrgSlug.charAt(0).toUpperCase() + detectedOrgSlug.slice(1) : 'Subedge Technology Pvt Ltd'),
-        slug: detectedOrgSlug || org?.slug || 'subedge',
-        imageUrl: org?.imageUrl || (org as any)?.logoUrl || null,
-        role: orgRole,
-      };
+  const refreshProfile = useCallback(async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authUser = sessionData.session?.user;
+      if (!authUser) {
+        setUser(null);
+        setProfile(null);
+        return;
+      }
+      const prof = await syncProfileForAuthUser(authUser);
+      setProfile(prof);
+    } catch (e) {
+      console.error('refreshProfile error:', e);
+    }
+  }, [syncProfileForAuthUser]);
 
-      setClerkOrg(resolvedOrgObj);
+  // Listen to Supabase Auth state changes & initialize session
+  useEffect(() => {
+    let isMounted = true;
 
-      const appUserObj: AppUser = {
-        id: clerkUserObj.id,
-        email: primaryEmail,
-        fullName:
-          clerkUserObj.fullName ||
-          `${clerkUserObj.firstName || ''} ${clerkUserObj.lastName || ''}`.trim() ||
-          'Clerk User',
-        imageUrl: clerkUserObj.imageUrl || null,
-        user_metadata: {
-          full_name:
-            clerkUserObj.fullName ||
-            `${clerkUserObj.firstName || ''} ${clerkUserObj.lastName || ''}`.trim() ||
-            'Clerk User',
-          role: mapClerkRoleToUserRole(orgRole),
-          organization_id: orgId,
-          organization_slug: resolvedOrgObj.slug,
-        },
-      };
+    async function initAuth() {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.warn('Get session error:', error.message);
+        }
 
-      setUser(appUserObj);
+        if (session?.user && isMounted) {
+          const authUser = session.user;
+          const appUser: AppUser = {
+            id: authUser.id,
+            email: authUser.email,
+            fullName: authUser.user_metadata?.full_name || authUser.email?.split('@')[0],
+            imageUrl: authUser.user_metadata?.avatar_url || null,
+            user_metadata: authUser.user_metadata,
+          };
+          setUser(appUser);
 
-      syncClerkUserToProfile({
-        id: clerkUserObj.id,
-        fullName: appUserObj.fullName,
-        email: primaryEmail,
-        imageUrl: clerkUserObj.imageUrl,
-        orgRole: String(orgRole || 'org:member'),
-        orgId: org?.id || undefined,
-        orgName: resolvedOrgObj.name,
-        orgSlug: resolvedOrgObj.slug,
-        orgImageUrl: resolvedOrgObj.imageUrl,
-      })
-        .then(async (res) => {
-          if (!isMounted) return;
-          if (res?.profile) {
-            setProfile(res.profile);
+          const prof = await syncProfileForAuthUser(authUser);
+          if (isMounted) {
+            setProfile(prof);
 
-            // If newly signed in, log session and IP activity
-            if (syncedUserIdRef.current !== clerkUserObj.id) {
-              syncedUserIdRef.current = clerkUserObj.id;
+            if (prof && loggedInUserIdRef.current !== prof.id) {
+              loggedInUserIdRef.current = prof.id;
               try {
                 let ipAddress: string | null = null;
                 if (Platform.OS === 'web') {
@@ -206,94 +165,148 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   const ipData = await ipRes.json();
                   ipAddress = ipData?.ip || null;
                 }
-                const sessionId = clerkAuth?.sessionId || `sess_${Math.random().toString(36).substring(2, 15)}`;
-                await logUserLogin(res.profile, ipAddress, sessionId);
-              } catch (ipErr) {
-                // Ignore IP lookup failures
-              }
+                await logUserLogin(prof, ipAddress, session.access_token?.slice(-16));
+              } catch (ipErr) {}
             }
           }
-          setIsLoading(false);
-        })
-        .catch((err) => {
-          console.error('Failed to sync Clerk user to Supabase:', err);
-          if (isMounted) setIsLoading(false);
-        });
-    } else {
-      syncedUserIdRef.current = null;
-      setUser(null);
-      setProfile(null);
-      setClerkOrg(null);
-      setIsLoading(false);
+        } else if (isMounted) {
+          setUser(null);
+          setProfile(null);
+          loggedInUserIdRef.current = null;
+        }
+      } catch (err) {
+        console.error('Supabase Auth init error:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
     }
+
+    initAuth();
+
+    // Subscribe to auth state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (session?.user) {
+          const authUser = session.user;
+          const appUser: AppUser = {
+            id: authUser.id,
+            email: authUser.email,
+            fullName: authUser.user_metadata?.full_name || authUser.email?.split('@')[0],
+            imageUrl: authUser.user_metadata?.avatar_url || null,
+            user_metadata: authUser.user_metadata,
+          };
+          setUser(appUser);
+
+          const prof = await syncProfileForAuthUser(authUser);
+          if (isMounted) {
+            setProfile(prof);
+          }
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        loggedInUserIdRef.current = null;
+      }
+      setIsLoading(false);
+    });
 
     return () => {
       isMounted = false;
+      authListener?.subscription?.unsubscribe();
     };
-  }, [clerkUserObj, isUserLoaded]);
+  }, [syncProfileForAuthUser]);
 
-  // Clerk Email/Password Sign-In
+  // Sign In via Supabase Auth
   const handleSignIn = useCallback(
     async (email: string, password: string, _fallbackOrgId?: string) => {
-      if (!clerkSignInHook?.signIn || !clerkSignInHook?.setActive) {
-        throw new Error('Clerk authentication is not ready. Please try again.');
-      }
-
-      const { signIn, setActive } = clerkSignInHook;
-
-      const result = await signIn.create({
-        identifier: email.trim(),
+      const cleanEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
         password: password,
       });
 
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
-      } else if (result.status === 'needs_first_factor') {
-        throw new Error('Additional verification required for this account.');
-      } else if (result.status === 'needs_second_factor') {
-        throw new Error('Two-factor authentication is required. Please check your verification method.');
-      } else {
-        throw new Error(`Sign in status: ${result.status}`);
+      if (error) {
+        throw new Error(error.message || 'Invalid email or password');
+      }
+
+      if (data?.user) {
+        const appUser: AppUser = {
+          id: data.user.id,
+          email: data.user.email,
+          fullName: data.user.user_metadata?.full_name || data.user.email?.split('@')[0],
+          imageUrl: data.user.user_metadata?.avatar_url || null,
+          user_metadata: data.user.user_metadata,
+        };
+        setUser(appUser);
+        const prof = await syncProfileForAuthUser(data.user);
+        setProfile(prof);
       }
     },
-    [clerkSignInHook]
+    [syncProfileForAuthUser]
   );
 
-  // Google OAuth via Clerk
-  const handleSignInWithGoogle = useCallback(async () => {
-    if (!startGoogleOAuth) {
-      throw new Error('Google Sign-In is initializing. Please try again.');
-    }
+  // Sign Up via Supabase Auth
+  const handleSignUp = useCallback(
+    async (email: string, password: string, fullName: string, role: string = 'employee', orgId?: string) => {
+      const cleanEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: password,
+        options: {
+          data: {
+            full_name: fullName,
+            role: role,
+            organization_id: orgId,
+          },
+        },
+      });
 
-    const redirectUrl = Platform.OS === 'web' && typeof window !== 'undefined'
-      ? `${window.location.origin}/oauth-native-callback`
+      if (error) {
+        throw new Error(error.message || 'Failed to create account');
+      }
+
+      if (data?.user) {
+        const prof = await syncProfileForAuthUser(data.user);
+        setProfile(prof);
+      }
+    },
+    [syncProfileForAuthUser]
+  );
+
+  // Google OAuth via Supabase
+  const handleSignInWithGoogle = useCallback(async () => {
+    const redirectTo = Platform.OS === 'web' && typeof window !== 'undefined'
+      ? `${window.location.origin}/sso-callback`
       : undefined;
 
-    const { createdSessionId, setActive } = await startGoogleOAuth({
-      redirectUrl,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+      },
     });
-    if (createdSessionId && setActive) {
-      await setActive({ session: createdSessionId });
-    }
-  }, [startGoogleOAuth]);
 
-  // Sign Out
+    if (error) {
+      throw new Error(error.message || 'Google Sign-In failed');
+    }
+  }, []);
+
+  // Sign Out via Supabase Auth
   const handleSignOut = useCallback(async () => {
     try {
       if (profile) {
         await logUserLogout(profile);
       }
-      if (clerkInstance?.signOut) {
-        await clerkInstance.signOut();
-      }
-      syncedUserIdRef.current = null;
+      await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
-      setClerkOrg(null);
+      loggedInUserIdRef.current = null;
     } catch (err) {
       console.error('Sign out error:', err);
     }
-  }, [profile, clerkInstance]);
+  }, [profile]);
 
   const effectiveRole: UserRole | null = profile?.role || (user?.user_metadata?.role as UserRole) || null;
 
@@ -305,9 +318,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: effectiveRole,
         isLoading,
         isAuthenticated: !!user,
-        clerkUser: clerkUserObj,
-        clerkOrg,
         signIn: handleSignIn,
+        signUp: handleSignUp,
         signInWithGoogle: handleSignInWithGoogle,
         signOut: handleSignOut,
         refreshProfile,

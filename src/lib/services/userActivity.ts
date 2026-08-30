@@ -60,7 +60,7 @@ export async function trackUserActivity(payload: UserActivityPayload): Promise<v
         ...(payload.metadata || {}),
       },
       user: {
-        full_name: payload.actorName || 'Clerk User',
+        full_name: payload.actorName || 'User',
         email: payload.actorEmail || '',
         role: payload.actorRole || 'employee',
       },
@@ -85,7 +85,7 @@ export async function trackUserActivity(payload: UserActivityPayload): Promise<v
 }
 
 /**
- * Logs a Clerk user sign-in session in Supabase, updating IP and session records
+ * Logs a user sign-in session in Supabase, updating IP and session records
  */
 export async function logUserLogin(
   profile: Profile,
@@ -114,12 +114,12 @@ export async function logUserLogin(
       action: 'USER_SIGN_IN',
       entityType: 'auth',
       entityId: profile.id,
-      description: `User ${profile.full_name} (${profile.email}) signed in via Clerk`,
+      description: `User ${profile.full_name} (${profile.email}) signed in`,
       actorName: profile.full_name,
       actorEmail: profile.email,
       actorRole: profile.role,
       metadata: {
-        login_method: 'clerk_sso',
+        login_method: 'password',
         ip_address: ipAddress || 'unknown',
         session_id: effectiveSessionId,
         platform: Platform.OS,
@@ -131,7 +131,7 @@ export async function logUserLogin(
 }
 
 /**
- * Logs a Clerk user sign-out session in Supabase
+ * Logs a user sign-out session in Supabase
  */
 export async function logUserLogout(profile?: Profile | null): Promise<void> {
   if (!profile) return;

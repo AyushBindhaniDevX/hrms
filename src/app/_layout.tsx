@@ -7,20 +7,16 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { ClerkProvider, ClerkLoaded } from '@clerk/clerk-expo';
-import { tokenCache } from '@/lib/clerkTokenCache';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { TenantProvider } from '@/context/TenantContext';
 import { SessionManager } from '@/components/auth/SessionManager';
 import { NotificationProvider } from '@/context/NotificationContext';
+import { ForcePasswordChangeModal } from '@/components/auth/ForcePasswordChangeModal';
 
 // Prevent native splash screen from auto hiding until initialization is complete
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
-const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_bW92aW5nLXNvbGUtMzMzLmNsZXJrLmFjY291bnRzLmRldiQ';
-
-import { ForcePasswordChangeModal } from '@/components/auth/ForcePasswordChangeModal';
 
 function AuthLayoutWrapper({ children }: { children: React.ReactNode }) {
   const { isLoading } = useAuth();
@@ -50,7 +46,7 @@ function AuthLayoutWrapper({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  const content = (
+  return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
@@ -80,16 +76,5 @@ export default function RootLayout() {
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
-
-  if (CLERK_PUBLISHABLE_KEY) {
-    return (
-      <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-        <ClerkLoaded>
-          {content}
-        </ClerkLoaded>
-      </ClerkProvider>
-    );
-  }
-
-  return content;
 }
+

@@ -189,7 +189,7 @@ export default function SettingsScreen() {
           <View style={{ gap: 10, paddingHorizontal: 4 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Authentication Engine</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Clerk Multi-Tenant (Active ✓)</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Supabase Auth (Active ✓)</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Database & Realtime</Text>

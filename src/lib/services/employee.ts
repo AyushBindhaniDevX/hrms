@@ -256,31 +256,41 @@ export async function createEmployee(params: {
     orgId = defaultOrg?.id;
   }
 
-  // 1. Check if user exists in Clerk or can be provisioned via Clerk Backend API
+  // 1. Check if user already exists in profiles or register in Supabase Auth
   let uid: string = '';
-  try {
-    const { provisionClerkUser } = await import('./clerkAuth');
-    const clerkRes = await provisionClerkUser({
-      email: params.email,
-      name: params.full_name,
-      role: params.role || 'employee',
-      organizationId: orgId,
-    });
-    if (clerkRes?.id) {
-      uid = clerkRes.id;
+  const cleanEmail = params.email.trim().toLowerCase();
+
+  const { data: existingProf } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', cleanEmail)
+    .maybeSingle();
+
+  if (existingProf?.id) {
+    uid = existingProf.id;
+  } else {
+    try {
+      const defaultPassword = params.phone ? `Pass@${params.phone.slice(-4)}` : 'Welcome@123';
+      const { data: authData } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: defaultPassword,
+        options: {
+          data: {
+            full_name: params.full_name,
+            role: params.role || 'employee',
+            organization_id: orgId,
+          },
+        },
+      });
+
+      if (authData?.user?.id) {
+        uid = authData.user.id;
+      }
+    } catch (authErr) {
+      console.warn('Supabase Auth employee pre-registration notice:', authErr);
     }
-  } catch (cErr) {}
 
-  if (!uid) {
-    const { data: existingProf } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', params.email)
-      .maybeSingle();
-
-    if (existingProf?.id) {
-      uid = existingProf.id;
-    } else {
+    if (!uid) {
       uid = generateUuid();
     }
   }

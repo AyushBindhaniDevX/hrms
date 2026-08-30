@@ -17,7 +17,7 @@ import { ShieldCheck, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-reac
 
 export function ForcePasswordChangeModal() {
   const colors = useTheme();
-  const { user, profile, refreshProfile, clerkUser } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
 
   const needsChange = Boolean(
     (profile as any)?.needs_password_change ||
@@ -46,15 +46,13 @@ export function ForcePasswordChangeModal() {
 
     setLoading(true);
     try {
-      // 1. Update Clerk user password
-      if (clerkUser?.updatePassword) {
-        await clerkUser.updatePassword({
-          newPassword: newPassword.trim(),
-        });
-      } else if (clerkUser?.createPassword) {
-        await clerkUser.createPassword({
-          newPassword: newPassword.trim(),
-        });
+      // 1. Update Supabase Auth user password
+      const { error: authErr } = await supabase.auth.updateUser({
+        password: newPassword.trim(),
+      });
+
+      if (authErr) {
+        throw new Error(authErr.message);
       }
 
       // 2. Update Supabase profiles table

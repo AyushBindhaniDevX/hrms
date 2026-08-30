@@ -25,7 +25,7 @@ import { trackUserActivity } from '@/lib/services/userActivity';
 
 export default function SettingsScreen() {
   const colors = useTheme();
-  const { profile, signOut, clerkUser, refreshProfile } = useAuth();
+  const { profile, signOut, refreshProfile } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
@@ -85,17 +85,13 @@ export default function SettingsScreen() {
     setPwError('');
     setSavingPw(true);
     try {
-      if (clerkUser?.updatePassword) {
-        await clerkUser.updatePassword({
-          currentPassword: currentPw || undefined,
-          newPassword: newPw,
-        });
-      } else if (clerkUser?.createPassword) {
-        await clerkUser.createPassword({
-          newPassword: newPw,
-        });
-      } else {
-        throw new Error('Password service is unavailable for this account.');
+      const { supabase } = await import('@/lib/supabase');
+      const { error: updateErr } = await supabase.auth.updateUser({
+        password: newPw.trim(),
+      });
+
+      if (updateErr) {
+        throw new Error(updateErr.message);
       }
 
       if (profile?.id) {
@@ -105,19 +101,16 @@ export default function SettingsScreen() {
           action: 'USER_PASSWORD_CHANGE',
           entityType: 'auth',
           entityId: profile.id,
-          description: `User ${profile.full_name} updated account password`,
-          actorName: profile.full_name,
-          actorEmail: profile.email,
-          actorRole: profile.role,
+          description: 'User updated personal password',
         });
       }
 
       setPwSuccess(true);
-      setTimeout(() => setPwModalOpen(false), 2000);
+      setTimeout(() => {
+        setPwModalOpen(false);
+      }, 1500);
     } catch (err: any) {
-      console.error('Password change error:', err);
-      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Failed to update password.';
-      setPwError(msg);
+      setPwError(err?.message || 'Failed to update password');
     } finally {
       setSavingPw(false);
     }
@@ -141,7 +134,7 @@ export default function SettingsScreen() {
     setBioError('');
     setBioLoading(true);
     try {
-      const email = profile?.email || clerkUser?.primaryEmailAddress?.emailAddress || '';
+      const email = profile?.email || '';
       const result = await registerBiometrics(email, bioPassword);
       if (result.success) {
         setBioModalOpen(false);
@@ -185,7 +178,7 @@ export default function SettingsScreen() {
               </View>
               <Text style={[styles.blockDesc, { color: colors.textSecondary }]}>
                 {hasHardware
-                  ? `Quickly and securely authenticate into your Clerk account using ${biometricType || 'device biometrics'}.`
+                  ? `Quickly and securely authenticate into your account using ${biometricType || 'device biometrics'}.`
                   : 'Biometric hardware is not detected on this device.'}
               </Text>
             </View>
@@ -256,11 +249,11 @@ export default function SettingsScreen() {
           <View style={[styles.block, { borderBottomColor: '#f1f5f9' }]}>
             <View style={{ flex: 1, paddingRight: 24 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                <Text style={[styles.blockTitle, { color: colors.text }]}>Two-Factor Authentication (2FA)</Text>
-                <Badge label="Clerk Security" variant="accentLight" />
+                <Text style={[styles.blockTitle, { color: colors.text }]}>Account Security</Text>
+                <Badge label="Supabase Auth" variant="successLight" />
               </View>
               <Text style={[styles.blockDesc, { color: colors.textSecondary }]}>
-                Secured by Clerk. Manage 2FA verification codes, authenticator apps, and passkeys directly from your user security portal.
+                Secured by Supabase Auth with encrypted sessions, biometric token storage, and verified email authentication.
               </Text>
             </View>
           </View>

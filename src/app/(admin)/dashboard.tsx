@@ -335,7 +335,7 @@ export default function AdminDashboard() {
             </View>
             <View style={mStyles.infraRow}>
               <Text style={mStyles.infraLabel}>Identity & Auth</Text>
-              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Clerk Enterprise Multi-Tenant ✓</Text>
+              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Supabase Auth Multi-Tenant ✓</Text>
             </View>
             <View style={mStyles.infraRow}>
               <Text style={mStyles.infraLabel}>Biometric Vault</Text>

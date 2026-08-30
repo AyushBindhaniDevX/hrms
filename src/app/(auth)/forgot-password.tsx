@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSignIn } from '@clerk/clerk-expo';
+import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/hooks/use-theme';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -10,89 +10,39 @@ import { ShieldCheck, Mail, KeyRound, AlertCircle, CheckCircle2, ArrowLeft } fro
 export default function ForgotPasswordScreen() {
   const colors = useTheme();
   const router = useRouter();
-  const { signIn, setActive, isLoaded } = useSignIn();
 
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [step, setStep] = useState<'request' | 'verify'>('request');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Step 1: Send reset code to email
-  const handleSendResetCode = async () => {
+  // Send reset password email via Supabase
+  const handleSendResetEmail = async () => {
     if (!email) {
       setError('Please enter your work email address.');
       return;
     }
-    if (!isLoaded || !signIn) {
-      setError('Authentication service is initializing. Please try again.');
-      return;
-    }
 
     setError('');
     setLoading(true);
 
     try {
-      await signIn.create({
-        strategy: 'reset_password_email_code',
-        identifier: email.trim(),
-      });
-      setStep('verify');
-    } catch (err: any) {
-      console.error('Clerk reset password request error:', err);
-      const msg = err?.errors?.[0]?.message || err?.message || 'Failed to send reset code. Please check your email.';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const redirectTo = Platform.OS === 'web' && typeof window !== 'undefined'
+        ? `${window.location.origin}/`
+        : undefined;
 
-  // Step 2: Verify code and set new password
-  const handleVerifyAndReset = async () => {
-    if (!code) {
-      setError('Please enter the 6-digit code sent to your email.');
-      return;
-    }
-    if (!newPassword || newPassword.length < 6) {
-      setError('Password must be at least 6 characters long.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match. Please re-enter.');
-      return;
-    }
-    if (!isLoaded || !signIn || !setActive) {
-      setError('Authentication service is initializing.');
-      return;
-    }
-
-    setError('');
-    setLoading(true);
-
-    try {
-      const result = await signIn.attemptFirstFactor({
-        strategy: 'reset_password_email_code',
-        code: code.trim(),
-        password: newPassword,
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo,
       });
 
-      if (result.status === 'complete') {
-        setSuccess(true);
-        if (result.createdSessionId) {
-          await setActive({ session: result.createdSessionId });
-        }
-        setTimeout(() => {
-          router.replace('/');
-        }, 1500);
-      } else {
-        setError(`Additional verification step required: ${result.status}`);
+      if (resetErr) {
+        throw new Error(resetErr.message);
       }
+
+      setSuccess(true);
     } catch (err: any) {
-      console.error('Clerk reset password attempt error:', err);
-      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Failed to reset password. Please check the code and try again.';
+      console.error('Reset password error:', err);
+      const msg = err?.message || 'Failed to send password reset email. Please verify your email address.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -109,19 +59,11 @@ export default function ForgotPasswordScreen() {
           <View style={styles.formWrapper}>
             <View style={styles.header}>
               <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
-                {step === 'request' ? (
-                  <Mail size={32} color={colors.primary} />
-                ) : (
-                  <KeyRound size={32} color={colors.primary} />
-                )}
+                <Mail size={32} color={colors.primary} />
               </View>
-              <Text style={styles.title}>
-                {step === 'request' ? 'Reset Password' : 'Enter Verification Code'}
-              </Text>
+              <Text style={styles.title}>Reset Password</Text>
               <Text style={styles.subtitle}>
-                {step === 'request'
-                  ? 'Enter your registered work email to receive a password reset verification code.'
-                  : `We sent a 6-digit code to ${email}. Enter it below along with your new password.`}
+                Enter your registered work email to receive a password reset link.
               </Text>
             </View>
 
@@ -134,15 +76,25 @@ export default function ForgotPasswordScreen() {
               ) : null}
 
               {success ? (
-                <View style={styles.successBox}>
-                  <CheckCircle2 size={20} color="#059669" />
-                  <Text style={styles.successText}>Password reset successful! Logging you in...</Text>
+                <View style={{ gap: 16 }}>
+                  <View style={styles.successBox}>
+                    <CheckCircle2 size={20} color="#059669" />
+                    <Text style={styles.successText}>
+                      Password reset instructions have been sent to {email}. Please check your inbox.
+                    </Text>
+                  </View>
+                  <Button
+                    title="Return to Sign In"
+                    onPress={() => router.replace('/')}
+                    variant="primary"
+                    style={styles.submitBtn}
+                  />
                 </View>
-              ) : step === 'request' ? (
+              ) : (
                 <View style={{ gap: 16 }}>
                   <Input
                     label="Work Email"
-                    placeholder="name@subedge.com"
+                    placeholder="name@company.com"
                     value={email}
                     onChangeText={setEmail}
                     keyboardType="email-address"
@@ -151,54 +103,11 @@ export default function ForgotPasswordScreen() {
                   />
 
                   <Button
-                    title="Send Verification Code"
-                    onPress={handleSendResetCode}
+                    title="Send Reset Instructions"
+                    onPress={handleSendResetEmail}
                     loading={loading}
                     variant="primary"
                     style={styles.submitBtn}
-                  />
-                </View>
-              ) : (
-                <View style={{ gap: 16 }}>
-                  <Input
-                    label="6-Digit Verification Code"
-                    placeholder="e.g. 123456"
-                    value={code}
-                    onChangeText={setCode}
-                    keyboardType="numeric"
-                    autoCapitalize="none"
-                  />
-
-                  <Input
-                    label="New Password"
-                    placeholder="Enter new password (min. 6 chars)"
-                    value={newPassword}
-                    onChangeText={setNewPassword}
-                    secureTextEntry
-                  />
-
-                  <Input
-                    label="Confirm New Password"
-                    placeholder="Re-enter new password"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                  />
-
-                  <Button
-                    title="Reset Password & Sign In"
-                    onPress={handleVerifyAndReset}
-                    loading={loading}
-                    variant="primary"
-                    style={styles.submitBtn}
-                  />
-
-                  <Button
-                    title="Resend Verification Code"
-                    onPress={handleSendResetCode}
-                    variant="ghost"
-                    size="sm"
-                    disabled={loading}
                   />
                 </View>
               )}
