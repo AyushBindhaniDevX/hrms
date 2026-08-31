@@ -35,7 +35,7 @@ const DEFAULT_COURSES: TrainingCourse[] = [
         lessons: [
           {
             id: 'les_1_1',
-            title: '🎥 Video Lecture: Zero-Trust Security Architecture',
+            title: 'Video Lecture: Zero-Trust Security Architecture',
             type: 'video',
             duration_minutes: 18,
             video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
@@ -44,7 +44,7 @@ const DEFAULT_COURSES: TrainingCourse[] = [
           },
           {
             id: 'les_1_2',
-            title: '📄 Handbook: Clean Desk & Cryptographic Token Protocols',
+            title: 'Handbook: Clean Desk & Cryptographic Token Protocols',
             type: 'article',
             duration_minutes: 12,
             content_markdown: '# Information Security Protocol\n\nAll workstations must utilize hardware-backed security keys. Screen lock timers must never exceed 180 seconds.\n\n### Key Takeaways:\n- Never store plaintext credentials or API secrets in source repositories.\n- Always encrypt local SSDs using BitLocker or FileVault.',

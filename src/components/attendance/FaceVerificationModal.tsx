@@ -110,7 +110,7 @@ export function FaceVerificationModal({
 
       if (result.success) {
         setVerificationSuccess(true);
-        setStatusMsg(`✓ ${biometricType} Identity Confirmed`);
+        setStatusMsg(`${biometricType} Identity Confirmed`);
         await new Promise((res) => setTimeout(res, 600));
         await onVerified('device_biometric_verified');
         onClose();
@@ -200,8 +200,8 @@ export function FaceVerificationModal({
       setVerificationSuccess(true);
       setStatusMsg(
         !isEnrolled
-          ? '✓ Face Registered & Enrolled Successfully'
-          : `✓ Biometric Identity Confirmed (${matchResult.confidence}% Match)`
+          ? 'Face Registered & Enrolled Successfully'
+          : `Biometric Identity Confirmed (${matchResult.confidence}% Match)`
       );
 
       await new Promise((resolve) => setTimeout(resolve, 600));
@@ -314,7 +314,7 @@ export function FaceVerificationModal({
                   ]}
                 >
                   <Text style={styles.scanInstructionText}>
-                    {statusMsg || (verificationSuccess ? '✓ Biometric Match Confirmed' : 'Analyzing biometric geometry...')}
+                    {statusMsg || (verificationSuccess ? 'Biometric Match Confirmed' : 'Analyzing biometric geometry...')}
                   </Text>
                 </View>
               </View>
@@ -386,7 +386,7 @@ export function FaceVerificationModal({
                     <>
                       <CheckCircle2 size={20} color="#FFF" />
                       <Text style={styles.verifyBtnText}>
-                        {!isEnrolled ? 'Face Registered & Clocked!' : 'Face Matched & Clocked!'}
+                        {!isEnrolled ? 'Face Registered & Clocked' : 'Face Matched & Clocked'}
                       </Text>
                     </>
                   ) : (
@@ -410,7 +410,7 @@ export function FaceVerificationModal({
                   >
                     <Fingerprint size={18} color={colors.primary} />
                     <Text style={[styles.biometricBtnText, { color: colors.primary }]}>
-                      ⚡ Instant Verify via {biometricType}
+                      Instant Verify via {biometricType}
                     </Text>
                   </TouchableOpacity>
                 )}

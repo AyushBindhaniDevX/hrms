@@ -8,43 +8,13 @@ import {
   ScrollView,
 } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
-import { IconSelector } from '@/components/ui/IconSelector';
+import { IconSelector, ICON_MAP } from '@/components/ui/IconSelector';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/utils/format';
 import type { CustomPayrollItem } from '@/types';
-import {
-  Plus,
-  Trash2,
-  Gift,
-  Award,
-  Shield,
-  Briefcase,
-  Heart,
-  TrendingUp,
-  Percent,
-  DollarSign,
-  Layers,
-  Sparkles,
-  ChevronDown,
-  Building,
-  CheckCircle2,
-} from 'lucide-react-native';
-
-const ICON_MAP: Record<string, any> = {
-  gift: Gift,
-  award: Award,
-  shield: Shield,
-  briefcase: Briefcase,
-  heart: Heart,
-  'trending-up': TrendingUp,
-  percent: Percent,
-  'dollar-sign': DollarSign,
-  layers: Layers,
-  sparkles: Sparkles,
-  building: Building,
-};
+import { Plus, Trash2 } from 'lucide-react-native';
 
 interface CustomPayrollItemsManagerProps {
   items: CustomPayrollItem[];
@@ -188,7 +158,7 @@ export function CustomPayrollItemsManager({
       ) : (
         <View style={styles.itemsGrid}>
           {items.map((item) => {
-            const IconComp = ICON_MAP[item.icon || 'gift'] || Gift;
+            const IconComp = ICON_MAP[item.icon || 'gift'] || ICON_MAP['gift'];
             const itemColor = item.color || (item.type === 'deduction' ? '#BB0000' : '#107E3E');
             const isDeduction = item.type === 'deduction';
             const computedVal = getComputedAmount(item);

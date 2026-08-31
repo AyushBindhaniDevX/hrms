@@ -8,7 +8,6 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import { Modal } from './Modal';
 import {
   // HR & People
   User,
@@ -19,6 +18,7 @@ import {
   GraduationCap,
   Award,
   HeartHandshake,
+  Heart,
   // Time & Leave
   Calendar,
   Clock,
@@ -37,6 +37,11 @@ import {
   TrendingUp,
   Percent,
   Calculator,
+  Gift,
+  BadgePercent,
+  Layers,
+  Banknote,
+  PiggyBank,
   // Workplaces & Assets
   Building,
   Building2,
@@ -57,77 +62,141 @@ import {
   FileText,
   Search,
   Check,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react-native';
 
 export interface IconOption {
   name: string;
   label: string;
-  category: 'hr' | 'time' | 'finance' | 'asset' | 'status';
+  category: 'finance' | 'hr' | 'time' | 'asset' | 'status';
   IconComponent: React.ComponentType<{ size?: number; color?: string }>;
 }
 
-export const ENTERPRISE_ICONS: IconOption[] = [
+export const ICON_MAP: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+  // Finance
+  gift: Gift,
+  award: Award,
+  shield: Shield,
+  briefcase: Briefcase,
+  heart: Heart,
+  'trending-up': TrendingUp,
+  percent: Percent,
+  'dollar-sign': DollarSign,
+  layers: Layers,
+  sparkles: Sparkles,
+  building: Building,
+  wallet: Wallet,
+  coins: Coins,
+  receipt: Receipt,
+  'credit-card': CreditCard,
+  calculator: Calculator,
+  'badge-percent': BadgePercent,
+  banknote: Banknote,
+  'piggy-bank': PiggyBank,
   // HR & People
-  { name: 'user', label: 'Employee', category: 'hr', IconComponent: User },
-  { name: 'users', label: 'Team / Dept', category: 'hr', IconComponent: Users },
+  user: User,
+  users: Users,
+  'user-check': UserCheck,
+  'user-plus': UserPlus,
+  'graduation-cap': GraduationCap,
+  'heart-handshake': HeartHandshake,
+  // Time & Leave
+  calendar: Calendar,
+  clock: Clock,
+  plane: Plane,
+  medical: BriefcaseMedical,
+  coffee: Coffee,
+  umbrella: Umbrella,
+  hourglass: Hourglass,
+  'calendar-check': CalendarCheck,
+  // Workplace & Assets
+  'building-2': Building2,
+  laptop: Laptop,
+  smartphone: Smartphone,
+  server: Server,
+  'map-pin': MapPin,
+  compass: Compass,
+  // Status & Operations
+  'check-circle': CheckCircle,
+  'alert-triangle': AlertTriangle,
+  'help-circle': HelpCircle,
+  bell: Bell,
+  zap: Zap,
+  target: Target,
+  'file-text': FileText,
+};
+
+export const ENTERPRISE_ICONS: IconOption[] = [
+  // Finance & Payroll (Primary for custom items)
+  { name: 'gift', label: 'Bonus / Gift', category: 'finance', IconComponent: Gift },
+  { name: 'trending-up', label: 'Incentive', category: 'finance', IconComponent: TrendingUp },
+  { name: 'award', label: 'Performance', category: 'finance', IconComponent: Award },
+  { name: 'wallet', label: 'Allowance', category: 'finance', IconComponent: Wallet },
+  { name: 'percent', label: 'Percentage Cut', category: 'finance', IconComponent: Percent },
+  { name: 'dollar-sign', label: 'Fixed Pay', category: 'finance', IconComponent: DollarSign },
+  { name: 'coins', label: 'Provident Fund', category: 'finance', IconComponent: Coins },
+  { name: 'receipt', label: 'Tax Deduction', category: 'finance', IconComponent: Receipt },
+  { name: 'credit-card', label: 'Reimbursement', category: 'finance', IconComponent: CreditCard },
+  { name: 'calculator', label: 'Auto Calculated', category: 'finance', IconComponent: Calculator },
+  { name: 'badge-percent', label: 'Commission', category: 'finance', IconComponent: BadgePercent },
+  { name: 'banknote', label: 'Direct Cash', category: 'finance', IconComponent: Banknote },
+  { name: 'piggy-bank', label: 'Savings Scheme', category: 'finance', IconComponent: PiggyBank },
+  { name: 'layers', label: 'Tiered Rate', category: 'finance', IconComponent: Layers },
+  { name: 'sparkles', label: 'Special Reward', category: 'finance', IconComponent: Sparkles },
+
+  // HR & People
+  { name: 'user', label: 'Individual', category: 'hr', IconComponent: User },
+  { name: 'users', label: 'Team Component', category: 'hr', IconComponent: Users },
   { name: 'user-check', label: 'Verified Staff', category: 'hr', IconComponent: UserCheck },
-  { name: 'user-plus', label: 'Onboarding', category: 'hr', IconComponent: UserPlus },
-  { name: 'briefcase', label: 'Job Role', category: 'hr', IconComponent: Briefcase },
-  { name: 'graduation-cap', label: 'Training', category: 'hr', IconComponent: GraduationCap },
-  { name: 'award', label: 'Appraisal / KPI', category: 'hr', IconComponent: Award },
-  { name: 'heart-handshake', label: 'Relations', category: 'hr', IconComponent: HeartHandshake },
+  { name: 'user-plus', label: 'Joining Bonus', category: 'hr', IconComponent: UserPlus },
+  { name: 'briefcase', label: 'Role Allowance', category: 'hr', IconComponent: Briefcase },
+  { name: 'graduation-cap', label: 'Education / L&D', category: 'hr', IconComponent: GraduationCap },
+  { name: 'heart-handshake', label: 'Retainership', category: 'hr', IconComponent: HeartHandshake },
+  { name: 'heart', label: 'Wellness / Health', category: 'hr', IconComponent: Heart },
 
   // Time & Leave
-  { name: 'calendar', label: 'Calendar', category: 'time', IconComponent: Calendar },
-  { name: 'clock', label: 'Shift / Clock', category: 'time', IconComponent: Clock },
-  { name: 'plane', label: 'Annual Vacation', category: 'time', IconComponent: Plane },
-  { name: 'medical', label: 'Medical / Sick', category: 'time', IconComponent: BriefcaseMedical },
-  { name: 'coffee', label: 'Casual / Break', category: 'time', IconComponent: Coffee },
-  { name: 'umbrella', label: 'Emergency Leave', category: 'time', IconComponent: Umbrella },
-  { name: 'hourglass', label: 'Overtime', category: 'time', IconComponent: Hourglass },
-  { name: 'calendar-check', label: 'Public Holiday', category: 'time', IconComponent: CalendarCheck },
-
-  // Finance & Payroll
-  { name: 'dollar-sign', label: 'Salary / Pay', category: 'finance', IconComponent: DollarSign },
-  { name: 'credit-card', label: 'Reimbursement', category: 'finance', IconComponent: CreditCard },
-  { name: 'receipt', label: 'Tax Deductions', category: 'finance', IconComponent: Receipt },
-  { name: 'wallet', label: 'Allowances', category: 'finance', IconComponent: Wallet },
-  { name: 'coins', label: 'Provident Fund', category: 'finance', IconComponent: Coins },
-  { name: 'trending-up', label: 'Bonus / Increment', category: 'finance', IconComponent: TrendingUp },
-  { name: 'percent', label: 'TDS / Slab', category: 'finance', IconComponent: Percent },
-  { name: 'calculator', label: 'Payroll Auto', category: 'finance', IconComponent: Calculator },
+  { name: 'calendar', label: 'Calendar Cycle', category: 'time', IconComponent: Calendar },
+  { name: 'clock', label: 'Overtime Pay', category: 'time', IconComponent: Clock },
+  { name: 'plane', label: 'Travel Allowance', category: 'time', IconComponent: Plane },
+  { name: 'medical', label: 'Medical Coverage', category: 'time', IconComponent: BriefcaseMedical },
+  { name: 'coffee', label: 'Meal Allowance', category: 'time', IconComponent: Coffee },
+  { name: 'umbrella', label: 'Emergency Fund', category: 'time', IconComponent: Umbrella },
+  { name: 'hourglass', label: 'Shift Differential', category: 'time', IconComponent: Hourglass },
+  { name: 'calendar-check', label: 'Holiday Premium', category: 'time', IconComponent: CalendarCheck },
 
   // Workplaces & Assets
-  { name: 'building', label: 'Headquarters', category: 'asset', IconComponent: Building },
-  { name: 'building-2', label: 'Branch Office', category: 'asset', IconComponent: Building2 },
-  { name: 'laptop', label: 'Work Laptop', category: 'asset', IconComponent: Laptop },
-  { name: 'smartphone', label: 'Mobile Device', category: 'asset', IconComponent: Smartphone },
-  { name: 'server', label: 'IT Infra', category: 'asset', IconComponent: Server },
-  { name: 'map-pin', label: 'Geofence Zone', category: 'asset', IconComponent: MapPin },
-  { name: 'compass', label: 'GPS Radius', category: 'asset', IconComponent: Compass },
-  { name: 'shield', label: 'Biometrics Security', category: 'asset', IconComponent: Shield },
+  { name: 'building', label: 'Office / On-Site', category: 'asset', IconComponent: Building },
+  { name: 'building-2', label: 'Branch / Plant', category: 'asset', IconComponent: Building2 },
+  { name: 'laptop', label: 'Hardware Subsidies', category: 'asset', IconComponent: Laptop },
+  { name: 'smartphone', label: 'Mobile Reimbursement', category: 'asset', IconComponent: Smartphone },
+  { name: 'server', label: 'Infra Allowance', category: 'asset', IconComponent: Server },
+  { name: 'map-pin', label: 'Location Hardship', category: 'asset', IconComponent: MapPin },
+  { name: 'compass', label: 'Field Mileage', category: 'asset', IconComponent: Compass },
+  { name: 'shield', label: 'Security Deposit', category: 'asset', IconComponent: Shield },
 
   // Status & Operations
-  { name: 'check-circle', label: 'Approved', category: 'status', IconComponent: CheckCircle },
-  { name: 'alert-triangle', label: 'Exception / Late', category: 'status', IconComponent: AlertTriangle },
-  { name: 'help-circle', label: 'Helpdesk Ticket', category: 'status', IconComponent: HelpCircle },
-  { name: 'bell', label: 'Notification', category: 'status', IconComponent: Bell },
-  { name: 'sparkles', label: 'AI Appraisal', category: 'status', IconComponent: Sparkles },
-  { name: 'zap', label: 'Instant Action', category: 'status', IconComponent: Zap },
-  { name: 'target', label: 'OKR / Goal', category: 'status', IconComponent: Target },
-  { name: 'file-text', label: 'Policy Document', category: 'status', IconComponent: FileText },
+  { name: 'check-circle', label: 'Approved Component', category: 'status', IconComponent: CheckCircle },
+  { name: 'alert-triangle', label: 'Penalty / Fine', category: 'status', IconComponent: AlertTriangle },
+  { name: 'help-circle', label: 'Miscellaneous', category: 'status', IconComponent: HelpCircle },
+  { name: 'bell', label: 'Notification Item', category: 'status', IconComponent: Bell },
+  { name: 'zap', label: 'Instant Payout', category: 'status', IconComponent: Zap },
+  { name: 'target', label: 'Target / KPI Bonus', category: 'status', IconComponent: Target },
+  { name: 'file-text', label: 'Statutory Form', category: 'status', IconComponent: FileText },
 ];
 
-export const SAP_SEMANTIC_COLORS = [
-  { name: 'Teal (SAP Primary)', hex: '#006a61', bgHex: '#EDF8F6' },
-  { name: 'Positive (Green)', hex: '#107E3E', bgHex: '#EAF7EE' },
-  { name: 'Informative (Blue)', hex: '#0064D9', bgHex: '#EBF3FE' },
-  { name: 'Critical (Amber)', hex: '#DF6E0C', bgHex: '#FEF5EB' },
-  { name: 'Negative (Red)', hex: '#BB0000', bgHex: '#FDECEC' },
+export const COLOR_PALETTE = [
+  { name: 'Teal (Primary)', hex: '#006a61', bgHex: '#EDF8F6' },
+  { name: 'Green (Earning)', hex: '#107E3E', bgHex: '#EAF7EE' },
+  { name: 'Blue (Allowance)', hex: '#0064D9', bgHex: '#EBF3FE' },
+  { name: 'Amber (Variable)', hex: '#DF6E0C', bgHex: '#FEF5EB' },
+  { name: 'Red (Deduction)', hex: '#BB0000', bgHex: '#FDECEC' },
   { name: 'Purple (Executive)', hex: '#7C3AED', bgHex: '#F5F3FF' },
-  { name: 'Indigo (Operations)', hex: '#4338CA', bgHex: '#EEF2FF' },
+  { name: 'Indigo (Corporate)', hex: '#4338CA', bgHex: '#EEF2FF' },
   { name: 'Slate (Neutral)', hex: '#475569', bgHex: '#F1F5F9' },
 ];
+
+export const SAP_SEMANTIC_COLORS = COLOR_PALETTE; // Backward compatibility
 
 interface IconSelectorProps {
   label?: string;
@@ -135,20 +204,20 @@ interface IconSelectorProps {
   selectedColor?: string;
   onSelect: (iconName: string, colorHex: string, bgHex: string) => void;
   disabled?: boolean;
+  inline?: boolean;
 }
 
 export function IconSelector({
   label = 'Select Category Icon & Color',
-  selectedIconName = 'calendar-check',
+  selectedIconName = 'gift',
   selectedColor = '#006a61',
   onSelect,
   disabled = false,
+  inline = true,
 }: IconSelectorProps) {
-  const [showModal, setShowModal] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [tempIcon, setTempIcon] = useState(selectedIconName);
-  const [tempColor, setTempColor] = useState(selectedColor);
 
   const activeIconObj =
     ENTERPRISE_ICONS.find((i) => i.name === selectedIconName) ||
@@ -156,8 +225,8 @@ export function IconSelector({
   const ActiveIconComp = activeIconObj.IconComponent;
 
   const activeColorObj =
-    SAP_SEMANTIC_COLORS.find((c) => c.hex === selectedColor) ||
-    SAP_SEMANTIC_COLORS[0];
+    COLOR_PALETTE.find((c) => c.hex === selectedColor) ||
+    COLOR_PALETTE[0];
 
   const filteredIcons = ENTERPRISE_ICONS.filter((item) => {
     const matchesCat =
@@ -169,31 +238,27 @@ export function IconSelector({
     return matchesCat && matchesSearch;
   });
 
-  const handleApply = () => {
-    const chosenColor =
-      SAP_SEMANTIC_COLORS.find((c) => c.hex === tempColor) ||
-      SAP_SEMANTIC_COLORS[0];
-    onSelect(tempIcon, chosenColor.hex, chosenColor.bgHex);
-    setShowModal(false);
+  const handleSelectIcon = (iconName: string) => {
+    onSelect(iconName, activeColorObj.hex, activeColorObj.bgHex);
+  };
+
+  const handleSelectColor = (colorHex: string, bgHex: string) => {
+    onSelect(selectedIconName, colorHex, bgHex);
   };
 
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
 
-      {/* SAP Trigger Field */}
+      {/* Selected Preview Bar / Accordion Toggle */}
       <TouchableOpacity
-        onPress={() => {
-          if (disabled) return;
-          setTempIcon(selectedIconName);
-          setTempColor(selectedColor);
-          setShowModal(true);
-        }}
+        onPress={() => !disabled && setExpanded(!expanded)}
         disabled={disabled}
         activeOpacity={0.75}
         style={[
           styles.triggerBox,
           { backgroundColor: disabled ? '#F1F5F9' : '#FFFFFF' },
+          expanded && styles.triggerBoxExpanded,
         ]}
       >
         <View style={styles.triggerLeft}>
@@ -213,44 +278,46 @@ export function IconSelector({
           </View>
         </View>
 
-        <View style={styles.sapPill}>
-          <Text style={styles.sapPillText}>Fiori Value Help</Text>
+        <View style={styles.toggleRow}>
+          <Text style={styles.changeText}>{expanded ? 'Collapse' : 'Change'}</Text>
+          {expanded ? (
+            <ChevronUp size={16} color="#006a61" />
+          ) : (
+            <ChevronDown size={16} color="#64748B" />
+          )}
         </View>
       </TouchableOpacity>
 
-      {/* Modal Palette */}
-      <Modal
-        visible={showModal}
-        onClose={() => setShowModal(false)}
-        title="SAP Fiori Icon & Color Palette"
-      >
-        <View style={styles.modalBody}>
+      {/* Expandable In-Place Picker */}
+      {expanded && !disabled && (
+        <View style={styles.pickerBody}>
           {/* Color Palette Selector */}
-          <Text style={styles.sectionHeading}>1. Semantic Color Badge</Text>
+          <Text style={styles.sectionHeading}>Color Theme</Text>
           <View style={styles.colorPaletteRow}>
-            {SAP_SEMANTIC_COLORS.map((c) => (
-              <TouchableOpacity
-                key={c.hex}
-                onPress={() => setTempColor(c.hex)}
-                style={[
-                  styles.colorCircle,
-                  { backgroundColor: c.hex },
-                  tempColor === c.hex && styles.colorCircleActive,
-                ]}
-              >
-                {tempColor === c.hex && <Check size={14} color="#FFF" />}
-              </TouchableOpacity>
-            ))}
+            {COLOR_PALETTE.map((c) => {
+              const isSelected = selectedColor === c.hex;
+              return (
+                <TouchableOpacity
+                  key={c.hex}
+                  onPress={() => handleSelectColor(c.hex, c.bgHex)}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.colorCircle,
+                    { backgroundColor: c.hex },
+                    isSelected && styles.colorCircleActive,
+                  ]}
+                >
+                  {isSelected && <Check size={14} color="#FFF" />}
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           {/* Search Box */}
-          <Text style={[styles.sectionHeading, { marginTop: 16 }]}>
-            2. Choose Icon
-          </Text>
           <View style={styles.searchBox}>
-            <Search size={15} color="#64748B" />
+            <Search size={14} color="#64748B" />
             <TextInput
-              placeholder="Filter icons (e.g. Leave, Pay, HR)..."
+              placeholder="Search icons (e.g. bonus, health, allowance)..."
               placeholderTextColor="#94A3B8"
               value={search}
               onChangeText={setSearch}
@@ -258,7 +325,7 @@ export function IconSelector({
             />
           </View>
 
-          {/* Category Tabs */}
+          {/* Category Filter Chips */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -266,11 +333,11 @@ export function IconSelector({
           >
             {[
               { id: 'all', label: 'All' },
+              { id: 'finance', label: 'Finance & Pay' },
               { id: 'hr', label: 'HR & People' },
               { id: 'time', label: 'Time & Leave' },
-              { id: 'finance', label: 'Finance & Pay' },
-              { id: 'asset', label: 'Assets & Space' },
-              { id: 'status', label: 'Status & AI' },
+              { id: 'asset', label: 'Assets & Tools' },
+              { id: 'status', label: 'Status' },
             ].map((cat) => (
               <TouchableOpacity
                 key={cat.id}
@@ -293,91 +360,74 @@ export function IconSelector({
           </ScrollView>
 
           {/* Icon Grid */}
-          <ScrollView style={styles.iconGridScroll} showsVerticalScrollIndicator={false}>
-            <View style={styles.iconGrid}>
-              {filteredIcons.map((item) => {
-                const IconC = item.IconComponent;
-                const isSelected = tempIcon === item.name;
-                const colorObj =
-                  SAP_SEMANTIC_COLORS.find((c) => c.hex === tempColor) ||
-                  SAP_SEMANTIC_COLORS[0];
+          <View style={styles.iconGrid}>
+            {filteredIcons.map((item) => {
+              const IconC = item.IconComponent;
+              const isSelected = selectedIconName === item.name;
 
-                return (
-                  <TouchableOpacity
-                    key={item.name}
-                    onPress={() => setTempIcon(item.name)}
+              return (
+                <TouchableOpacity
+                  key={item.name}
+                  onPress={() => handleSelectIcon(item.name)}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.iconTile,
+                    isSelected && {
+                      backgroundColor: activeColorObj.bgHex,
+                      borderColor: activeColorObj.hex,
+                      borderWidth: 1.5,
+                    },
+                  ]}
+                >
+                  <IconC
+                    size={20}
+                    color={isSelected ? activeColorObj.hex : '#475569'}
+                  />
+                  <Text
                     style={[
-                      styles.iconTile,
+                      styles.iconTileLabel,
                       isSelected && {
-                        backgroundColor: colorObj.bgHex,
-                        borderColor: colorObj.hex,
+                        color: activeColorObj.hex,
+                        fontWeight: '700',
                       },
                     ]}
+                    numberOfLines={1}
                   >
-                    <IconC
-                      size={22}
-                      color={isSelected ? colorObj.hex : '#475569'}
-                    />
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.iconTileLabel,
-                        isSelected && {
-                          color: colorObj.hex,
-                          fontWeight: '800',
-                        },
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </ScrollView>
-
-          {/* Action Footer */}
-          <View style={styles.footerRow}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => setShowModal(false)}
-            >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.applyBtn} onPress={handleApply}>
-              <Check size={16} color="#FFF" />
-              <Text style={styles.applyBtnText}>Apply Selection</Text>
-            </TouchableOpacity>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
-      </Modal>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '700', color: '#1E293B', marginBottom: 6 },
+  container: {
+    marginVertical: 4,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 6,
+  },
   triggerBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 52,
-    ...Platform.select({
-      web: { boxShadow: '0 1px 2px rgba(0,0,0,0.03)' },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03,
-        shadowRadius: 2,
-        elevation: 1,
-      },
-    }),
+  },
+  triggerBoxExpanded: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomColor: '#E2E8F0',
   },
   triggerLeft: {
     flexDirection: 'row',
@@ -386,79 +436,75 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconBadge: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   triggerTitle: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#0F172A',
   },
   triggerSub: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#64748B',
-    marginTop: 1,
+    marginTop: 2,
   },
-  sapPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: '#F1F5F9',
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  changeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#006a61',
+  },
+  pickerBody: {
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  sapPillText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#475569',
-  },
-
-  modalBody: {
-    maxHeight: 520,
+    borderTopWidth: 0,
+    borderColor: '#CBD5E1',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    padding: 14,
+    gap: 12,
   },
   sectionHeading: {
     fontSize: 12,
-    fontWeight: '800',
-    color: '#64748B',
+    fontWeight: '700',
+    color: '#475569',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 8,
   },
   colorPaletteRow: {
     flexDirection: 'row',
-    gap: 8,
     flexWrap: 'wrap',
+    gap: 8,
   },
   colorCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   colorCircleActive: {
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    ...Platform.select({
-      web: { boxShadow: '0 0 0 2px #006a61' },
-      default: { elevation: 3 },
-    }),
+    borderWidth: 2.5,
+    borderColor: '#0F172A',
   },
-
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginBottom: 10,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   searchInput: {
     flex: 1,
@@ -466,89 +512,53 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     padding: 0,
   },
-
   categoryScroll: {
     gap: 6,
-    paddingBottom: 10,
+    paddingVertical: 2,
   },
   catTab: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#E2E8F0',
   },
   catTabActive: {
     backgroundColor: '#006a61',
   },
   catTabText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '600',
     color: '#475569',
   },
   catTabTextActive: {
     color: '#FFFFFF',
-  },
-
-  iconGridScroll: {
-    maxHeight: 260,
+    fontWeight: '700',
   },
   iconGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    paddingVertical: 4,
+    maxHeight: 220,
+    overflow: 'scroll',
   },
   iconTile: {
     width: '23%',
+    minWidth: 70,
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 4,
-    borderRadius: 10,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   iconTileLabel: {
     fontSize: 10,
-    fontWeight: '600',
-    color: '#334155',
+    color: '#64748B',
     textAlign: 'center',
-  },
-
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 14,
-    marginTop: 10,
-  },
-  cancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-  },
-  cancelBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  applyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#006a61',
-  },
-  applyBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: '500',
   },
 });

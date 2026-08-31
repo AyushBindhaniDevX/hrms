@@ -99,27 +99,27 @@ export default function AutomationsScreen() {
     try {
       if (type === 'onboarding') {
         await sendWelcomeEmail(testEmail, 'Alex Morgan', 'SUB-EMP-9021', 'Senior Full Stack Engineer');
-        setTestSuccess(`✓ Onboarding welcome email dispatched to ${testEmail}!`);
+        setTestSuccess(`Onboarding welcome email dispatched to ${testEmail}!`);
       } else if (type === 'leave') {
         await sendLeaveStatusEmail(testEmail, 'Alex Morgan', 'approved', 'Annual Paid Leave', 'Aug 25 - Aug 28, 2026', 'HR Operations Lead');
-        setTestSuccess(`✓ Leave status notification dispatched to ${testEmail}!`);
+        setTestSuccess(`Leave status notification dispatched to ${testEmail}!`);
       } else if (type === 'ticket') {
         await sendTicketStatusEmail(testEmail, 'TKT-8842', 'VPN / Subedge Network Gateway Access', 'Configured access keys and verified tunnel connectivity.');
-        setTestSuccess(`✓ Ticket resolution email dispatched to ${testEmail}!`);
+        setTestSuccess(`Ticket resolution email dispatched to ${testEmail}!`);
       } else if (type === 'offer') {
         await sendOfferLetterEmail(testEmail, 'Alex Morgan', 'Lead Cloud Architect', 2400000, 'Sept 1, 2026');
-        setTestSuccess(`✓ Official Offer Letter email dispatched to ${testEmail}!`);
+        setTestSuccess(`Official Offer Letter email dispatched to ${testEmail}!`);
       } else {
         await sendResendEmail({
           to: testEmail,
-          subject: '🧪 Resend Gateway Test from Oasis HRMS Engine',
+          subject: 'Resend Gateway Test from Oasis HRMS Engine',
           htmlContent: `<div style="font-family: sans-serif; padding: 20px; background: #F8FAFC;">
             <h2>Oasis Automated Notification Test</h2>
             <p>This email confirms that the Subedge Resend transactional pipeline is healthy and active.</p>
           </div>`,
           category: 'general',
         });
-        setTestSuccess(`✓ Gateway diagnostic ping sent to ${testEmail}!`);
+        setTestSuccess(`Gateway diagnostic ping sent to ${testEmail}!`);
       }
       loadData();
       setTimeout(() => setTestSuccess(null), 4000);

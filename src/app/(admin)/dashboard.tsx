@@ -236,7 +236,7 @@ export default function AdminDashboard() {
         <View style={mStyles.heroBannerRow}>
           <View style={{ flex: 1 }}>
             <Text style={mStyles.heroGreeting}>{getGreeting()}</Text>
-            <Text style={mStyles.heroName}>{profile?.full_name?.split(' ')[0] ?? 'Admin'} ⚡</Text>
+            <Text style={mStyles.heroName}>{profile?.full_name?.split(' ')[0] ?? 'Admin'}</Text>
             <Text style={mStyles.heroDate}>System Administration Console</Text>
           </View>
           <View style={mStyles.heroRight}>
@@ -331,16 +331,16 @@ export default function AdminDashboard() {
           <View style={{ paddingHorizontal: 16, paddingBottom: 14, gap: 10 }}>
             <View style={mStyles.infraRow}>
               <Text style={mStyles.infraLabel}>Database Engine</Text>
-              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Supabase PostgreSQL Realtime ✓</Text>
+              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Supabase PostgreSQL Realtime</Text>
             </View>
             <View style={mStyles.infraRow}>
               <Text style={mStyles.infraLabel}>Identity & Auth</Text>
-              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Supabase Auth Multi-Tenant ✓</Text>
+              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Supabase Auth Multi-Tenant</Text>
             </View>
             <View style={mStyles.infraRow}>
               <Text style={mStyles.infraLabel}>Biometric Vault</Text>
               <Text style={[mStyles.infraValue, { color: '#0D7377' }]}>
-                {biometricEnabled ? `iOS Face ID Active ✓` : `Hardware Supported (Face ID)`}
+                {biometricEnabled ? `iOS Face ID Active` : `Hardware Supported (Face ID)`}
               </Text>
             </View>
             <View style={mStyles.infraRow}>

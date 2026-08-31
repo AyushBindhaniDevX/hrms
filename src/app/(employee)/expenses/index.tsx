@@ -254,7 +254,7 @@ export default function EmployeeExpensesScreen() {
 
               {isMileage && (
                 <View style={mStyles.mileageBox}>
-                  <Text style={mStyles.mileageTitle}>🚗 Mileage Calculator (₹46 / km)</Text>
+                  <Text style={mStyles.mileageTitle}>Mileage Calculator (₹46 / km)</Text>
                   <TextInput
                     style={[mStyles.input, { borderColor: '#CCECEC', color: '#0F172A', backgroundColor: '#FFF' }]}
                     placeholder="Enter distance in kilometers (e.g. 75)"
@@ -405,7 +405,7 @@ export default function EmployeeExpensesScreen() {
 
                 {isMileage && (
                   <View style={styles.mileageBox}>
-                    <Text style={styles.mileageTitle}>🚗 Mileage Calculator (₹46 / km)</Text>
+                    <Text style={styles.mileageTitle}>Mileage Calculator (₹46 / km)</Text>
                     <TextInput
                       style={styles.input}
                       placeholder="Enter distance in km"

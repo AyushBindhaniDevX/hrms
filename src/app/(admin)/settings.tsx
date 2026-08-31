@@ -189,16 +189,16 @@ export default function SettingsScreen() {
           <View style={{ gap: 10, paddingHorizontal: 4 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Authentication Engine</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Supabase Auth (Active ✓)</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Supabase Auth (Active)</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Database & Realtime</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Supabase PostgreSQL (Realtime ✓)</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Supabase PostgreSQL (Realtime)</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Biometrics & Security</Text>
               <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>
-                {biometricEnabled ? 'iOS Face ID Vault Active ✓' : 'Face ID Hardware Supported'}
+                {biometricEnabled ? 'iOS Face ID Vault Active' : 'Face ID Hardware Supported'}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

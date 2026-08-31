@@ -419,7 +419,7 @@ export default function CreateEmployeeScreen() {
               {basic > 0 && (
                 <View style={[styles.estimateBox, { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={styles.estimateTitle}>📊 Live Payroll Calculation</Text>
+                    <Text style={styles.estimateTitle}>Live Payroll Calculation</Text>
                     <Text style={{ fontSize: 11, color: '#006a61', fontWeight: '700' }}>
                       {taxRegime.toUpperCase()} REGIME
                     </Text>

@@ -66,8 +66,8 @@ export default function AttendanceDetail() {
           <Row label="Clock In" value={record.clock_in ? formatTime(record.clock_in) : 'N/A'} />
           <Row label="Clock Out" value={record.clock_out ? formatTime(record.clock_out) : 'N/A'} />
           <Row label="Working Hours" value={formatMinutes(record.working_minutes)} />
-          <Row label="Clock In Verified" value={record.clock_in_verified ? '✓ Yes' : '✗ No'} />
-          <Row label="Clock Out Verified" value={record.clock_out_verified ? '✓ Yes' : '✗ No'} />
+          <Row label="Clock In Verified" value={record.clock_in_verified ? 'Yes' : 'No'} />
+          <Row label="Clock Out Verified" value={record.clock_out_verified ? 'Yes' : 'No'} />
           {record.clock_in_latitude && (
             <Row label="Clock In Location" value={`${record.clock_in_latitude.toFixed(4)}, ${record.clock_in_longitude?.toFixed(4)}`} />
           )}

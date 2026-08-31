@@ -314,7 +314,7 @@ export default function HRAssetsScreen() {
     const res = await verifyAndAuditAsset(scannedAsset.id, 'IT Operations Lead');
     if (res) {
       setScannedAsset(res);
-      setAuditSuccessMsg(`✓ Asset [${res.asset_tag}] verified and logged to IT Audit ledger.`);
+      setAuditSuccessMsg(`Asset [${res.asset_tag}] verified and logged to IT Audit ledger.`);
     }
   };
 
@@ -416,7 +416,7 @@ export default function HRAssetsScreen() {
               activeOpacity={0.8}
             >
               <Camera size={16} color="#0D7377" />
-              <Text style={styles.scanActionText}>📷 Scan Barcode</Text>
+              <Text style={styles.scanActionText}>Scan Barcode</Text>
             </TouchableOpacity>
 
             <Button
@@ -962,7 +962,7 @@ export default function HRAssetsScreen() {
 
                   <TouchableOpacity
                     onPress={() => {
-                      alert(`✓ Barcode sticker for ${showBarcodeModal.asset_tag} ready for thermal printing.`);
+                      alert(`Barcode sticker for ${showBarcodeModal.asset_tag} ready for thermal printing.`);
                       setShowBarcodeModal(null);
                     }}
                     style={styles.printBtn}

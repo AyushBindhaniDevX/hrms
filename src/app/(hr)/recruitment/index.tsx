@@ -102,7 +102,7 @@ const STAGES: { key: CandidateStage; label: string; color: string }[] = [
   { key: 'assessment', label: 'Assessment', color: '#8B5CF6' },
   { key: 'interview', label: 'Interview', color: '#0D7377' },
   { key: 'offer', label: 'Offer Sent', color: '#2563EB' },
-  { key: 'hired', label: 'Hired 🎉', color: '#10B981' },
+  { key: 'hired', label: 'Hired', color: '#10B981' },
 ];
 
 const REJECTION_REASONS: { code: RejectionReasonCode; label: string }[] = [
@@ -389,7 +389,7 @@ export default function RecruitmentWorkspaceScreen() {
   const handleConvertToEmployee = async (candidateId: string) => {
     const res = await convertCandidateToEmployee(candidateId);
     if (res.success) {
-      alert('🎉 Handoff Complete! Candidate converted into an active employee record in the Oasis HCM directory.');
+      alert('Handoff Complete. Candidate converted into an active employee record in the Oasis HCM directory.');
       setSelectedCandidate360(null);
       loadAllData();
     }
@@ -484,7 +484,7 @@ export default function RecruitmentWorkspaceScreen() {
             </TouchableOpacity>
 
             <Button
-              title="📅 Schedule Interview"
+              title="Schedule Interview"
               onPress={() => {
                 if (candidates.length > 0) setIntCandidateId(candidates[0].id);
                 setShowInterviewModal(true);
@@ -773,7 +773,7 @@ export default function RecruitmentWorkspaceScreen() {
 
                               <Text style={styles.candMeta}>Exp: {c.experience_years}y · {c.expected_salary}</Text>
                               {c.current_location && (
-                                <Text style={styles.candLocation}>📍 {c.current_location}</Text>
+                                <Text style={styles.candLocation}>{c.current_location}</Text>
                               )}
 
                               {/* Skills Cloud */}

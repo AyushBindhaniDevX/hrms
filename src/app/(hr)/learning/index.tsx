@@ -257,7 +257,7 @@ export default function HRLearningScreen() {
                           <Text style={styles.modTitle}>• {mod.title}</Text>
                           {mod.lessons.map((les) => (
                             <Text key={les.id} style={styles.lesTitle}>
-                              {'   '}↳ {les.type === 'video' ? '🎥' : les.type === 'quiz' ? '❓' : les.type === 'document' ? '📑' : '📄'} {les.title} ({les.duration_minutes}m)
+                              {'   '}↳ [{les.type.toUpperCase()}] {les.title} ({les.duration_minutes}m)
                             </Text>
                           ))}
                         </View>

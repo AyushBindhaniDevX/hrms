@@ -116,7 +116,7 @@ export default function HRDashboard() {
         <View style={mStyles.heroBannerRow}>
           <View style={{ flex: 1 }}>
             <Text style={mStyles.heroGreeting}>{getGreeting()}</Text>
-            <Text style={mStyles.heroName}>{profile?.full_name?.split(' ')[0] ?? 'HR'} 👋</Text>
+            <Text style={mStyles.heroName}>{profile?.full_name?.split(' ')[0] ?? 'HR'}</Text>
             <Text style={mStyles.heroDate}>HR Management Console</Text>
           </View>
           {profile && (
@@ -288,14 +288,14 @@ export default function HRDashboard() {
                   </View>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <Button
-                      title="✓ Approve"
+                      title="Approve"
                       onPress={() => handleLeaveAction(req.id, 'approve')}
                       size="sm"
                       loading={processing === req.id}
                       style={{ paddingHorizontal: 16 }}
                     />
                     <Button
-                      title="✗"
+                      title="Reject"
                       onPress={() => handleLeaveAction(req.id, 'reject')}
                       variant="danger"
                       size="sm"

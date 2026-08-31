@@ -346,7 +346,7 @@ export default function PayrollDetailScreen() {
                 >
                   <RefreshCw size={15} color={colors.primary} />
                   <Text style={[styles.syncBtnText, { color: colors.primary }]}>
-                    {recalculating ? 'Syncing...' : '⚡ Sync & Recalculate Profiles'}
+                    {recalculating ? 'Syncing...' : 'Sync & Recalculate Profiles'}
                   </Text>
                 </TouchableOpacity>
 
@@ -434,7 +434,7 @@ export default function PayrollDetailScreen() {
             <View style={styles.emptyBox}>
               <CreditCard size={40} color={colors.textSecondary} />
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No employee payroll entries generated for this period. Click "+ Add Custom Entry" or "⚡ Sync" to populate.
+                No employee payroll entries generated for this period. Click "+ Add Custom Entry" or "Sync" to populate.
               </Text>
             </View>
           ) : (
@@ -545,7 +545,7 @@ export default function PayrollDetailScreen() {
                                 { color: slipGenerated ? '#166534' : '#FFF' },
                               ]}
                             >
-                              {slipGenerated ? '✓ Slip Ready' : generatingSlip === entry.id ? '...' : 'PDF Slip'}
+                              {slipGenerated ? 'Slip Ready' : generatingSlip === entry.id ? '...' : 'PDF Slip'}
                             </Text>
                           </TouchableOpacity>
                         </View>

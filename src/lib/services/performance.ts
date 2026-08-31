@@ -269,7 +269,7 @@ export async function sendKudos(data: {
   await createNotification(
     data.receiver_id,
     'kudos',
-    'New Kudos Received! 🎉',
+    'New Kudos Received',
     `${data.sender_name || 'A teammate'} sent you a "${data.badge.toUpperCase()}" badge: "${data.message}"`
   );
 

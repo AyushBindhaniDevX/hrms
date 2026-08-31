@@ -203,7 +203,7 @@ export async function sendWelcomeEmail(to: string, name: string, employeeCode: s
     subject: `Welcome to Subedge Technology Pvt Ltd — Your Oasis Access`,
     category: 'onboarding',
     htmlContent: `
-      <h2>Welcome aboard, ${name}! 🎉</h2>
+      <h2>Welcome aboard, ${name}!</h2>
       <p>Your employee profile has been provisioned on the <strong>Oasis Platform</strong>.</p>
       <div style="background: #F0F7F7; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #CCECEC;">
         <p style="margin: 0 0 6px 0;"><strong>Employee Code:</strong> ${employeeCode}</p>
@@ -223,7 +223,7 @@ export async function sendLeaveStatusEmail(to: string, name: string, status: 'ap
   const isApproved = status === 'approved';
   return sendResendEmail({
     to,
-    subject: `Leave Request ${isApproved ? 'Approved ✅' : 'Rejected ❌'} — ${leaveType}`,
+    subject: `Leave Request ${isApproved ? 'Approved' : 'Rejected'} — ${leaveType}`,
     category: 'leave',
     htmlContent: `
       <h2>Hello ${name},</h2>
@@ -264,7 +264,7 @@ export async function sendTicketStatusEmail(to: string, ticketNumber: string, ti
     subject: `Ticket Resolved: [${ticketNumber}] ${title}`,
     category: 'ticket',
     htmlContent: `
-      <h2>Support Ticket Resolved ✅</h2>
+      <h2>Support Ticket Resolved</h2>
       <p>Your support ticket <strong>${ticketNumber}</strong> has been marked as resolved by the Subedge IT & Operations desk.</p>
       <div style="background: #F0F7F7; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #CCECEC;">
         <p style="margin: 0 0 6px 0; font-weight: 700; color: #0D7377;">Resolution Notes:</p>
@@ -304,7 +304,7 @@ export async function sendOfferLetterEmail(to: string, candidateName: string, de
     subject: `Official Offer of Employment: ${designation} — Subedge Technology Pvt Ltd`,
     category: 'onboarding',
     htmlContent: `
-      <h2>Congratulations, ${candidateName}! 🎉</h2>
+      <h2>Congratulations, ${candidateName}!</h2>
       <p>Subedge Technology Pvt Ltd is delighted to extend you an official offer of employment for the position of <strong>${designation}</strong>.</p>
       <div style="background: #ECFDF5; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #A7F3D0;">
         <p style="margin: 0 0 6px 0;"><strong>Designation:</strong> ${designation}</p>
@@ -341,7 +341,7 @@ export async function sendApplicationReceivedEmail(to: string, candidateName: st
     subject: `Application Received: ${jobTitle} — Subedge Technology Pvt Ltd`,
     category: 'onboarding',
     htmlContent: `
-      <h2>Thank you for applying, ${candidateName}! 🚀</h2>
+      <h2>Thank you for applying, ${candidateName}!</h2>
       <p>We have successfully received your direct application for <strong>${jobTitle}</strong> at Subedge Technology Pvt Ltd.</p>
       <div style="background: #F0F7F7; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #CCECEC;">
         <p style="margin: 0 0 6px 0;"><strong>Role:</strong> ${jobTitle}</p>

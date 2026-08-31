@@ -511,7 +511,7 @@ export default function EmployeePerformanceScreen() {
                 <Text style={styles.emptyTitle}>No Kudos Yet</Text>
                 <Text style={styles.emptySub}>Send appreciation and celebrate team milestones together!</Text>
                 <Button
-                  title="🎉 Give First Kudos"
+                  title="Give First Kudos"
                   onPress={() => setShowKudosModal(true)}
                   style={{ marginTop: 14, backgroundColor: '#0D7377' }}
                 />
@@ -675,7 +675,7 @@ export default function EmployeePerformanceScreen() {
       </Modal>
 
       {/* ── MODAL 3: SEND KUDOS ─────────────────────────────────────────────── */}
-      <Modal visible={showKudosModal} onClose={() => setShowKudosModal(false)} title="Send Praise to Teammate 🎉">
+      <Modal visible={showKudosModal} onClose={() => setShowKudosModal(false)} title="Send Praise to Teammate">
         <View style={{ gap: 12 }}>
           <View>
             <Text style={styles.formLabel}>Select Teammate</Text>
@@ -742,7 +742,7 @@ export default function EmployeePerformanceScreen() {
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
             <Button title="Cancel" onPress={() => setShowKudosModal(false)} variant="outline" style={{ flex: 1 }} />
             <Button
-              title="Send Kudos 🚀"
+              title="Send Kudos"
               onPress={handleSendKudos}
               loading={sendingKudos}
               style={{ flex: 1, backgroundColor: '#0D7377' }}

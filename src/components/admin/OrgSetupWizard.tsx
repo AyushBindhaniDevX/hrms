@@ -227,7 +227,7 @@ export function OrgSetupWizard({ visible, organization, onComplete }: OrgSetupWi
                   disabled={locationLoading}
                 >
                   {locationLoading ? <ActivityIndicator size="small" color={colors.primary} /> : (
-                    <Text style={{ color: colors.primary, fontWeight: '600' }}>📍 Use Current Location</Text>
+                    <Text style={{ color: colors.primary, fontWeight: '600' }}>Use Current Location</Text>
                   )}
                 </TouchableOpacity>
 

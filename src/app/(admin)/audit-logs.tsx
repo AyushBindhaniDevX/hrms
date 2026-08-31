@@ -115,7 +115,7 @@ export default function AuditLogsScreen() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        setExportNotice('✓ CSV exported successfully!');
+        setExportNotice('CSV exported successfully.');
         setTimeout(() => setExportNotice(null), 3500);
       } else {
         setExportNotice('Export downloaded to device storage.');

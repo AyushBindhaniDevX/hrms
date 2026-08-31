@@ -51,7 +51,7 @@ export async function sendClockInNotification(startTime: string) {
 
     await ExpoNotifications.scheduleNotificationAsync({
       content: {
-        title: '✅ Clocked In',
+        title: 'Clocked In',
         body: `You are currently clocked in. Started at ${startTime}. Don't forget to clock out when you leave!`,
         data: { type: 'clock_in' },
         sound: true,

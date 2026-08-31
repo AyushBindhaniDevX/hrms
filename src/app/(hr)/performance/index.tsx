@@ -557,7 +557,7 @@ export default function HRPerformanceScreen() {
                             <Text style={styles.progressBtnText}>+10%</Text>
                           </TouchableOpacity>
                           <TouchableOpacity onPress={() => handleUpdateProgress(g, 100 - g.progress)} style={[styles.progressBtn, { backgroundColor: '#dcfce7' }]}>
-                            <Text style={[styles.progressBtnText, { color: '#15803d' }]}>✓ Complete</Text>
+                            <Text style={[styles.progressBtnText, { color: '#15803d' }]}>Complete</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -1048,7 +1048,7 @@ export default function HRPerformanceScreen() {
         {/* ---------------------------------------------------- */}
         {/* MODAL: GIVE KUDOS */}
         {/* ---------------------------------------------------- */}
-        <Modal visible={showKudosModal} onClose={() => setShowKudosModal(false)} title="Send Praise & Recognition 🎉">
+        <Modal visible={showKudosModal} onClose={() => setShowKudosModal(false)} title="Send Praise & Recognition">
           <View style={{ gap: 14 }}>
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Select Teammate</Text>
@@ -1101,7 +1101,7 @@ export default function HRPerformanceScreen() {
 
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
               <Button title="Cancel" onPress={() => setShowKudosModal(false)} variant="outline" style={{ flex: 1 }} />
-              <Button title="Send Kudos 🚀" onPress={handleSendKudos} loading={sendingKudos} style={{ flex: 1, backgroundColor: colors.primary }} />
+              <Button title="Send Kudos" onPress={handleSendKudos} loading={sendingKudos} style={{ flex: 1, backgroundColor: colors.primary }} />
             </View>
           </View>
         </Modal>

@@ -188,16 +188,11 @@ export function DatePicker({
             {selectedDate ? formatDate(selectedDate) : placeholder}
           </Text>
         </View>
-
-        <View style={styles.sapBadge}>
-          <Text style={styles.sapBadgeText}>SAP</Text>
-        </View>
       </TouchableOpacity>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {/* SAP Horizon Style Modal */}
-      <Modal visible={show} onClose={() => setShow(false)} title="Select Date (SAP Fiori)">
+      <Modal visible={show} onClose={() => setShow(false)} title="Select Date">
         <View style={styles.modalContent}>
           {/* SAP Quick Presets Bar */}
           <View style={styles.presetBar}>

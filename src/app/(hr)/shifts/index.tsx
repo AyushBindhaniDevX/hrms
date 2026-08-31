@@ -242,7 +242,7 @@ export default function ShiftsScreen() {
             style={[styles.tabBtn, selectedView === 'roster' && styles.tabBtnActive]}
           >
             <Text style={[styles.tabText, selectedView === 'roster' && styles.tabTextActive]}>
-              📅 Weekly Roster Matrix
+              Weekly Roster Matrix
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -250,7 +250,7 @@ export default function ShiftsScreen() {
             style={[styles.tabBtn, selectedView === 'master' && styles.tabBtnActive]}
           >
             <Text style={[styles.tabText, selectedView === 'master' && styles.tabTextActive]}>
-              ⚙️ Shift Master ({shifts.length})
+              Shift Master ({shifts.length})
             </Text>
           </TouchableOpacity>
         </View>

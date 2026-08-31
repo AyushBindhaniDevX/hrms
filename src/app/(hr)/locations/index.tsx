@@ -217,7 +217,7 @@ export default function LocationsScreen() {
                   ) : null}
 
                   <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '500' }}>
-                    📍 Coordinates: {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)} • Geofence:{' '}
+                    Coordinates: {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)} • Geofence:{' '}
                     <Text style={{ fontWeight: '700', color: colors.text }}>{item.radius_meters}m</Text>
                   </Text>
                 </View>

@@ -610,7 +610,7 @@ let CUSTOM_PIPELINES_STORE: CustomPipeline[] = [
       { id: 'p3', name: 'Design Challenge / Figma', key: 'assessment', color: '#8B5CF6', requires_scorecard: true, sla_days: 4 },
       { id: 'p4', name: 'Design Crit & Lead Panel', key: 'interview', color: '#0D7377', requires_scorecard: true, sla_days: 4 },
       { id: 'p5', name: 'Offer Extended', key: 'offer', color: '#2563EB', requires_scorecard: false, sla_days: 3 },
-      { id: 'p6', name: 'Hired 🎉', key: 'hired', color: '#10B981', requires_scorecard: false, sla_days: 1 },
+      { id: 'p6', name: 'Hired', key: 'hired', color: '#10B981', requires_scorecard: false, sla_days: 1 },
     ],
   },
   {
