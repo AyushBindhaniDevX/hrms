@@ -1,10 +1,13 @@
 import { supabase } from '@/lib/supabase';
 import type { Notification } from '@/types';
 import { Platform } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 
-// Safely lazy-load ExpoNotifications only on native devices (iOS/Android)
+// Safely lazy-load ExpoNotifications only on native devices (iOS/Android) and non-Expo Go
+const isExpoGo = Constants?.executionEnvironment === ExecutionEnvironment.StoreClient;
 let ExpoNotifications: typeof import('expo-notifications') | null = null;
-if (Platform.OS !== 'web') {
+
+if (Platform.OS !== 'web' && !isExpoGo) {
   try {
     ExpoNotifications = require('expo-notifications');
     ExpoNotifications?.setNotificationHandler({

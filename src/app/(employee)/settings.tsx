@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Switch, ActivityIndicator, Platform, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useBiometrics } from '@/hooks/useBiometrics';
@@ -26,8 +27,10 @@ import { trackUserActivity } from '@/lib/services/userActivity';
 export default function SettingsScreen() {
   const colors = useTheme();
   const { profile, signOut, refreshProfile } = useAuth();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
 
   const {
     hasHardware,
@@ -307,10 +310,252 @@ export default function SettingsScreen() {
     );
   };
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MOBILE LAYOUT
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (!isDesktop) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+          {/* Top bounce underlay matching header card */}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
+
+          {/* Password Modal */}
+        <Modal visible={pwModalOpen} onClose={() => setPwModalOpen(false)} title="Change Password">
+          {pwSuccess ? (
+            <View style={{ alignItems: 'center', padding: 24, gap: 12 }}>
+              <CheckCircle2 size={40} color="#006a61" />
+              <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16 }}>Password Updated!</Text>
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              {pwError ? (
+                <View style={[styles.alertBox, { backgroundColor: colors.dangerLight }]}>
+                  <AlertCircle size={16} color={colors.danger} />
+                  <Text style={{ color: colors.danger, flex: 1, fontSize: 13 }}>{pwError}</Text>
+                </View>
+              ) : null}
+              <Input label="Current Password" value={currentPw} onChangeText={setCurrentPw} secureTextEntry placeholder="••••••••" />
+              <Input label="New Password" value={newPw} onChangeText={setNewPw} secureTextEntry placeholder="••••••••" />
+              <Input label="Confirm New Password" value={confirmPw} onChangeText={setConfirmPw} secureTextEntry placeholder="••••••••" />
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <Button title="Cancel" onPress={() => setPwModalOpen(false)} variant="outline" style={{ flex: 1, borderRadius: 12 }} />
+                <Button title="Update" onPress={handleChangePassword} loading={savingPw} style={{ flex: 1, backgroundColor: '#006a61', borderRadius: 12 }} />
+              </View>
+            </View>
+          )}
+        </Modal>
+
+        {/* Enable Biometrics Confirmation Modal */}
+        <Modal
+          visible={bioModalOpen}
+          onClose={() => setBioModalOpen(false)}
+          title={`Register ${biometricType || 'Biometric'} Login`}
+        >
+          <View style={{ gap: 14 }}>
+            <View style={{ alignItems: 'center', marginVertical: 8 }}>
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
+                  backgroundColor: '#EDF8F6',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 8,
+                }}
+              >
+                {biometricType === 'Face ID' ? (
+                  <ScanFace size={28} color="#006a61" />
+                ) : (
+                  <Fingerprint size={28} color="#006a61" />
+                )}
+              </View>
+              <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 18 }}>
+                Enter your account password to authorize 1-tap {biometricType || 'biometric'} login on this device.
+              </Text>
+            </View>
+
+            {bioError ? (
+              <View style={[styles.alertBox, { backgroundColor: colors.dangerLight }]}>
+                <AlertCircle size={16} color={colors.danger} />
+                <Text style={{ color: colors.danger, flex: 1, fontSize: 13 }}>{bioError}</Text>
+              </View>
+            ) : null}
+
+            <Input
+              label="Account Password"
+              value={bioPassword}
+              onChangeText={setBioPassword}
+              secureTextEntry
+              placeholder="Enter your current password"
+            />
+
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+              <Button
+                title="Cancel"
+                onPress={() => setBioModalOpen(false)}
+                variant="outline"
+                style={{ flex: 1, borderRadius: 12 }}
+              />
+              <Button
+                title="Verify & Register"
+                onPress={handleConfirmEnableBiometrics}
+                loading={bioLoading}
+                style={{ flex: 1, backgroundColor: '#006a61', borderRadius: 12 }}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Attendance Face Enrollment Modal */}
+        <FaceVerificationModal
+          visible={faceEnrollModalOpen}
+          onClose={() => setFaceEnrollModalOpen(false)}
+          onVerified={async (faceSnapshot) => {
+            if (faceSnapshot && profile?.id) {
+              await enrollEmployeeFace(profile.id, faceSnapshot);
+              if (refreshProfile) {
+                await refreshProfile();
+              }
+            }
+            setFaceEnrollModalOpen(false);
+          }}
+          employeeName={profile?.full_name || 'Employee'}
+          officeName="Workplace"
+          isClockingIn={false}
+          enrolledFaceUrl={profile?.avatar_url}
+          profileId={profile?.id}
+        />
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={[mSetStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
+            <Text style={mSetStyles.heroTag}>PREFERENCES & SECURITY</Text>
+            <Text style={mSetStyles.heroTitle}>Account Settings</Text>
+          </View>
+
+          {/* Biometrics & Authentication Group */}
+          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+            <View style={mSetStyles.groupCard}>
+              <Text style={mSetStyles.groupHeader}>AUTHENTICATION</Text>
+
+              {/* Biometric Toggle */}
+              <View style={mSetStyles.settingRow}>
+                <View style={mSetStyles.iconWrap}>
+                  {biometricType === 'Face ID' ? (
+                    <ScanFace size={18} color="#006a61" />
+                  ) : (
+                    <Fingerprint size={18} color="#006a61" />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mSetStyles.settingTitle}>
+                    {biometricType === 'None' ? 'Biometric Login' : `${biometricType} Login`}
+                  </Text>
+                  <Text style={mSetStyles.settingSub}>1-tap quick authentication</Text>
+                </View>
+                {hasHardware ? (
+                  <Switch
+                    value={isBiometricEnabled}
+                    onValueChange={handleToggleBiometrics}
+                    trackColor={{ false: '#cbd5e1', true: '#006a61' }}
+                    thumbColor="#ffffff"
+                  />
+                ) : (
+                  <Badge label="Unavailable" variant="neutral" />
+                )}
+              </View>
+
+              {/* Face Enrollment */}
+              <TouchableOpacity
+                style={[mSetStyles.settingRow, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}
+                onPress={() => setFaceEnrollModalOpen(true)}
+                activeOpacity={0.7}
+              >
+                <View style={[mSetStyles.iconWrap, { backgroundColor: '#EEEBFF' }]}>
+                  <UserCheck size={18} color="#4F46E5" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mSetStyles.settingTitle}>Attendance Face ID</Text>
+                  <Text style={mSetStyles.settingSub}>
+                    {profile?.biometric_enrolled || profile?.avatar_url ? 'Template registered' : 'Not yet enrolled'}
+                  </Text>
+                </View>
+                <View style={mSetStyles.smallBtn}>
+                  <Text style={mSetStyles.smallBtnText}>
+                    {profile?.biometric_enrolled || profile?.avatar_url ? 'Update' : 'Enroll'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Password */}
+              <TouchableOpacity
+                style={[mSetStyles.settingRow, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}
+                onPress={openPasswordModal}
+                activeOpacity={0.7}
+              >
+                <View style={[mSetStyles.iconWrap, { backgroundColor: '#FEF3C7' }]}>
+                  <Lock size={18} color="#B45309" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mSetStyles.settingTitle}>Password</Text>
+                  <Text style={mSetStyles.settingSub}>Change login credentials</Text>
+                </View>
+                <View style={mSetStyles.smallBtn}>
+                  <Text style={mSetStyles.smallBtnText}>Change</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Active Session Card */}
+          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+            <View style={mSetStyles.groupCard}>
+              <Text style={mSetStyles.groupHeader}>SECURITY & SESSIONS</Text>
+              <View style={mSetStyles.settingRow}>
+                <View style={[mSetStyles.iconWrap, { backgroundColor: '#E0F2FE' }]}>
+                  <ShieldCheck size={18} color="#0369A1" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mSetStyles.settingTitle}>Session Security</Text>
+                  <Text style={mSetStyles.settingSub}>AES-256 encrypted JWT vault</Text>
+                </View>
+                <Badge label="Protected" variant="successLight" />
+              </View>
+            </View>
+          </View>
+
+          {/* Sign Out Card */}
+          <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+            <TouchableOpacity
+              style={mSetStyles.signOutBtn}
+              onPress={signOut}
+              activeOpacity={0.85}
+            >
+              <Text style={mSetStyles.signOutBtnText}>Sign Out of Account</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    </View>
+  );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // DESKTOP LAYOUT (unchanged)
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+      contentContainerStyle={[styles.content, styles.contentDesktop]}
     >
       {/* Password Modal */}
       <Modal visible={pwModalOpen} onClose={() => setPwModalOpen(false)} title="Change Password">
@@ -502,4 +747,117 @@ const styles = StyleSheet.create({
   sessionDesc: { fontSize: 13 },
 
   alertBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 8, marginBottom: 8 },
+});
+
+// ─── MOBILE SETTINGS STYLES ──────────────────────────────────────────────────
+const mSetStyles = StyleSheet.create({
+  heroGradient: {
+    backgroundColor: '#004D47',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+    paddingBottom: 22,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    ...Platform.select({
+      web: {
+        backgroundImage: 'linear-gradient(135deg, #006a61 0%, #004D47 50%, #003D38 100%)',
+        boxShadow: '0 8px 32px rgba(0, 77, 71, 0.3)',
+      },
+      default: {
+        shadowColor: '#004D47',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 12,
+      },
+    }),
+  },
+  heroTag: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+    marginTop: 2,
+  },
+
+  groupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)' },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.03,
+        shadowRadius: 4,
+        elevation: 1,
+      },
+    }),
+  },
+  groupHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 0.8,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 6,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EDF8F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  settingSub: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  smallBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#EDF8F6',
+  },
+  smallBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#006a61',
+  },
+  signOutBtn: {
+    backgroundColor: '#FEE2E2',
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
 });

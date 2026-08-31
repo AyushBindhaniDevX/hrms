@@ -1,14 +1,16 @@
 import { supabase } from '@/lib/supabase';
 import type { LeaveType, LeaveBalance, LeaveRequest, LeaveProcessResponse, Employee } from '@/types';
+import { getWorkingDaysCount } from './holidays';
 
 const DEFAULT_LEAVE_TYPES = [
-  { name: 'Annual Leave', annual_days: 18, is_paid: true },
-  { name: 'Sick Leave', annual_days: 12, is_paid: true },
-  { name: 'Casual Leave', annual_days: 7, is_paid: true },
-  { name: 'Maternity Leave', annual_days: 90, is_paid: true },
-  { name: 'Paternity Leave', annual_days: 7, is_paid: true },
-  { name: 'Compensatory Leave', annual_days: 5, is_paid: true },
-  { name: 'Unpaid Leave', annual_days: 30, is_paid: false },
+  { name: 'Annual Leave', annual_days: 18, is_paid: true, description: 'Standard paid annual leave for vacation & personal rest' },
+  { name: 'Sick Leave', annual_days: 12, is_paid: true, description: 'Medical & health recovery leave' },
+  { name: 'Casual Leave', annual_days: 7, is_paid: true, description: 'Short unplanned personal emergencies' },
+  { name: 'Maternity Leave', annual_days: 90, is_paid: true, description: 'Paid maternity leave for female employees' },
+  { name: 'Paternity Leave', annual_days: 7, is_paid: true, description: 'Paid paternity leave for new fathers' },
+  { name: 'Compensatory Leave', annual_days: 5, is_paid: true, description: 'Comp-off for overtime or weekend duties' },
+  { name: 'Bereavement Leave', annual_days: 5, is_paid: true, description: 'Compassionate leave for family loss' },
+  { name: 'Unpaid Leave', annual_days: 30, is_paid: false, description: 'Extended leave without salary pay (LOP)' },
 ];
 
 export async function getLeaveTypes(organizationId?: string): Promise<LeaveType[]> {
@@ -37,6 +39,7 @@ export async function getLeaveTypes(organizationId?: string): Promise<LeaveType[
       name: lt.name,
       annual_days: lt.annual_days,
       is_paid: lt.is_paid,
+      description: lt.description,
     }));
 
     const { data: seeded, error: seedError } = await supabase
@@ -57,10 +60,82 @@ export async function getLeaveTypes(organizationId?: string): Promise<LeaveType[
     name: lt.name,
     annual_days: lt.annual_days,
     is_paid: lt.is_paid,
+    description: lt.description,
     organization_id: organizationId || '190b952b-df91-4011-8e48-a5e02fad80fe',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   })) as LeaveType[];
+}
+
+/**
+ * Add a new Leave Type / Policy (Admin / HR)
+ */
+export async function createLeaveType(data: {
+  name: string;
+  annual_days: number;
+  is_paid: boolean;
+  description?: string;
+  organization_id?: string;
+}): Promise<LeaveType> {
+  const now = new Date().toISOString();
+  let orgId = data.organization_id;
+  if (!orgId) {
+    const { data: anyOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
+    orgId = anyOrg?.id;
+  }
+
+  const { data: result, error } = await supabase
+    .from('leave_types')
+    .insert({
+      organization_id: orgId || null,
+      name: data.name.trim(),
+      annual_days: data.annual_days || 12,
+      is_paid: data.is_paid ?? true,
+      description: data.description?.trim() || null,
+      created_at: now,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('createLeaveType error:', error);
+    throw new Error(error.message || 'Failed to create leave policy');
+  }
+
+  return result as LeaveType;
+}
+
+/**
+ * Update an existing Leave Type (Admin / HR)
+ */
+export async function updateLeaveType(
+  id: string,
+  updates: Partial<Omit<LeaveType, 'id' | 'created_at'>>
+): Promise<LeaveType> {
+  const { data, error } = await supabase
+    .from('leave_types')
+    .update(updates)
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('updateLeaveType error:', error);
+    throw new Error(error.message || 'Failed to update leave policy');
+  }
+
+  return data as LeaveType;
+}
+
+/**
+ * Delete a Leave Type (Admin / HR)
+ */
+export async function deleteLeaveType(id: string): Promise<void> {
+  const { error } = await supabase.from('leave_types').delete().eq('id', id);
+  if (error) {
+    console.error('deleteLeaveType error:', error);
+    throw new Error(error.message || 'Failed to delete leave type');
+  }
 }
 
 export async function getLeaveBalances(employeeId: string, year?: number): Promise<LeaveBalance[]> {
@@ -199,6 +274,22 @@ export async function applyLeave(params: {
     throw new Error('Leave type configuration not found. Please contact your HR administrator.');
   }
 
+  // Calculate net working days by automatically excluding weekends and declared public holidays
+  let calculatedDays = params.days;
+  try {
+    const workingDaysInfo = await getWorkingDaysCount(
+      params.start_date,
+      params.end_date,
+      empOrgId || undefined,
+      params.is_half_day
+    );
+    if (workingDaysInfo.workingDays > 0) {
+      calculatedDays = workingDaysInfo.workingDays;
+    }
+  } catch (dayErr) {
+    console.warn('Working days calculation notice:', dayErr);
+  }
+
   const { data, error } = await supabase
     .from('leave_requests')
     .insert({
@@ -206,7 +297,7 @@ export async function applyLeave(params: {
       leave_type_id: validLeaveTypeId,
       start_date: params.start_date,
       end_date: params.end_date,
-      days: params.days,
+      days: calculatedDays,
       is_half_day: params.is_half_day,
       reason: params.reason,
       status: 'pending',

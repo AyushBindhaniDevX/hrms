@@ -152,12 +152,32 @@ CREATE TABLE IF NOT EXISTS public.attendance (
 -- ==============================================================================
 -- 5. LEAVE MANAGEMENT
 -- ==============================================================================
+-- Ensure tax_config column exists on employees table
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS tax_config JSONB DEFAULT '{}'::jsonb;
+
+-- 5.2 Holidays Calendar (Public, Company, Optional, Restricted)
+CREATE TABLE IF NOT EXISTS public.holidays (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  date DATE NOT NULL,
+  type TEXT DEFAULT 'public', -- 'public', 'optional', 'restricted', 'company'
+  description TEXT,
+  is_recurring BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_holidays_date ON public.holidays(date);
+CREATE INDEX IF NOT EXISTS idx_holidays_org ON public.holidays(organization_id);
+
 CREATE TABLE IF NOT EXISTS public.leave_types (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   annual_days INT NOT NULL DEFAULT 12,
   is_paid BOOLEAN DEFAULT TRUE,
+  description TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -586,6 +606,7 @@ ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leave_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leave_balances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
@@ -697,6 +718,26 @@ VALUES
   ('00000000-0000-0000-0000-000000000001', 'Maternity Leave', 90, true),
   ('00000000-0000-0000-0000-000000000001', 'Paternity Leave', 7, true),
   ('00000000-0000-0000-0000-000000000001', 'Compensatory Leave', 5, true)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.holidays (organization_id, name, date, type, description)
+VALUES
+  ('00000000-0000-0000-0000-000000000001', 'New Year''s Day', '2026-01-01', 'public', 'Global New Year Holiday'),
+  ('00000000-0000-0000-0000-000000000001', 'Republic Day', '2026-01-26', 'public', 'National Republic Day'),
+  ('00000000-0000-0000-0000-000000000001', 'Maha Shivratri', '2026-02-15', 'optional', 'Cultural Festival'),
+  ('00000000-0000-0000-0000-000000000001', 'Holi (Festival of Colors)', '2026-03-04', 'public', 'National Spring Festival'),
+  ('00000000-0000-0000-0000-000000000001', 'Good Friday', '2026-04-03', 'public', 'Christian Holiday'),
+  ('00000000-0000-0000-0000-000000000001', 'Eid al-Fitr', '2026-03-21', 'public', 'Islamic Festival'),
+  ('00000000-0000-0000-0000-000000000001', 'Independence Day', '2026-08-15', 'public', 'National Independence Day'),
+  ('00000000-0000-0000-0000-000000000001', 'Gandhi Jayanti', '2026-10-02', 'public', 'National Holiday'),
+  ('00000000-0000-0000-0000-000000000001', 'Dussehra (Vijayadashami)', '2026-10-20', 'public', 'Victory of Good over Evil'),
+  ('00000000-0000-0000-0000-000000000001', 'Diwali (Deepavali)', '2026-11-08', 'public', 'Festival of Lights'),
+  ('00000000-0000-0000-0000-000000000001', 'Christmas Day', '2026-12-25', 'public', 'Christmas Celebration'),
+  ('00000000-0000-0000-0000-000000000002', 'New Year''s Day', '2026-01-01', 'public', 'Global New Year Holiday'),
+  ('00000000-0000-0000-0000-000000000002', 'Republic Day', '2026-01-26', 'public', 'National Republic Day'),
+  ('00000000-0000-0000-0000-000000000002', 'Independence Day', '2026-08-15', 'public', 'National Independence Day'),
+  ('00000000-0000-0000-0000-000000000002', 'Gandhi Jayanti', '2026-10-02', 'public', 'National Holiday'),
+  ('00000000-0000-0000-0000-000000000002', 'Diwali', '2026-11-08', 'public', 'Festival of Lights')
 ON CONFLICT DO NOTHING;
 
 -- ==============================================================================

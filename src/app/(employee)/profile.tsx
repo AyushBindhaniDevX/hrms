@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions, Platform, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { Avatar } from '@/components/ui/Avatar';
@@ -17,8 +18,10 @@ import { supabase } from '@/lib/supabase';
 export default function ProfileScreen() {
   const colors = useTheme();
   const { profile, refreshProfile } = useAuth();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,10 +84,176 @@ export default function ProfileScreen() {
   const location = employee?.workplace?.name || 'N/A';
   const joinDate = employee?.joining_date ? formatDate(employee.joining_date) : 'N/A';
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MOBILE LAYOUT
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (!isDesktop) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+          {/* Top bounce underlay matching header card */}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
+
+          {/* Edit Modal */}
+          <Modal visible={editOpen} onClose={() => setEditOpen(false)} title="Edit Profile">
+            {saveSuccess ? (
+              <View style={{ alignItems: 'center', padding: 24, gap: 12 }}>
+                <CheckCircle2 size={40} color="#006a61" />
+                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16 }}>Profile Updated!</Text>
+              </View>
+            ) : (
+              <View style={{ gap: 12 }}>
+                <Input
+                  label="Full Name"
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="Your full name"
+                />
+                <Input
+                  label="Phone Number"
+                  value={editPhone}
+                  onChangeText={setEditPhone}
+                  placeholder="+1 (555) 000-0000"
+                  keyboardType="phone-pad"
+                />
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                  <Button title="Cancel" onPress={() => setEditOpen(false)} variant="outline" style={{ flex: 1, borderRadius: 12 }} />
+                  <Button title="Save" onPress={handleSave} loading={saving} style={{ flex: 1, backgroundColor: '#006a61', borderRadius: 12 }} />
+                </View>
+              </View>
+            )}
+          </Modal>
+
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 100 }}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ── Mobile Gradient Profile Hero ── */}
+            <View style={[mProfStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
+            <View style={mProfStyles.avatarWrap}>
+              <Avatar name={profile?.full_name || ''} url={profile?.avatar_url} size={90} />
+              <TouchableOpacity style={mProfStyles.editAvatarBtn} onPress={openEdit}>
+                <Edit2 size={14} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={mProfStyles.heroName}>{profile?.full_name}</Text>
+            <Text style={mProfStyles.heroRole}>{role}</Text>
+
+            <View style={mProfStyles.heroBadgesRow}>
+              {empCode !== 'N/A' && (
+                <View style={mProfStyles.heroPill}>
+                  <Text style={mProfStyles.heroPillText}>ID: {empCode}</Text>
+                </View>
+              )}
+              <View style={[mProfStyles.heroPill, { backgroundColor: 'rgba(110, 231, 183, 0.2)' }]}>
+                <Text style={[mProfStyles.heroPillText, { color: '#6EE7B7' }]}>Active Member</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* ── Contact Details Card ── */}
+          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+            <View style={mProfStyles.infoCard}>
+              <Text style={mProfStyles.cardTitle}>Contact Details</Text>
+
+              <View style={mProfStyles.infoRow}>
+                <View style={mProfStyles.infoIconWrap}>
+                  <Mail size={16} color="#006a61" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mProfStyles.infoLabel}>EMAIL ADDRESS</Text>
+                  <Text style={mProfStyles.infoValue}>{profile?.email || 'Not set'}</Text>
+                </View>
+              </View>
+
+              <View style={mProfStyles.infoRow}>
+                <View style={mProfStyles.infoIconWrap}>
+                  <Phone size={16} color="#006a61" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mProfStyles.infoLabel}>PHONE NUMBER</Text>
+                  <Text style={mProfStyles.infoValue}>{profile?.phone || 'Not set'}</Text>
+                </View>
+              </View>
+
+              <View style={mProfStyles.infoRow}>
+                <View style={mProfStyles.infoIconWrap}>
+                  <MapPin size={16} color="#006a61" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mProfStyles.infoLabel}>WORKPLACE</Text>
+                  <Text style={mProfStyles.infoValue}>{location}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* ── Employment & Organization Card ── */}
+          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+            <View style={mProfStyles.infoCard}>
+              <Text style={mProfStyles.cardTitle}>Employment Details</Text>
+
+              <View style={mProfStyles.infoRow}>
+                <View style={[mProfStyles.infoIconWrap, { backgroundColor: '#EEEBFF' }]}>
+                  <Building size={16} color="#4F46E5" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mProfStyles.infoLabel}>DEPARTMENT</Text>
+                  <Text style={mProfStyles.infoValue}>{dept}</Text>
+                </View>
+              </View>
+
+              <View style={mProfStyles.infoRow}>
+                <View style={[mProfStyles.infoIconWrap, { backgroundColor: '#E0F2FE' }]}>
+                  <User size={16} color="#0369A1" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mProfStyles.infoLabel}>DESIGNATION</Text>
+                  <Text style={mProfStyles.infoValue}>{role}</Text>
+                </View>
+              </View>
+
+              <View style={mProfStyles.infoRow}>
+                <View style={[mProfStyles.infoIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                  <FileText size={16} color="#B45309" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mProfStyles.infoLabel}>JOIN DATE</Text>
+                  <Text style={mProfStyles.infoValue}>{joinDate}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* ── Edit Button Action ── */}
+          <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+            <TouchableOpacity
+              style={mProfStyles.editActionBtn}
+              onPress={openEdit}
+              activeOpacity={0.85}
+            >
+              <Edit2 size={16} color="#FFFFFF" />
+              <Text style={mProfStyles.editActionBtnText}>Edit Contact Info</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    </View>
+  );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // DESKTOP LAYOUT (unchanged)
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+      contentContainerStyle={[styles.content, styles.contentDesktop]}
     >
       {/* Edit Modal */}
       <Modal visible={editOpen} onClose={() => setEditOpen(false)} title="Edit Profile">
@@ -270,4 +439,154 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 },
   infoValue: { fontSize: 14, lineHeight: 20 },
   infoValueLg: { fontSize: 16, fontWeight: '600', marginTop: 8 },
+});
+
+// ─── MOBILE PROFILE STYLES ──────────────────────────────────────────────────
+const mProfStyles = StyleSheet.create({
+  heroGradient: {
+    backgroundColor: '#004D47',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 56 : 28,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        backgroundImage: 'linear-gradient(135deg, #006a61 0%, #004D47 50%, #003D38 100%)',
+        boxShadow: '0 8px 32px rgba(0, 77, 71, 0.3)',
+      },
+      default: {
+        shadowColor: '#004D47',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 12,
+      },
+    }),
+  },
+  avatarWrap: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  editAvatarBtn: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#006a61',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    marginBottom: 2,
+  },
+  heroRole: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  heroBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  heroPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Info Card
+  infoCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    gap: 16,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)' },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.03,
+        shadowRadius: 4,
+        elevation: 1,
+      },
+    }),
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.2,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EDF8F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+
+  // Action Button
+  editActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#006a61',
+    paddingVertical: 15,
+    borderRadius: 16,
+    ...Platform.select({
+      web: { boxShadow: '0 4px 12px rgba(0, 106, 97, 0.25)' },
+      default: {
+        shadowColor: '#006a61',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+        elevation: 4,
+      },
+    }),
+  },
+  editActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
 });

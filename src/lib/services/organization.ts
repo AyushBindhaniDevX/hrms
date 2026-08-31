@@ -158,7 +158,7 @@ export async function createSystemUser(params: {
   tax_regime?: string;
   hra_percentage?: number | string;
   transport_allowance?: number;
-  other_allowances?: number;
+  custom_items?: any[];
   tax_config?: Record<string, any>;
 }): Promise<string> {
   // 0. Check Organization User Limit
@@ -259,7 +259,7 @@ export async function createSystemUser(params: {
       tax_regime: params.tax_regime || 'custom',
       hra_percentage: params.hra_percentage != null ? Number(params.hra_percentage) : 40,
       transport_allowance: params.transport_allowance || 0,
-      other_allowances: params.other_allowances || 0,
+      custom_items: params.custom_items || params.tax_config?.custom_items || [],
     };
 
     const empPayload: Record<string, any> = {

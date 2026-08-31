@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useTheme } from '@/hooks/use-theme';
 import { enrollEmployeeFace, verifyFaceMatch } from '@/lib/services/biometrics';
 import {
@@ -18,12 +19,13 @@ import {
   X,
   ShieldCheck,
   UserCheck,
-  RefreshCw,
-  Sparkles,
-  AlertTriangle,
   RotateCcw,
   UserPlus,
   Fingerprint,
+  ScanFace,
+  Sparkles,
+  AlertTriangle,
+  Zap,
 } from 'lucide-react-native';
 
 interface FaceVerificationModalProps {
@@ -50,15 +52,38 @@ export function FaceVerificationModal({
   const colors = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [verificationSuccess, setVerificationSuccess] = useState(false);
-  const [matchScore, setMatchScore] = useState<number | null>(null);
+  const [hasBiometrics, setHasBiometrics] = useState(false);
+  const [biometricType, setBiometricType] = useState<string>('Biometric');
   const [statusMsg, setStatusMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   const isEnrolled = Boolean(enrolledFaceUrl);
+
+  // Check hardware biometric capabilities (Face ID / Touch ID / Fingerprint)
+  useEffect(() => {
+    (async () => {
+      try {
+        const hasHw = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolledDevice = await LocalAuthentication.isEnrolledAsync();
+        if (hasHw && isEnrolledDevice) {
+          setHasBiometrics(true);
+          const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+          if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+            setBiometricType('Face ID');
+          } else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+            setBiometricType('Fingerprint / Touch ID');
+          } else {
+            setBiometricType('Device Biometric');
+          }
+        }
+      } catch {}
+    })();
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -67,11 +92,40 @@ export function FaceVerificationModal({
       setErrorMsg('');
       setIsVerifying(false);
       setCameraReady(false);
-      setMatchScore(null);
       setStatusMsg('');
     }
   }, [visible]);
 
+  // Direct Device Face ID / Biometrics Handler
+  const handleDeviceBiometricVerify = async () => {
+    setErrorMsg('');
+    setIsVerifying(true);
+    setStatusMsg(`Verifying with ${biometricType}...`);
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: `Verify your identity to Clock ${isClockingIn ? 'In' : 'Out'}`,
+        cancelLabel: 'Use Facial Scan',
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        setVerificationSuccess(true);
+        setStatusMsg(`✓ ${biometricType} Identity Confirmed`);
+        await new Promise((res) => setTimeout(res, 600));
+        await onVerified('device_biometric_verified');
+        onClose();
+      } else if (result.error !== 'user_cancel' && result.error !== 'app_cancel') {
+        setErrorMsg(`Biometric check was not successful (${result.error || 'Failed'}). Please try facial scan.`);
+      }
+    } catch (bioErr) {
+      console.warn('Device biometrics error:', bioErr);
+      setErrorMsg('Device biometrics not accessible. Please use front camera facial scan.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  // Facial Scan & Live Snapshot Verification
   const handleCaptureAndVerify = async () => {
     setErrorMsg('');
     setIsVerifying(true);
@@ -79,23 +133,44 @@ export function FaceVerificationModal({
     try {
       let snapshotBase64: string | undefined = undefined;
 
+      // 1. Try Expo Camera capture
       if (cameraRef.current) {
         try {
           const capturePromise = cameraRef.current.takePictureAsync({
             quality: 0.7,
             base64: true,
           });
-          const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 3500));
+          const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 3000));
           const photo: any = await Promise.race([capturePromise, timeoutPromise]);
 
           if (photo) {
-            snapshotBase64 = photo.base64 ? `data:image/jpeg;base64,${photo.base64}` : (photo.uri || undefined);
-            if (snapshotBase64) {
+            snapshotBase64 = photo.base64
+              ? `data:image/jpeg;base64,${photo.base64}`
+              : photo.uri || undefined;
+            if (snapshotBase64) setCapturedPhoto(snapshotBase64);
+          }
+        } catch (camErr) {
+          console.warn('Expo camera capture warning:', camErr);
+        }
+      }
+
+      // 2. Try HTML5 Web Camera capture if in browser and expo camera didn't return
+      if (!snapshotBase64 && Platform.OS === 'web' && typeof document !== 'undefined') {
+        try {
+          const videoEl = document.querySelector('video');
+          if (videoEl && videoEl.videoWidth > 0) {
+            const canvas = document.createElement('canvas');
+            canvas.width = videoEl.videoWidth;
+            canvas.height = videoEl.videoHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(videoEl, 0, 0);
+              snapshotBase64 = canvas.toDataURL('image/jpeg', 0.75);
               setCapturedPhoto(snapshotBase64);
             }
           }
-        } catch (camErr) {
-          console.warn('Camera takePictureAsync warning:', camErr);
+        } catch (webCamErr) {
+          console.warn('Web video capture warning:', webCamErr);
         }
       }
 
@@ -103,9 +178,9 @@ export function FaceVerificationModal({
         snapshotBase64 = 'captured_biometric_face';
       }
 
-      // Step 1: If not enrolled, register face in Supabase Storage
+      // Step 1: If not enrolled, register reference face
       if (!isEnrolled && profileId && snapshotBase64 !== 'captured_biometric_face') {
-        setStatusMsg('Enrolling biometric reference face to Supabase...');
+        setStatusMsg('Enrolling biometric reference face to profile...');
         try {
           await enrollEmployeeFace(profileId, snapshotBase64);
         } catch (enrollErr) {
@@ -115,23 +190,21 @@ export function FaceVerificationModal({
 
       // Step 2: Compare live face with enrolled reference template
       setStatusMsg('Comparing facial geometry against enrolled template...');
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
       const matchResult = await verifyFaceMatch(enrolledFaceUrl, snapshotBase64, profileId);
       if (!matchResult.isMatch) {
-        throw new Error(matchResult.message || 'Face did not match the registered employee profile.');
+        throw new Error(matchResult.message || 'Face did not match registered employee profile.');
       }
 
-      setMatchScore(matchResult.confidence);
       setVerificationSuccess(true);
       setStatusMsg(
         !isEnrolled
-          ? '✓ Face Registered & Enrolled Successfully (100% Match)'
+          ? '✓ Face Registered & Enrolled Successfully'
           : `✓ Biometric Identity Confirmed (${matchResult.confidence}% Match)`
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
+      await new Promise((resolve) => setTimeout(resolve, 600));
       await onVerified(snapshotBase64);
       onClose();
     } catch (err: unknown) {
@@ -149,7 +222,6 @@ export function FaceVerificationModal({
     setVerificationSuccess(false);
     setErrorMsg('');
     setStatusMsg('');
-    setMatchScore(null);
   };
 
   if (!visible) return null;
@@ -167,7 +239,7 @@ export function FaceVerificationModal({
                 <UserPlus size={22} color="#0284C7" />
               )}
               <Text style={[styles.title, { color: colors.text }]}>
-                {isEnrolled ? 'Facial Recognition Verification' : 'Register Biometric Face'}
+                {isEnrolled ? 'Facial & Biometric Verification' : 'Register Biometric Face'}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} disabled={isVerifying}>
@@ -186,12 +258,11 @@ export function FaceVerificationModal({
                 </>
               ) : (
                 <>
-                  First-time biometric setup: Please capture a clear front photo of your face to register your reference template.
+                  First-time biometric setup: Please capture a front photo of your face to register your reference template.
                 </>
               )}
             </Text>
 
-            {/* Enrolled Reference Badge */}
             {isEnrolled && enrolledFaceUrl ? (
               <View style={styles.enrolledBadge}>
                 <Image source={{ uri: enrolledFaceUrl }} style={styles.enrolledThumb} />
@@ -298,39 +369,52 @@ export function FaceVerificationModal({
                 <Text style={styles.verifyBtnText}>Retake Photo</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                style={[
-                  styles.verifyBtn,
-                  { backgroundColor: verificationSuccess ? '#10B981' : colors.primary },
-                  (!permission?.granted || isVerifying) && { opacity: 0.7 },
-                ]}
-                onPress={handleCaptureAndVerify}
-                disabled={!permission?.granted || isVerifying}
-              >
-                {isVerifying ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : verificationSuccess ? (
-                  <>
-                    <CheckCircle2 size={20} color="#FFF" />
-                    <Text style={styles.verifyBtnText}>
-                      {!isEnrolled ? 'Face Registered & Clocked!' : 'Face Matched & Clocked!'}
+              <>
+                {/* 1. Primary Facial Scan Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.verifyBtn,
+                    { backgroundColor: verificationSuccess ? '#10B981' : colors.primary },
+                    (!permission?.granted || isVerifying) && { opacity: 0.7 },
+                  ]}
+                  onPress={handleCaptureAndVerify}
+                  disabled={!permission?.granted || isVerifying}
+                >
+                  {isVerifying ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : verificationSuccess ? (
+                    <>
+                      <CheckCircle2 size={20} color="#FFF" />
+                      <Text style={styles.verifyBtnText}>
+                        {!isEnrolled ? 'Face Registered & Clocked!' : 'Face Matched & Clocked!'}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <ScanFace size={18} color="#FFF" />
+                      <Text style={styles.verifyBtnText}>
+                        {!isEnrolled
+                          ? 'Register Face & Clock In'
+                          : `Scan Face & Clock ${isClockingIn ? 'In' : 'Out'}`}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* 2. Instant Device Biometrics (Face ID / Fingerprint) button */}
+                {hasBiometrics && (
+                  <TouchableOpacity
+                    style={[styles.biometricBtn, { borderColor: colors.primary, backgroundColor: colors.surface }]}
+                    onPress={handleDeviceBiometricVerify}
+                    disabled={isVerifying}
+                  >
+                    <Fingerprint size={18} color={colors.primary} />
+                    <Text style={[styles.biometricBtnText, { color: colors.primary }]}>
+                      ⚡ Instant Verify via {biometricType}
                     </Text>
-                  </>
-                ) : (
-                  <>
-                    {isEnrolled ? (
-                      <Fingerprint size={18} color="#FFF" />
-                    ) : (
-                      <Camera size={18} color="#FFF" />
-                    )}
-                    <Text style={styles.verifyBtnText}>
-                      {!isEnrolled
-                        ? 'Register Face & Clock In'
-                        : `Scan Face & Clock ${isClockingIn ? 'In' : 'Out'}`}
-                    </Text>
-                  </>
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
+              </>
             )}
 
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={isVerifying}>
@@ -423,7 +507,7 @@ const styles = StyleSheet.create({
   },
   cameraWrapper: {
     width: '100%',
-    height: 290,
+    height: 280,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#0F172A',
@@ -441,9 +525,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   faceOvalOverlay: {
-    width: 160,
-    height: 210,
-    borderRadius: 80,
+    width: 150,
+    height: 195,
+    borderRadius: 75,
     borderWidth: 3,
     borderStyle: 'dashed',
     justifyContent: 'center',
@@ -528,6 +612,19 @@ const styles = StyleSheet.create({
   verifyBtnText: {
     color: '#FFF',
     fontSize: 15,
+    fontWeight: '700',
+  },
+  biometricBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    gap: 8,
+  },
+  biometricBtnText: {
+    fontSize: 14,
     fontWeight: '700',
   },
   cancelBtn: {

@@ -38,7 +38,8 @@ import { getShifts } from '@/lib/services/shifts';
 import { createAuditLog } from '@/lib/services/audit';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
-import type { Profile, Department, Workplace, WorkShift, Employee, LeaveBalance, LeaveType } from '@/types';
+import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
+import type { Profile, Department, Workplace, WorkShift, Employee, LeaveBalance, LeaveType, CustomPayrollItem } from '@/types';
 import {
   Search,
   UserPlus,
@@ -112,6 +113,7 @@ export default function UserManagementScreen() {
   const [newTaxRegime, setNewTaxRegime] = useState('custom');
   const [newHraPercentage, setNewHraPercentage] = useState('40');
   const [newTransportAllowance, setNewTransportAllowance] = useState('0');
+  const [newCustomItems, setNewCustomItems] = useState<CustomPayrollItem[]>([]);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
@@ -135,6 +137,7 @@ export default function UserManagementScreen() {
   const [editTaxRegime, setEditTaxRegime] = useState('custom');
   const [editHraPercentage, setEditHraPercentage] = useState('40');
   const [editTransportAllowance, setEditTransportAllowance] = useState('0');
+  const [editCustomItems, setEditCustomItems] = useState<CustomPayrollItem[]>([]);
   const [editStatus, setEditStatus] = useState('active');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
@@ -272,6 +275,7 @@ export default function UserManagementScreen() {
         tax_regime: newTaxRegime,
         hra_percentage: parseFloat(newHraPercentage) || 0,
         transport_allowance: parseFloat(newTransportAllowance) || 0,
+        custom_items: newCustomItems,
       });
 
       await createAuditLog('user_created', 'profile', uid, {
@@ -400,6 +404,7 @@ export default function UserManagementScreen() {
         setEditTaxRegime(tc.tax_regime || 'custom');
         setEditHraPercentage(tc.hra_percentage != null ? String(tc.hra_percentage) : '40');
         setEditTransportAllowance(tc.transport_allowance != null ? String(tc.transport_allowance) : '0');
+        setEditCustomItems(Array.isArray(tc.custom_items) ? tc.custom_items : []);
         setEditStatus(empData.employment_status || 'active');
 
         let shiftVal = (empData as any).default_shift_id || null;
@@ -433,6 +438,7 @@ export default function UserManagementScreen() {
         setEditTaxPercentage('5');
         setEditHraPercentage('40');
         setEditTransportAllowance('0');
+        setEditCustomItems([]);
         setEditStatus('active');
       }
     } catch (e) {
@@ -475,6 +481,7 @@ export default function UserManagementScreen() {
         tax_regime: editTaxRegime,
         hra_percentage: parseFloat(editHraPercentage) || 0,
         transport_allowance: parseFloat(editTransportAllowance) || 0,
+        custom_items: editCustomItems,
       };
 
       // 2. Update linked Employee if exists, otherwise create it!
@@ -1228,6 +1235,13 @@ export default function UserManagementScreen() {
                         onChangeText={setNewTransportAllowance}
                         keyboardType="numeric"
                       />
+
+                      {/* Custom Bonuses, Deductions & Allowances with Icon Selector */}
+                      <CustomPayrollItemsManager
+                        items={newCustomItems}
+                        onChange={setNewCustomItems}
+                        basicSalary={parseFloat(newSalary) || 0}
+                      />
                     </View>
                   </View>
                 )}
@@ -1429,6 +1443,13 @@ export default function UserManagementScreen() {
                     value={editTransportAllowance}
                     onChangeText={setEditTransportAllowance}
                     keyboardType="numeric"
+                  />
+
+                  {/* Custom Bonuses, Deductions & Allowances with Icon Selector */}
+                  <CustomPayrollItemsManager
+                    items={editCustomItems}
+                    onChange={setEditCustomItems}
+                    basicSalary={parseFloat(editSalary) || 0}
                   />
                 </View>
 

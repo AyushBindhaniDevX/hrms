@@ -10,17 +10,29 @@ import {
   RefreshControl,
   useWindowDimensions,
   Platform,
+  Alert,
 } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { Select } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
-import { getAllLeaveRequests, processLeaveRequest } from '@/lib/services/leave';
+import {
+  getAllLeaveRequests,
+  processLeaveRequest,
+  getLeaveTypes,
+  createLeaveType,
+  updateLeaveType,
+  deleteLeaveType,
+} from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
-import type { LeaveRequest } from '@/types';
+import type { LeaveRequest, LeaveType } from '@/types';
 import {
   CheckCircle2,
   XCircle,
@@ -35,8 +47,15 @@ import {
   TrendingUp,
   Building2,
   IdCard,
+  Plus,
+  Trash2,
+  Edit2,
+  Sliders,
+  ShieldCheck,
+  Umbrella,
+  FileCheck,
 } from 'lucide-react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
 export default function HRLeaveWorkflowScreen() {
   const colors = useTheme();
@@ -46,25 +65,40 @@ export default function HRLeaveWorkflowScreen() {
   const isDesktop = width >= 1024;
 
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  // View Mode: 'board' (Kanban / Workflow) or 'list'
-  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+  // View Mode: 'board' (Kanban / Workflow) | 'list' | 'types' (Leave Policies)
+  const [viewMode, setViewMode] = useState<'board' | 'list' | 'types'>('board');
   const [search, setSearch] = useState('');
 
   // Drag and Drop state (Web)
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetColumn, setDropTargetColumn] = useState<string | null>(null);
 
+  // Leave Type Modal State
+  const [showTypeModal, setShowTypeModal] = useState(false);
+  const [editingType, setEditingType] = useState<LeaveType | null>(null);
+  const [typeName, setTypeName] = useState('');
+  const [typeDays, setTypeDays] = useState('12');
+  const [typeIsPaid, setTypeIsPaid] = useState('yes');
+  const [typeDesc, setTypeDesc] = useState('');
+  const [typeSaving, setTypeSaving] = useState(false);
+  const [typeError, setTypeError] = useState('');
+
   const load = useCallback(async () => {
     try {
       const orgId = tenantOrg?.id || profile?.organization_id;
-      const data = await getAllLeaveRequests(orgId);
-      setRequests(data);
+      const [reqData, typesData] = await Promise.all([
+        getAllLeaveRequests(orgId),
+        getLeaveTypes(orgId),
+      ]);
+      setRequests(reqData);
+      setLeaveTypes(typesData);
     } catch (err) {
-      console.error('Error loading HR leave requests:', err);
+      console.error('Error loading HR leave requests and types:', err);
     } finally {
       setLoading(false);
     }
@@ -78,6 +112,87 @@ export default function HRLeaveWorkflowScreen() {
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  };
+
+  const handleOpenAddType = () => {
+    setEditingType(null);
+    setTypeName('');
+    setTypeDays('12');
+    setTypeIsPaid('yes');
+    setTypeDesc('');
+    setTypeError('');
+    setShowTypeModal(true);
+  };
+
+  const handleOpenEditType = (lt: LeaveType) => {
+    setEditingType(lt);
+    setTypeName(lt.name);
+    setTypeDays(String(lt.annual_days || 12));
+    setTypeIsPaid(lt.is_paid ? 'yes' : 'no');
+    setTypeDesc(lt.description || '');
+    setTypeError('');
+    setShowTypeModal(true);
+  };
+
+  const handleSaveType = async () => {
+    if (!typeName.trim()) {
+      setTypeError('Leave type name is required.');
+      return;
+    }
+    const days = parseInt(typeDays, 10);
+    if (isNaN(days) || days <= 0) {
+      setTypeError('Annual allowance must be at least 1 day.');
+      return;
+    }
+    setTypeSaving(true);
+    setTypeError('');
+    try {
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
+      if (editingType) {
+        await updateLeaveType(editingType.id, {
+          name: typeName.trim(),
+          annual_days: days,
+          is_paid: typeIsPaid === 'yes',
+          description: typeDesc.trim() || null,
+        });
+      } else {
+        await createLeaveType({
+          name: typeName.trim(),
+          annual_days: days,
+          is_paid: typeIsPaid === 'yes',
+          description: typeDesc.trim() || undefined,
+          organization_id: orgId,
+        });
+      }
+      setShowTypeModal(false);
+      await load();
+    } catch (err: unknown) {
+      setTypeError(err instanceof Error ? err.message : 'Failed to save leave type');
+    } finally {
+      setTypeSaving(false);
+    }
+  };
+
+  const handleDeleteType = async (id: string, name: string) => {
+    const proceed = async () => {
+      try {
+        await deleteLeaveType(id);
+        await load();
+      } catch (err) {
+        console.error('Delete leave type error:', err);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Are you sure you want to delete "${name}"?`)) {
+        await proceed();
+      }
+    } else {
+      Alert.alert('Delete Leave Policy', `Are you sure you want to delete "${name}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: proceed },
+      ]);
+    }
   };
 
   const handleAction = async (id: string, action: 'approve' | 'reject') => {
@@ -216,6 +331,16 @@ export default function HRLeaveWorkflowScreen() {
               >
                 <List size={15} color="#FFF" />
                 <Text style={styles.toggleText}>List</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setViewMode('types')}
+                style={[
+                  styles.toggleBtn,
+                  viewMode === 'types' && { backgroundColor: '#006a61' },
+                ]}
+              >
+                <Sliders size={15} color="#FFF" />
+                <Text style={styles.toggleText}>Policies ({leaveTypes.length})</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -547,7 +672,7 @@ export default function HRLeaveWorkflowScreen() {
               </ScrollView>
             </View>
           </View>
-        ) : (
+        ) : viewMode === 'list' ? (
           /* ── TABLE / LIST VIEW ────────────────────────────────────────────── */
           <View style={[styles.tableCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
             <View style={[styles.tableHeader, { borderBottomColor: '#f1f5f9' }]}>
@@ -632,7 +757,143 @@ export default function HRLeaveWorkflowScreen() {
               </View>
             )}
           </View>
+        ) : (
+          /* ── LEAVE POLICIES / TYPES CONFIGURATION VIEW ────────────────── */
+          <Animated.View entering={FadeIn.duration(300)}>
+            <View style={[styles.typesHeaderRow, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+              <View>
+                <Text style={[styles.typesSectionTitle, { color: colors.text }]}>
+                  Configured Leave Policies & Quotas
+                </Text>
+                <Text style={[styles.typesSectionSub, { color: colors.textSecondary }]}>
+                  Admins and HR can set annual day quotas, paid/unpaid statuses, and policy rules for the organization.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.addPolicyBtn, { backgroundColor: colors.primary }]}
+                onPress={handleOpenAddType}
+              >
+                <Plus size={16} color="#FFF" />
+                <Text style={styles.addPolicyBtnText}>Add Leave Policy</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.typesGrid}>
+              {leaveTypes.map((lt, idx) => (
+                <Animated.View
+                  key={lt.id}
+                  entering={FadeInDown.delay(idx * 30).duration(250).springify()}
+                  style={[styles.typeCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}
+                >
+                  <View style={styles.typeCardTop}>
+                    <View style={styles.typeCardIconBox}>
+                      <Umbrella size={22} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.typeCardTitle, { color: colors.text }]}>{lt.name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                        <Badge
+                          label={lt.is_paid ? 'PAID LEAVE' : 'UNPAID (LOP)'}
+                          variant={lt.is_paid ? 'success' : 'dangerLight'}
+                        />
+                        <View style={[styles.annualQuotaPill, { backgroundColor: '#edf8f6' }]}>
+                          <Text style={{ fontSize: 11, fontWeight: '800', color: '#006a61' }}>
+                            {lt.annual_days} days / yr
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.typeCardDesc, { color: colors.textSecondary }]}>
+                    {lt.description || 'Standard corporate leave policy quota allocated yearly per employee.'}
+                  </Text>
+
+                  <View style={[styles.typeCardActions, { borderTopColor: '#f1f5f9' }]}>
+                    <TouchableOpacity
+                      style={[styles.typeActionBtn, { backgroundColor: colors.background }]}
+                      onPress={() => handleOpenEditType(lt)}
+                    >
+                      <Edit2 size={15} color={colors.primary} />
+                      <Text style={[styles.typeActionBtnText, { color: colors.primary }]}>Edit Policy</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.typeActionBtn, { backgroundColor: '#FEE2E2' }]}
+                      onPress={() => handleDeleteType(lt.id, lt.name)}
+                    >
+                      <Trash2 size={15} color="#DC2626" />
+                      <Text style={[styles.typeActionBtnText, { color: '#DC2626' }]}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
+              ))}
+            </View>
+          </Animated.View>
         )}
+
+        {/* ── Add / Edit Leave Type Modal ──────────────────────────────────── */}
+        <Modal
+          visible={showTypeModal}
+          onClose={() => setShowTypeModal(false)}
+          title={editingType ? 'Edit Leave Policy' : 'Create Leave Policy'}
+        >
+          <View style={{ gap: 14 }}>
+            {typeError ? (
+              <View style={{ padding: 10, borderRadius: 8, backgroundColor: '#FEE2E2' }}>
+                <Text style={{ color: '#DC2626', fontSize: 13 }}>{typeError}</Text>
+              </View>
+            ) : null}
+
+            <Input
+              label="Policy Name *"
+              placeholder="e.g. Wellness Leave / Sabbatical / Bereavement Leave"
+              value={typeName}
+              onChangeText={setTypeName}
+            />
+
+            <Input
+              label="Annual Quota (Days) *"
+              placeholder="12"
+              value={typeDays}
+              onChangeText={setTypeDays}
+              keyboardType="numeric"
+            />
+
+            <Select
+              label="Paid or Unpaid"
+              options={[
+                { label: 'Paid Leave (Regular full pay)', value: 'yes' },
+                { label: 'Unpaid Leave (Loss of Pay - LOP)', value: 'no' },
+              ]}
+              value={typeIsPaid}
+              onValueChange={setTypeIsPaid}
+            />
+
+            <Input
+              label="Description (Optional)"
+              placeholder="Guidance or rules for when employees can use this leave."
+              value={typeDesc}
+              onChangeText={setTypeDesc}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={{ gap: 8, marginTop: 10 }}>
+              <Button
+                title={editingType ? 'Save Policy Changes' : 'Create Policy'}
+                onPress={handleSaveType}
+                loading={typeSaving}
+              />
+              <Button
+                title="Cancel"
+                variant="ghost"
+                onPress={() => setShowTypeModal(false)}
+                disabled={typeSaving}
+              />
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SidebarLayout>
   );
@@ -818,4 +1079,73 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // Leave Policies Section
+  typesHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 16,
+    flexWrap: 'wrap',
+    marginBottom: 20,
+  },
+  typesSectionTitle: { fontSize: 18, fontWeight: '800' },
+  typesSectionSub: { fontSize: 13, marginTop: 4, maxWidth: 700 },
+  addPolicyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  addPolicyBtnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  typesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  typeCard: {
+    flex: 1,
+    minWidth: 320,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+  },
+  typeCardTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  typeCardIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#edf8f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeCardTitle: { fontSize: 16, fontWeight: '800' },
+  annualQuotaPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  typeCardDesc: { fontSize: 13, lineHeight: 18 },
+  typeCardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  typeActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  typeActionBtnText: { fontSize: 12, fontWeight: '700' },
 });

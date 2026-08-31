@@ -1,3 +1,4 @@
+import 'react-native-url-polyfill/auto';
 import '@/utils/mediaDevicesPolyfill';
 import { Redirect, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';

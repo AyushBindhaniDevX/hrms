@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   },
   tabsRow: { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: 1 },
   tabBtn: { paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabBtnActive: { borderBottomColor: '#0D7377' },
+  tabBtnActive: { borderBottomColor: '#006a61' },
   tabText: { fontSize: 14, fontWeight: '600' },
   tabTextActive: { fontWeight: '800' },
 
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 3,
-    backgroundColor: '#0D7377',
+    backgroundColor: '#006a61',
   },
   iconBox: {
     width: 40,
@@ -344,12 +344,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#F0F7F7',
+    backgroundColor: '#EDF8F6',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  dMarkBtnText: { fontSize: 13, fontWeight: '700', color: '#0D7377' },
+  dMarkBtnText: { fontSize: 13, fontWeight: '700', color: '#006a61' },
   dContainer: { padding: 24, flex: 1, alignItems: 'center' },
   dCard: { width: '100%', maxWidth: 800, flex: 1, borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
 });

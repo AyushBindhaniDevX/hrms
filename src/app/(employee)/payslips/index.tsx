@@ -7,7 +7,10 @@ import {
   ScrollView,
   useWindowDimensions,
   ActivityIndicator,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
@@ -48,8 +51,10 @@ export default function PayslipsScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
 
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -106,21 +111,23 @@ export default function PayslipsScreen() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isDesktop) {
     return (
-      <ScrollView
-        style={mStyles.root}
-        contentContainerStyle={mStyles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Standard Page Header ───────────────────────────────────────── */}
-        <Animated.View entering={FadeInDown.duration(300).springify()} style={mStyles.header}>
-          <Text style={mStyles.headerTitle}>Salary & Payslips</Text>
-        </Animated.View>
+      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+          {/* Top bounce underlay matching header card */}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
 
-        {/* ── Hero Salary Banner ─────────────────────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(40).duration(400).springify()}>
-          <View style={mStyles.heroBanner}>
-            <Text style={mStyles.heroLabel}>OFFICIAL SALARY STATEMENT</Text>
-            <Text style={mStyles.heroPeriod}>{monthName} {yearStr}</Text>
+          <ScrollView
+            style={mStyles.root}
+            contentContainerStyle={mStyles.content}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ── Hero Salary Banner ── */}
+            <View style={[mStyles.heroBanner, { paddingTop: topPadding + 10 }]}>
+              <Text style={mStyles.heroLabel}>OFFICIAL SALARY STATEMENT</Text>
+              <Text style={mStyles.heroPeriod}>{monthName} {yearStr}</Text>
 
             {/* Big net salary display */}
             <View style={mStyles.salaryDisplay}>
@@ -159,7 +166,6 @@ export default function PayslipsScreen() {
               </View>
             </View>
           </View>
-        </Animated.View>
 
         {/* ── Download Latest Button ─────────────────────────────────────── */}
         {latest && (
@@ -333,7 +339,9 @@ export default function PayslipsScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    );
+    </View>
+  </View>
+);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -603,14 +611,25 @@ const mStyles = StyleSheet.create({
 
   // Hero Banner
   heroBanner: {
-    backgroundColor: '#0D7377',
+    backgroundColor: '#004D47',
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: Platform.OS === 'ios' ? 56 : 20,
     paddingBottom: 24,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 16,
-    borderRadius: 16,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    ...Platform.select({
+      web: {
+        backgroundImage: 'linear-gradient(135deg, #006a61 0%, #004D47 50%, #003D38 100%)',
+        boxShadow: '0 8px 32px rgba(0, 77, 71, 0.3)',
+      },
+      default: {
+        shadowColor: '#004D47',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 12,
+      },
+    }),
   },
   heroLabel: {
     fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.6)',
@@ -622,15 +641,15 @@ const mStyles = StyleSheet.create({
   },
   salaryDisplay: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 20,
   },
   salaryLabel: {
     fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.65)',
     letterSpacing: 0.5,
   },
   salaryAmount: {
-    fontSize: 40, fontWeight: '900', color: '#FFFFFF',
-    letterSpacing: -1.5, marginTop: 6, marginBottom: 10,
+    fontSize: 38, fontWeight: '900', color: '#FFFFFF',
+    letterSpacing: -1.5, marginTop: 4, marginBottom: 8,
   },
   salaryStatusRow: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -642,7 +661,7 @@ const mStyles = StyleSheet.create({
   // Metric chips in banner
   metricRow: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 8,
@@ -655,19 +674,27 @@ const mStyles = StyleSheet.create({
   // Download button
   downloadLatestBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    marginHorizontal: 16, marginBottom: 16,
-    backgroundColor: '#0D7377',
-    paddingVertical: 14, borderRadius: 14,
-    shadowColor: '#0D7377', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+    marginHorizontal: 20, marginTop: -12, marginBottom: 16,
+    backgroundColor: '#006a61',
+    paddingVertical: 14, borderRadius: 16,
+    ...Platform.select({
+      web: { boxShadow: '0 4px 12px rgba(0, 106, 97, 0.25)' },
+      default: {
+        shadowColor: '#006a61',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 5,
+      },
+    }),
   },
-  downloadLatestText: { fontSize: 15, fontWeight: '800', color: '#FFF' },
+  downloadLatestText: { fontSize: 14, fontWeight: '800', color: '#FFF' },
 
   // Breakdown card
   card: {
-    marginHorizontal: 16, marginBottom: 16,
+    marginHorizontal: 20, marginBottom: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0',
+    borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0',
     overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,

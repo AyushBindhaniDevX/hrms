@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Stack, Redirect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingState } from '@/components/ui/States';
-import { View, Platform } from 'react-native';
+import { View, Platform, useWindowDimensions } from 'react-native';
 import { SidebarLayout } from '@/components/layout/Sidebar';
+import { BottomTabBar } from '@/components/layout/BottomTabBar';
 import { LayoutDashboard, CalendarClock, CalendarDays, Banknote, Users } from 'lucide-react-native';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
 import type { Employee } from '@/types';
@@ -19,6 +20,8 @@ const NAV_ITEMS = [
 
 export default function EmployeeLayout() {
   const { isAuthenticated, isLoading, profile } = useAuth();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loadingEmp, setLoadingEmp] = useState(true);
 
@@ -55,30 +58,34 @@ export default function EmployeeLayout() {
     );
   }
 
-  return (
-    <SidebarLayout>
-      <Stack screenOptions={{ 
-        headerShown: false,
-        gestureEnabled: false,
-        animation: Platform.OS === 'web' ? 'none' : 'fade',
-        contentStyle: { backgroundColor: '#F8FAFC' }
-      }}>
-        <Stack.Screen name="dashboard" />
-        <Stack.Screen name="attendance/index" />
-        <Stack.Screen name="attendance/[id]" />
-        <Stack.Screen name="leave/index" />
-        <Stack.Screen name="leave/apply" />
-        <Stack.Screen name="leave/[id]" />
-        <Stack.Screen name="performance/index" />
-        <Stack.Screen name="payslips/index" />
-        <Stack.Screen name="payslips/[id]" />
-        <Stack.Screen name="expenses/index" />
-        <Stack.Screen name="helpdesk/index" />
-        <Stack.Screen name="directory/index" />
-        <Stack.Screen name="profile" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="notifications/index" />
-      </Stack>
-    </SidebarLayout>
+  const stackContent = (
+    <Stack screenOptions={{ 
+      headerShown: false,
+      gestureEnabled: false,
+      animation: Platform.OS === 'web' ? 'none' : 'fade',
+      contentStyle: { backgroundColor: '#F8FAFC' }
+    }}>
+      <Stack.Screen name="dashboard" />
+      <Stack.Screen name="attendance/index" />
+      <Stack.Screen name="attendance/[id]" />
+      <Stack.Screen name="leave/index" />
+      <Stack.Screen name="leave/apply" />
+      <Stack.Screen name="leave/[id]" />
+      <Stack.Screen name="performance/index" />
+      <Stack.Screen name="payslips/index" />
+      <Stack.Screen name="payslips/[id]" />
+      <Stack.Screen name="expenses/index" />
+      <Stack.Screen name="helpdesk/index" />
+      <Stack.Screen name="directory/index" />
+      <Stack.Screen name="profile" />
+      <Stack.Screen name="settings" />
+      <Stack.Screen name="notifications/index" />
+    </Stack>
   );
+
+  if (isDesktop) {
+    return <SidebarLayout>{stackContent}</SidebarLayout>;
+  }
+
+  return <BottomTabBar>{stackContent}</BottomTabBar>;
 }

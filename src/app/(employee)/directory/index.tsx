@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions, Linking, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions, Linking, Modal, Platform, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
@@ -16,8 +17,10 @@ export default function DirectoryScreen() {
   const { profile } = useAuth();
   const { organization } = useTenant();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
 
   const orgId = organization?.id || profile?.organization_id;
 
@@ -80,56 +83,66 @@ export default function DirectoryScreen() {
   if (loading) return <LoadingState />;
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
-    >
-      {/* Header */}
-      {isDesktop ? (
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: colors.text }]}>Company Directory</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Find and connect with {employees.length} colleagues across {organization?.name || 'the organization'}.
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.mHeader}>
-          <Text style={styles.mHeaderTitle}>Directory</Text>
-        </View>
-      )}
+    <View style={{ flex: 1, backgroundColor: isDesktop ? colors.background : '#004D47' }}>
+      {!isDesktop && <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />}
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        {!isDesktop && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />}
+
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+          contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          {isDesktop ? (
+            <View style={styles.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.title, { color: colors.text }]}>Company Directory</Text>
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+                  Find and connect with {employees.length} colleagues across {organization?.name || 'the organization'}.
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View style={[styles.mHeroGradient, { paddingTop: topPadding + 10 }]}>
+              <Text style={styles.mHeroTag}>PEOPLE & TEAMS</Text>
+              <Text style={styles.mHeroTitle}>Company Directory</Text>
+              <Text style={styles.mHeroSub}>{employees.length} colleagues in {organization?.name || 'Oasis'}</Text>
+            </View>
+          )}
 
       {/* Search + Filters */}
-      <View style={styles.controls}>
-        <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Search size={16} color={colors.textSecondary} />
+      <View style={[styles.controls, !isDesktop && { paddingHorizontal: 20, marginTop: 16 }]}>
+        <View style={[styles.searchBox, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', borderRadius: 14 }]}>
+          <Search size={16} color="#94A3B8" />
           <TextInput
-            placeholder="Search by name, role, department, or code..."
-            placeholderTextColor={colors.textSecondary}
+            placeholder="Search name, role, dept..."
+            placeholderTextColor="#94A3B8"
             value={searchInput}
             onChangeText={setSearchInput}
-            style={[styles.searchInput, { color: colors.text }]}
+            style={[styles.searchInput, { color: '#0F172A' }]}
           />
           {searching && (
-            <View style={[styles.searchDot, { backgroundColor: colors.primary }]} />
+            <View style={[styles.searchDot, { backgroundColor: '#006a61' }]} />
           )}
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
           <TouchableOpacity
-            style={[styles.filterPill, !deptFilter ? { backgroundColor: colors.primary } : { backgroundColor: colors.backgroundElement }]}
+            style={[styles.filterPill, !deptFilter ? { backgroundColor: '#006a61' } : { backgroundColor: '#F1F5F9' }]}
             onPress={() => { setDeptFilter(null); runSearch(searchInput, null); }}
           >
-            <Text style={[styles.filterText, { color: !deptFilter ? '#FFF' : colors.text }]}>All</Text>
+            <Text style={[styles.filterText, { color: !deptFilter ? '#FFF' : '#64748B' }]}>All</Text>
           </TouchableOpacity>
           {departments.map(d => (
             <TouchableOpacity
               key={d.id}
-              style={[styles.filterPill, deptFilter === d.id ? { backgroundColor: colors.primary } : { backgroundColor: colors.backgroundElement }]}
+              style={[styles.filterPill, deptFilter === d.id ? { backgroundColor: '#006a61' } : { backgroundColor: '#F1F5F9' }]}
               onPress={() => { setDeptFilter(d.id); runSearch(searchInput, d.id); }}
             >
-              <Text style={[styles.filterText, { color: deptFilter === d.id ? '#FFF' : colors.text }]}>{d.name}</Text>
+              <Text style={[styles.filterText, { color: deptFilter === d.id ? '#FFF' : '#64748B' }]}>{d.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -281,8 +294,10 @@ export default function DirectoryScreen() {
           </View>
         </View>
       </Modal>
-    </ScrollView>
-  );
+      </ScrollView>
+    </View>
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
@@ -294,22 +309,48 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 14, marginTop: 4 },
 
-  mHeader: {
-    backgroundColor: '#FFFFFF',
+  mHeroGradient: {
+    backgroundColor: '#004D47',
+    paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    marginHorizontal: -16, // Counteract content padding
+    paddingBottom: 22,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    marginHorizontal: -16,
     marginTop: -16,
     marginBottom: 0,
+    ...Platform.select({
+      web: {
+        backgroundImage: 'linear-gradient(135deg, #006a61 0%, #004D47 50%, #003D38 100%)',
+        boxShadow: '0 8px 32px rgba(0, 77, 71, 0.3)',
+      },
+      default: {
+        shadowColor: '#004D47',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 12,
+      },
+    }),
   },
-  mHeaderTitle: {
-    fontSize: 22,
+  mHeroTag: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  mHeroTitle: {
+    fontSize: 24,
     fontWeight: '800',
-    color: '#0F172A',
-    paddingHorizontal: 20,
-    letterSpacing: -0.5,
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+    marginTop: 2,
+  },
+  mHeroSub: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontWeight: '500',
+    marginTop: 2,
   },
 
   controls: { gap: 12 },

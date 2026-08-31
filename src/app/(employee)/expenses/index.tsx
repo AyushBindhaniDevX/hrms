@@ -10,7 +10,9 @@ import {
   RefreshControl,
   useWindowDimensions,
   Platform,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { LoadingState } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
@@ -41,8 +43,10 @@ const CATEGORIES: { key: ExpenseCategory; label: string; Icon: React.ElementType
 
 export default function EmployeeExpensesScreen() {
   const colors = useTheme();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+  const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
 
   const [expenses, setExpenses] = useState<ExpenseClaim[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,28 +122,38 @@ export default function EmployeeExpensesScreen() {
 
   if (!isDesktop) {
     return (
-      <View style={[mStyles.root, { backgroundColor: colors.background }]}>
-        <Animated.View entering={FadeInDown.duration(300).springify()} style={[mStyles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <Text style={[mStyles.headerTitle, { color: colors.text }]}>Expenses</Text>
-        </Animated.View>
+      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+          {/* Top bounce underlay matching header card */}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
 
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={mStyles.content}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
-          showsVerticalScrollIndicator={false}
-        >
-          <Animated.View entering={FadeInDown.delay(100).duration(300).springify()}>
-            <View style={mStyles.banner}>
-              <View>
-                <Text style={mStyles.bannerSub}>Total Claims (INR)</Text>
-                <Text style={mStyles.bannerAmount}>{formatCurrency(myTotal)}</Text>
-              </View>
-              <View style={mStyles.badgePill}>
-                <Text style={mStyles.badgePillText}>Settled Monthly</Text>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={mStyles.content}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor="#FFFFFF" colors={['#004D47']} />}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ── Mobile Gradient Header ── */}
+            <View style={[mStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
+              <View style={mStyles.heroTop}>
+                <View>
+                  <Text style={mStyles.heroTag}>EXPENSE CLAIMS</Text>
+                  <Text style={mStyles.heroAmount}>{formatCurrency(myTotal)}</Text>
+                  <Text style={mStyles.heroSub}>Monthly Settled Reimbursements</Text>
+                </View>
+                <TouchableOpacity
+                  style={mStyles.newClaimBtn}
+                  onPress={() => setShowModal(true)}
+                  activeOpacity={0.85}
+                >
+                  <Plus size={16} color="#006a61" />
+                  <Text style={mStyles.newClaimBtnText}>New Claim</Text>
+                </TouchableOpacity>
               </View>
             </View>
-          </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(200).duration(300).springify()}>
             <View style={mStyles.sectionHeader}>
@@ -277,7 +291,8 @@ export default function EmployeeExpensesScreen() {
           </View>
         </RNModal>
       </View>
-    );
+    </View>
+  );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -420,57 +435,124 @@ export default function EmployeeExpensesScreen() {
 // ─── MOBILE STYLES ─────────────────────────────────────────────────────────────
 const mStyles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0F172A',
+  heroGradient: {
+    backgroundColor: '#004D47',
     paddingHorizontal: 20,
-    letterSpacing: -0.5,
+    paddingTop: Platform.OS === 'ios' ? 56 : 20,
+    paddingBottom: 24,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    marginBottom: 16,
+    ...Platform.select({
+      web: {
+        backgroundImage: 'linear-gradient(135deg, #006a61 0%, #004D47 50%, #003D38 100%)',
+        boxShadow: '0 8px 32px rgba(0, 77, 71, 0.3)',
+      },
+      default: {
+        shadowColor: '#004D47',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 12,
+      },
+    }),
   },
-  content: { padding: 16 },
-  banner: {
-    backgroundColor: '#0D7377',
-    padding: 20,
-    borderRadius: 16,
+  heroTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
   },
-  bannerSub: { color: '#CCECEC', fontSize: 13, fontWeight: '600' },
-  bannerAmount: { color: '#FFFFFF', fontSize: 28, fontWeight: '800', marginTop: 4, letterSpacing: -0.5 },
-  badgePill: { backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
-  badgePillText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  heroTag: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  heroAmount: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.8,
+    marginTop: 2,
+  },
+  heroSub: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  newClaimBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)' },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
+  },
+  newClaimBtnText: {
+    color: '#006a61',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  content: { padding: 0, paddingBottom: 100 },
 
-  sectionHeader: { marginBottom: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: '700' },
+  sectionHeader: { paddingHorizontal: 20, marginBottom: 12 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#0F172A', letterSpacing: -0.3 },
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 32, fontSize: 14 },
   
-  card: { padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 12 },
+  card: {
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 10,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 6px rgba(0, 0, 0, 0.03)' },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.03,
+        shadowRadius: 4,
+        elevation: 1,
+      },
+    }),
+  },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F0F7F7', alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontSize: 15, fontWeight: '700' },
-  cardMeta: { fontSize: 12, marginTop: 4 },
-  cardAmount: { fontSize: 15, fontWeight: '800' },
+  iconBox: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#EDF8F6', alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
+  cardMeta: { fontSize: 12, marginTop: 3, color: '#64748B' },
+  cardAmount: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
   
   statusTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   statusText: { fontSize: 10, fontWeight: '800' },
 
   fab: {
-    position: 'absolute', right: 20, bottom: 20,
-    backgroundColor: '#0D7377', width: 56, height: 56, borderRadius: 28,
+    position: 'absolute', right: 20, bottom: 24,
+    backgroundColor: '#006a61', width: 56, height: 56, borderRadius: 28,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 5,
+    ...Platform.select({
+      web: { boxShadow: '0 4px 14px rgba(0, 106, 97, 0.35)' },
+      default: {
+        shadowColor: '#006a61',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+      },
+    }),
   },
 
   modalSheet: { flex: 1 },

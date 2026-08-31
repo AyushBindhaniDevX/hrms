@@ -221,26 +221,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSignIn = useCallback(
     async (email: string, password: string, _fallbackOrgId?: string) => {
       const cleanEmail = email.trim().toLowerCase();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: password,
-      });
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: password,
+        });
 
-      if (error) {
-        throw new Error(error.message || 'Invalid email or password');
-      }
+        if (error) {
+          throw new Error(error.message || 'Invalid email or password');
+        }
 
-      if (data?.user) {
-        const appUser: AppUser = {
-          id: data.user.id,
-          email: data.user.email,
-          fullName: data.user.user_metadata?.full_name || data.user.email?.split('@')[0],
-          imageUrl: data.user.user_metadata?.avatar_url || null,
-          user_metadata: data.user.user_metadata,
-        };
-        setUser(appUser);
-        const prof = await syncProfileForAuthUser(data.user);
-        setProfile(prof);
+        if (data?.user) {
+          const appUser: AppUser = {
+            id: data.user.id,
+            email: data.user.email,
+            fullName: data.user.user_metadata?.full_name || data.user.email?.split('@')[0],
+            imageUrl: data.user.user_metadata?.avatar_url || null,
+            user_metadata: data.user.user_metadata,
+          };
+          setUser(appUser);
+          const prof = await syncProfileForAuthUser(data.user);
+          setProfile(prof);
+        }
+      } catch (err: any) {
+        if (err.message === 'Network request failed' || err?.toString?.().includes('Network request failed')) {
+          throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+        }
+        throw err;
       }
     },
     [syncProfileForAuthUser]

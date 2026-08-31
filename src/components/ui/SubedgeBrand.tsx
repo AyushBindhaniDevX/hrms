@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useTenant } from '@/context/TenantContext';
 import { Building2, MapPin } from 'lucide-react-native';
 
-const DEFAULT_SUBEDGE_LOGO = require('../../../assets/images/subedge-logo.png');
+export const DEFAULT_SUBEDGE_LOGO = require('../../../assets/images/subedge-logo.png');
 
 interface SubedgeBrandProps {
   size?: 'sm' | 'md' | 'lg';

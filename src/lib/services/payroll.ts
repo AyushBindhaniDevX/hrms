@@ -37,6 +37,8 @@ export async function getPayslipDetail(payslipId: string): Promise<Payslip | nul
   return data as Payslip;
 }
 
+import { getHolidaysForDateRange } from './holidays';
+
 export async function getPayrollPeriods(organizationId?: string): Promise<PayrollPeriod[]> {
   let query = supabase
     .from('payroll_periods')
@@ -54,7 +56,7 @@ export async function getPayrollPeriods(organizationId?: string): Promise<Payrol
   return data as PayrollPeriod[];
 }
 
-/** Count absent + unpaid-leave days for an employee in a given month/year */
+/** Count absent + unpaid-leave days for an employee in a given month/year, EXCLUDING declared holidays */
 async function countLopDays(employeeId: string, month: number, year: number): Promise<number> {
   try {
     // Build date range for the month
@@ -63,7 +65,11 @@ async function countLopDays(employeeId: string, month: number, year: number): Pr
     const endYear = month === 12 ? year + 1 : year;
     const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
 
-    // 1. Count absent attendance days
+    // 1. Fetch holidays in this period to exclude from absent count
+    const holidays = await getHolidaysForDateRange(startDate, endDate);
+    const holidayDates = new Set(holidays.filter(h => h.type !== 'optional').map(h => h.date));
+
+    // 2. Count absent attendance days that are NOT declared holidays
     const { data: absentRecords } = await supabase
       .from('attendance')
       .select('id, date')
@@ -72,9 +78,10 @@ async function countLopDays(employeeId: string, month: number, year: number): Pr
       .gte('date', startDate)
       .lt('date', endDate);
 
-    const absentDays = absentRecords?.length ?? 0;
+    const validAbsences = (absentRecords || []).filter(r => !holidayDates.has(r.date));
+    const absentDays = validAbsences.length;
 
-    // 2. Count approved unpaid leave days in the period
+    // 3. Count approved unpaid leave days in the period
     const { data: unpaidLeaves } = await supabase
       .from('leave_requests')
       .select('days, leave_type:leave_types(is_paid)')
@@ -94,8 +101,8 @@ async function countLopDays(employeeId: string, month: number, year: number): Pr
   }
 }
 
-/** Calculate TDS based on annual taxable income and tax regime */
-function calculateTds(annualBasic: number, taxConfig?: Record<string, any>): number {
+/** Calculate TDS based on annual taxable income and employee tax regime / custom TDS % */
+export function calculateTds(annualBasic: number, taxConfig?: Record<string, any>): number {
   if (taxConfig?.tds_percentage != null && !isNaN(Number(taxConfig.tds_percentage)) && taxConfig.tds_percentage !== '') {
     return Math.round((annualBasic * Number(taxConfig.tds_percentage)) / 100);
   }
@@ -109,15 +116,15 @@ function calculateTds(annualBasic: number, taxConfig?: Record<string, any>): num
   }
 
   if (regime === 'old') {
-    // Old regime slabs (FY 2024-25, simplified)
+    // Old regime slabs (FY 2024-25 / 2026, simplified)
     let tax = 0;
     if (annualTaxable <= 250000) tax = 0;
     else if (annualTaxable <= 500000) tax = (annualTaxable - 250000) * 0.05;
     else if (annualTaxable <= 1000000) tax = 12500 + (annualTaxable - 500000) * 0.2;
     else tax = 112500 + (annualTaxable - 1000000) * 0.3;
-    return Math.round(tax / 12); // Monthly TDS
+    return Math.round(tax / 12);
   } else {
-    // New regime slabs (FY 2024-25)
+    // New regime slabs
     let tax = 0;
     if (annualTaxable <= 300000) tax = 0;
     else if (annualTaxable <= 700000) tax = (annualTaxable - 300000) * 0.05;
@@ -125,10 +132,105 @@ function calculateTds(annualBasic: number, taxConfig?: Record<string, any>): num
     else if (annualTaxable <= 1200000) tax = 50000 + (annualTaxable - 1000000) * 0.15;
     else if (annualTaxable <= 1500000) tax = 80000 + (annualTaxable - 1200000) * 0.2;
     else tax = 140000 + (annualTaxable - 1500000) * 0.3;
-    // Rebate u/s 87A for income ≤ 7L under new regime
     if (annualTaxable <= 700000) tax = 0;
     return Math.round(tax / 12);
   }
+}
+
+/**
+ * Computes statutory salary breakdown strictly from an employee's profile and enrollment tax_config
+ */
+export async function calculateStatutoryForEmployee(
+  emp: Employee,
+  month: number,
+  year: number,
+  customLopDays?: number
+): Promise<{
+  basic_salary: number;
+  allowances: Record<string, number>;
+  deductions: Record<string, number>;
+  lop_days: number;
+  lop_amount: number;
+  gross_salary: number;
+  net_salary: number;
+}> {
+  const basic = emp.basic_salary || 0;
+  const taxConfig = (emp as any).tax_config || {};
+
+  // 1. EPF (Employee 12% or custom percentage / exempt)
+  let epfRate = 0.12;
+  if (taxConfig.epf_exempt) {
+    epfRate = 0;
+  } else if (taxConfig.epf_percentage != null && !isNaN(Number(taxConfig.epf_percentage))) {
+    epfRate = Number(taxConfig.epf_percentage) / 100;
+  }
+  const epf = Math.round(basic * epfRate);
+
+  // 2. Professional Tax (PT)
+  let pt = basic > 15000 ? 200 : 0;
+  if (taxConfig.pt_amount != null && !isNaN(Number(taxConfig.pt_amount))) {
+    pt = Number(taxConfig.pt_amount);
+  }
+
+  // 3. TDS / Income Tax
+  const tds = calculateTds(basic, taxConfig);
+
+  // 4. LOP Days & Amount (excluding declared public holidays)
+  const lopDays = customLopDays !== undefined ? customLopDays : await countLopDays(emp.id, month, year);
+  const lopAmount = lopDays > 0 ? Math.round((basic / 26) * lopDays) : 0;
+
+  // 5. Allowances: HRA & Special Allowance
+  let hraRate = taxConfig.hra_type === 'metro' ? 0.5 : 0.4;
+  if (taxConfig.hra_percentage != null && !isNaN(Number(taxConfig.hra_percentage))) {
+    hraRate = Number(taxConfig.hra_percentage) / 100;
+  }
+  const hra = Math.round(basic * hraRate);
+  const specialAllowance = Math.max(0, Math.round(basic * 0.1));
+
+  const allowances: Record<string, number> = {
+    'HRA': hra,
+    'Special Allowance': specialAllowance,
+  };
+
+  if (taxConfig.transport_allowance && Number(taxConfig.transport_allowance) > 0) {
+    allowances['Transport Allowance'] = Math.round(Number(taxConfig.transport_allowance));
+  }
+
+  const deductions: Record<string, number> = {
+    'EPF': epf,
+    'Professional Tax': pt,
+    'TDS': tds,
+  };
+
+  // 6. Custom Admin Enrolled Allowances, Bonuses, Deductions & Taxes
+  const customItems: any[] = Array.isArray(taxConfig.custom_items) ? taxConfig.custom_items : [];
+  customItems.forEach((item) => {
+    if (!item.name || !item.value) return;
+    const isPercentage = item.amount_type === 'percentage';
+    const computedVal = isPercentage ? Math.round((basic * Number(item.value)) / 100) : Math.round(Number(item.value));
+    
+    if (item.type === 'deduction') {
+      deductions[item.name] = computedVal;
+    } else {
+      // 'earning', 'bonus', 'reimbursement'
+      allowances[item.name] = computedVal;
+    }
+  });
+
+  const totalAllowances = Object.values(allowances).reduce((sum, v) => sum + v, 0);
+  const gross = basic + totalAllowances - lopAmount;
+  const totalDeductions = Object.values(deductions).reduce((sum, v) => sum + v, 0);
+  const netSalary = Math.max(0, gross - totalDeductions);
+
+  return {
+    basic_salary: basic,
+    allowances,
+    deductions,
+    lop_days: lopDays,
+    lop_amount: lopAmount,
+    gross_salary: gross,
+    net_salary: netSalary,
+  };
 }
 
 export async function createPayrollPeriod(month: number, year: number, orgId: string): Promise<PayrollPeriod> {
@@ -153,73 +255,78 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
   // 2. Fetch active employees for this organization
   const employees = await getEmployees({ organization_id: orgId, employment_status: 'active' });
 
-  // 3. Generate draft payroll entries with real LOP and tax calculations
+  // 3. Generate draft payroll entries reflecting all enrolled PF, TDS, HRA & PT details
   if (employees && employees.length > 0) {
-    const entries = await Promise.all(employees.map(async (emp) => {
-      const basic = emp.basic_salary || 0;
-      const taxConfig = (emp as any).tax_config || {};
-
-      // Statutory deductions with custom percentage support
-      let epfRate = 0.12;
-      if (taxConfig.epf_exempt) {
-        epfRate = 0;
-      } else if (taxConfig.epf_percentage != null && !isNaN(Number(taxConfig.epf_percentage))) {
-        epfRate = Number(taxConfig.epf_percentage) / 100;
-      }
-      const epf = Math.round(basic * epfRate); // EPF
-
-      let pt = basic > 15000 ? 200 : 0;
-      if (taxConfig.pt_amount != null && !isNaN(Number(taxConfig.pt_amount))) {
-        pt = Number(taxConfig.pt_amount);
-      }
-
-      const tds = calculateTds(basic, taxConfig);
-
-      // Loss of Pay from absences
-      const lopDays = await countLopDays(emp.id, month, year);
-      const lopAmount = lopDays > 0 ? Math.round((basic / 26) * lopDays) : 0;
-
-      // HRA (custom % or metro/non-metro default)
-      let hraRate = taxConfig.hra_type === 'metro' ? 0.5 : 0.4;
-      if (taxConfig.hra_percentage != null && !isNaN(Number(taxConfig.hra_percentage))) {
-        hraRate = Number(taxConfig.hra_percentage) / 100;
-      }
-      const hra = Math.round(basic * hraRate);
-
-      // Special allowance = gross - basic - HRA (to make up salary)
-      const specialAllowance = Math.max(0, Math.round(basic * 0.1));
-
-      const gross = basic + hra + specialAllowance - lopAmount;
-      const totalDeductions = epf + pt + tds;
-      const netSalary = gross - totalDeductions;
-
-      return {
-        payroll_period_id: period.id,
-        employee_id: emp.id,
-        basic_salary: basic,
-        allowances: {
-          'HRA': hra,
-          'Special Allowance': specialAllowance,
-        },
-        deductions: {
-          'EPF (Employee 12%)': epf,
-          'Professional Tax': pt,
-          'TDS': tds,
-        },
-        lop_days: lopDays,
-        lop_amount: lopAmount,
-        gross_salary: gross,
-        net_salary: Math.max(netSalary, 0),
-        status: 'draft',
-        created_at: now,
-        updated_at: now,
-      };
-    }));
+    const entries = await Promise.all(
+      employees.map(async (emp) => {
+        const breakdown = await calculateStatutoryForEmployee(emp, month, year);
+        return {
+          payroll_period_id: period.id,
+          employee_id: emp.id,
+          basic_salary: breakdown.basic_salary,
+          allowances: breakdown.allowances,
+          deductions: breakdown.deductions,
+          lop_days: breakdown.lop_days,
+          lop_amount: breakdown.lop_amount,
+          gross_salary: breakdown.gross_salary,
+          net_salary: breakdown.net_salary,
+          status: 'draft',
+          created_at: now,
+          updated_at: now,
+        };
+      })
+    );
 
     await supabase.from('payroll').insert(entries);
   }
 
   return period as PayrollPeriod;
+}
+
+/**
+ * Re-sync and recalculate all draft entries in a payroll period using the latest employee details
+ */
+export async function recalculatePeriodEntries(periodId: string): Promise<void> {
+  const { data: period } = await supabase
+    .from('payroll_periods')
+    .select('*')
+    .eq('id', periodId)
+    .single();
+
+  if (!period) throw new Error('Payroll period not found');
+
+  const { data: existingEntries } = await supabase
+    .from('payroll')
+    .select('*, employee:employees(*, profile:profiles(*))')
+    .eq('payroll_period_id', periodId);
+
+  if (!existingEntries || existingEntries.length === 0) return;
+
+  const now = new Date().toISOString();
+
+  for (const entry of existingEntries) {
+    if (entry.employee) {
+      const breakdown = await calculateStatutoryForEmployee(
+        entry.employee as Employee,
+        period.month,
+        period.year,
+        entry.lop_days
+      );
+
+      await supabase
+        .from('payroll')
+        .update({
+          basic_salary: breakdown.basic_salary,
+          allowances: breakdown.allowances,
+          deductions: breakdown.deductions,
+          lop_amount: breakdown.lop_amount,
+          gross_salary: breakdown.gross_salary,
+          net_salary: breakdown.net_salary,
+          updated_at: now,
+        })
+        .eq('id', entry.id);
+    }
+  }
 }
 
 export async function getPayrollEntries(periodId: string): Promise<Payroll[]> {

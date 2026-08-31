@@ -20,8 +20,9 @@ import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/States';
 import { getLeaveTypes, applyLeave } from '@/lib/services/leave';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
+import { getWorkingDaysCount } from '@/lib/services/holidays';
 import { getDaysBetween, formatDate } from '@/utils/format';
-import type { LeaveType } from '@/types';
+import type { LeaveType, Holiday } from '@/types';
 import {
   Calendar,
   CheckCircle2,
@@ -34,6 +35,8 @@ import {
   Heart,
   Umbrella,
   Sunset,
+  Sparkles,
+  PartyPopper,
 } from 'lucide-react-native';
 
 const ICON_COLOR = '#006a61';
@@ -82,6 +85,11 @@ export default function ApplyLeaveScreen() {
   const [reason, setReason] = useState('');
   const [isHalfDay, setIsHalfDay] = useState(false);
 
+  // Dynamic Holiday & Working Days Calculation
+  const [workingDays, setWorkingDays] = useState(0);
+  const [holidayDays, setHolidayDays] = useState(0);
+  const [holidaysInRange, setHolidaysInRange] = useState<Holiday[]>([]);
+
   useEffect(() => {
     (async () => {
       if (!profile) return;
@@ -99,15 +107,29 @@ export default function ApplyLeaveScreen() {
     })();
   }, [profile]);
 
-  const days =
-    startDate && endDate
-      ? isHalfDay
-        ? 0.5
-        : getDaysBetween(
-            startDate.toISOString().split('T')[0],
-            endDate.toISOString().split('T')[0]
-          )
-      : 0;
+  useEffect(() => {
+    if (startDate && endDate && startDate <= endDate) {
+      const sStr = startDate.toISOString().split('T')[0];
+      const eStr = endDate.toISOString().split('T')[0];
+      const orgId = profile?.organization_id;
+
+      getWorkingDaysCount(sStr, eStr, orgId, isHalfDay)
+        .then((res) => {
+          setWorkingDays(res.workingDays);
+          setHolidayDays(res.holidayDays);
+          setHolidaysInRange(res.holidaysInRange);
+        })
+        .catch(() => {
+          setWorkingDays(isHalfDay ? 0.5 : getDaysBetween(sStr, eStr));
+        });
+    } else {
+      setWorkingDays(0);
+      setHolidayDays(0);
+      setHolidaysInRange([]);
+    }
+  }, [startDate, endDate, isHalfDay, profile]);
+
+  const days = workingDays;
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -324,16 +346,32 @@ export default function ApplyLeaveScreen() {
 
         {/* Duration summary */}
         {days > 0 ? (
-          <View
-            style={[
-              styles.daysSummary,
-              { backgroundColor: '#eaf1ff', borderColor: '#dce9ff' },
-            ]}
-          >
-            <Calendar size={16} color={colors.primary} />
-            <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 14 }}>
-              {`${days} day${days !== 1 ? 's' : ''} of leave${startDate && endDate ? `  ·  ${formatDate(startDate)} to ${formatDate(endDate)}` : ''}`}
-            </Text>
+          <View style={{ gap: 8 }}>
+            <View
+              style={[
+                styles.daysSummary,
+                { backgroundColor: '#edf8f6', borderColor: '#c4ece7' },
+              ]}
+            >
+              <Calendar size={16} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                {`${days} working day${days !== 1 ? 's' : ''} to be deducted${startDate && endDate ? `  ·  ${formatDate(startDate)} to ${formatDate(endDate)}` : ''}`}
+              </Text>
+            </View>
+
+            {holidayDays > 0 ? (
+              <View
+                style={[
+                  styles.daysSummary,
+                  { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' },
+                ]}
+              >
+                <PartyPopper size={16} color="#D97706" />
+                <Text style={{ color: '#92400E', fontWeight: '600', fontSize: 13, flex: 1 }}>
+                  {`Includes ${holidayDays} public holiday (${holidaysInRange.map((h) => h.name).join(', ')}) — automatically excluded from your leave quota!`}
+                </Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
 

@@ -46,6 +46,33 @@ export interface Department {
   employee_count?: number;
 }
 
+export interface CustomPayrollItem {
+  id: string;
+  name: string;
+  type: 'earning' | 'deduction' | 'reimbursement';
+  amount_type: 'fixed' | 'percentage';
+  value: number;
+  icon?: string;
+  color?: string;
+  is_taxable?: boolean;
+  is_recurring?: boolean;
+}
+
+export interface TaxConfig {
+  pf_number?: string | null;
+  tax_regime?: 'old' | 'new' | 'custom' | string;
+  tds_percentage?: number | null;
+  epf_percentage?: number | null;
+  pt_amount?: number | null;
+  hra_percentage?: number | null;
+  custom_tax_percentage?: number | null;
+  esop_value?: number | null;
+  hra_type?: 'metro' | 'non-metro' | 'custom';
+  epf_exempt?: boolean;
+  transport_allowance?: number | null;
+  custom_items?: CustomPayrollItem[];
+}
+
 export interface Employee {
   id: string;
   profile_id: string;
@@ -66,18 +93,7 @@ export interface Employee {
     account_number: string;
     routing_number: string;
   } | null;
-  tax_config?: {
-    pf_number?: string | null;
-    tax_regime?: 'old' | 'new' | 'custom' | string;
-    tds_percentage?: number | null;
-    epf_percentage?: number | null;
-    pt_amount?: number | null;
-    hra_percentage?: number | null;
-    custom_tax_percentage?: number | null;
-    esop_value?: number | null;
-    hra_type?: 'metro' | 'non-metro' | 'custom';
-    epf_exempt?: boolean;
-  } | null;
+  tax_config?: TaxConfig | null;
   emergency_contact?: {
     name: string;
     phone: string;
@@ -139,6 +155,21 @@ export interface LeaveType {
   annual_days: number;
   is_paid: boolean;
   created_at: string;
+  description?: string | null;
+}
+
+export type HolidayType = 'public' | 'optional' | 'restricted' | 'company';
+
+export interface Holiday {
+  id: string;
+  organization_id: string;
+  name: string;
+  date: string; // YYYY-MM-DD
+  type: HolidayType;
+  description?: string | null;
+  is_recurring?: boolean;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface LeaveBalance {
