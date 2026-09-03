@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { TrendingUp, TrendingDown, Minus, ChevronRight } from 'lucide-react-native';
+import { useTheme } from '@/hooks/use-theme';
 
 interface MetricItem {
   label: string;
@@ -35,30 +36,34 @@ export function AnalyticalCard({
   metrics,
   onPress,
 }: AnalyticalCardProps) {
+  const colors = useTheme();
   const isUp = trend?.direction === 'up';
   const isDown = trend?.direction === 'down';
   const trendPositive = trend?.isPositive ?? isUp;
 
-  const trendColor = trendPositive ? '#107E3E' : '#BB0000';
-  const trendBg = trendPositive ? '#EAF7EE' : '#FDECEC';
+  const trendColor = trendPositive ? colors.success : colors.danger;
+  const trendBg = trendPositive ? colors.successLight : colors.dangerLight;
+
+  const progressColor = (pct: number) =>
+    pct >= 80 ? colors.success : pct >= 50 ? colors.warning : colors.danger;
 
   return (
     <TouchableOpacity
       activeOpacity={onPress ? 0.75 : 1}
       onPress={onPress}
-      style={styles.card}
+      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.categoryText}>{category.toUpperCase()}</Text>
-          <Text style={styles.kpiTitleText} numberOfLines={1}>
+          <Text style={[styles.categoryText, { color: colors.textSecondary }]}>{category.toUpperCase()}</Text>
+          <Text style={[styles.kpiTitleText, { color: colors.text }]} numberOfLines={1}>
             {kpiTitle}
           </Text>
         </View>
         {onPress && (
-          <View style={styles.actionArrow}>
-            <ChevronRight size={14} color="#64748B" />
+          <View style={[styles.actionArrow, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
+            <ChevronRight size={14} color={colors.textSecondary} />
           </View>
         )}
       </View>
@@ -66,8 +71,8 @@ export function AnalyticalCard({
       {/* KPI Value & Trend Badge */}
       <View style={styles.mainValRow}>
         <View style={styles.valGroup}>
-          <Text style={styles.kpiValueText}>{value}</Text>
-          {unit && <Text style={styles.unitText}>{unit}</Text>}
+          <Text style={[styles.kpiValueText, { color: colors.text }]}>{value}</Text>
+          {unit && <Text style={[styles.unitText, { color: colors.textSecondary }]}>{unit}</Text>}
         </View>
 
         {trend && (
@@ -75,9 +80,7 @@ export function AnalyticalCard({
             {isUp && <TrendingUp size={12} color={trendColor} />}
             {isDown && <TrendingDown size={12} color={trendColor} />}
             {!isUp && !isDown && <Minus size={12} color={trendColor} />}
-            <Text style={[styles.trendText, { color: trendColor }]}>
-              {trend.value}
-            </Text>
+            <Text style={[styles.trendText, { color: trendColor }]}>{trend.value}</Text>
           </View>
         )}
       </View>
@@ -85,42 +88,28 @@ export function AnalyticalCard({
       {/* Target Progress Bar */}
       {targetPercent !== undefined && (
         <View style={styles.progressContainer}>
-          <View style={styles.progressBarTrack}>
+          <View style={[styles.progressBarTrack, { backgroundColor: colors.backgroundElement }]}>
             <View
               style={[
                 styles.progressBarFill,
                 {
                   width: `${Math.min(Math.max(targetPercent, 0), 100)}%`,
-                  backgroundColor:
-                    targetPercent >= 80
-                      ? '#107E3E'
-                      : targetPercent >= 50
-                      ? '#DF6E0C'
-                      : '#BB0000',
+                  backgroundColor: progressColor(targetPercent),
                 },
               ]}
             />
           </View>
-          {targetText && (
-            <Text style={styles.targetText}>{targetText}</Text>
-          )}
+          {targetText && <Text style={[styles.targetText, { color: colors.textSecondary }]}>{targetText}</Text>}
         </View>
       )}
 
       {/* Sub-Metrics Footer Strip */}
       {metrics && metrics.length > 0 && (
-        <View style={styles.metricsFooter}>
+        <View style={[styles.metricsFooter, { borderTopColor: colors.border }]}>
           {metrics.map((m, idx) => (
             <View key={idx} style={styles.metricCol}>
-              <Text style={styles.metricLabel}>{m.label}</Text>
-              <Text
-                style={[
-                  styles.metricValue,
-                  m.semanticColor ? { color: m.semanticColor } : null,
-                ]}
-              >
-                {m.value}
-              </Text>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{m.label}</Text>
+              <Text style={[styles.metricValue, { color: m.semanticColor || colors.text }]}>{m.value}</Text>
             </View>
           ))}
         </View>
@@ -135,20 +124,16 @@ export type SAPAnalyticalCardProps = AnalyticalCardProps;
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
     padding: 16,
     ...Platform.select({
-      web: {
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-      },
+      web: { boxShadow: '0 1px 2px rgba(15,23,42,0.06)' },
       default: {
-        shadowColor: '#000',
+        shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 3,
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
         elevation: 2,
       },
     }),
@@ -162,25 +147,21 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#64748B',
     letterSpacing: 0.8,
     marginBottom: 2,
   },
   kpiTitleText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
     letterSpacing: -0.2,
   },
   actionArrow: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
   mainValRow: {
     flexDirection: 'row',
@@ -196,13 +177,11 @@ const styles = StyleSheet.create({
   kpiValueText: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#0F172A',
     letterSpacing: -0.5,
   },
   unitText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
   },
   trendBadge: {
     flexDirection: 'row',
@@ -210,7 +189,7 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   trendText: {
     fontSize: 11,
@@ -221,18 +200,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   progressBarTrack: {
-    height: 4,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: 3,
   },
   targetText: {
     fontSize: 11,
-    color: '#64748B',
     fontWeight: '500',
   },
   metricsFooter: {
@@ -241,21 +218,18 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
   },
   metricCol: {
     flex: 1,
   },
   metricLabel: {
     fontSize: 10,
-    color: '#64748B',
     fontWeight: '600',
     textTransform: 'uppercase',
   },
   metricValue: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#0F172A',
     marginTop: 2,
   },
 });

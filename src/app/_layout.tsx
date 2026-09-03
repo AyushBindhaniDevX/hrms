@@ -12,6 +12,8 @@ import { TenantProvider } from '@/context/TenantContext';
 import { SessionManager } from '@/components/auth/SessionManager';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { ForcePasswordChangeModal } from '@/components/auth/ForcePasswordChangeModal';
+import { GluestackUIProvider } from '@gluestack-ui/themed';
+import { config } from '@gluestack-ui/config';
 
 // Prevent native splash screen from auto hiding until initialization is complete
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -51,24 +53,26 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <BottomSheetModalProvider>
-            <AuthProvider>
-              <TenantProvider>
-                <NotificationProvider>
-                  <AuthLayoutWrapper>
-                    <SessionManager>
-                      <Stack screenOptions={{ headerShown: false }}>
-                        <Stack.Screen name="index" />
-                        <Stack.Screen name="careers" />
-                        <Stack.Screen name="(auth)" />
-                        <Stack.Screen name="(employee)" />
-                        <Stack.Screen name="(hr)" />
-                        <Stack.Screen name="(admin)" />
-                      </Stack>
-                    </SessionManager>
-                  </AuthLayoutWrapper>
-                </NotificationProvider>
-              </TenantProvider>
-            </AuthProvider>
+            <GluestackUIProvider config={config}>
+              <AuthProvider>
+                <TenantProvider>
+                  <NotificationProvider>
+                    <AuthLayoutWrapper>
+                      <SessionManager>
+                        <Stack screenOptions={{ headerShown: false }}>
+                          <Stack.Screen name="index" />
+                          <Stack.Screen name="careers" />
+                          <Stack.Screen name="(auth)" />
+                          <Stack.Screen name="(employee)" />
+                          <Stack.Screen name="(hr)" />
+                          <Stack.Screen name="(admin)" />
+                        </Stack>
+                      </SessionManager>
+                    </AuthLayoutWrapper>
+                  </NotificationProvider>
+                </TenantProvider>
+              </AuthProvider>
+            </GluestackUIProvider>
           </BottomSheetModalProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

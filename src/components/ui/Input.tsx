@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, TextInput, Text, StyleSheet, type TextInputProps } from 'react-native';
+import { View, TextInput, Text, StyleSheet, type TextInputProps, Animated, Platform } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
+import { BorderRadius } from '@/constants/theme';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -20,12 +21,11 @@ export function Input({ label, error, icon, rightElement, style, onFocus, onBlur
         style={[
           styles.inputWrapper,
           {
-            backgroundColor: colors.surface,
-            borderColor: error ? colors.danger : (isFocused ? colors.primary : colors.border),
-            borderWidth: isFocused || error ? 2 : 1,
-            paddingLeft: isFocused || error ? 11 : 12,
-            paddingRight: rightElement ? 0 : (isFocused || error ? 11 : 12),
-            overflow: 'hidden',
+            backgroundColor: isFocused ? colors.surface : colors.backgroundElement,
+            borderColor: error ? colors.danger : (isFocused ? colors.primary : 'transparent'),
+            borderWidth: isFocused || error ? 1.5 : 1,
+            paddingLeft: isFocused || error ? 15 : 16,
+            paddingRight: rightElement ? 0 : (isFocused || error ? 15 : 16),
           },
         ]}
       >
@@ -37,6 +37,7 @@ export function Input({ label, error, icon, rightElement, style, onFocus, onBlur
             { color: colors.text },
             icon ? { paddingLeft: 0 } : null,
             style,
+            Platform.OS === 'web' && { outlineStyle: 'none' } as any
           ]}
           onFocus={(e) => {
             setIsFocused(true);
@@ -57,31 +58,34 @@ export function Input({ label, error, icon, rightElement, style, onFocus, onBlur
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20, // slightly more spacing for MD
+    marginBottom: 24, // slightly more spacing for modern layouts
   },
   label: {
-    fontSize: 12, // smaller floating label style
-    fontWeight: '500',
-    marginBottom: 4,
+    fontSize: 13, // slightly larger floating label style
+    fontWeight: '600',
+    marginBottom: 8,
     marginLeft: 4,
+    letterSpacing: 0.2,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 4, // MD standard border radius
-    height: 52, // Taller touch target for MD
+    borderRadius: BorderRadius.lg, // MD standard border radius
+    height: 56, // Taller touch target for modern mobile
+    overflow: 'hidden',
   },
   icon: {
-    marginRight: 8,
+    marginRight: 12,
   },
   input: {
     flex: 1,
-    fontSize: 16, // larger text
+    fontSize: 16,
     height: '100%',
   },
   error: {
     fontSize: 12,
-    marginTop: 4,
+    marginTop: 6,
     marginLeft: 4,
+    fontWeight: '500',
   },
 });

@@ -198,8 +198,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
           edges={['top']}
           style={{
             backgroundColor: pathname.includes('dashboard')
-              ? (effectiveRole === 'admin' ? '#0F172A' : effectiveRole === 'hr' ? '#1E3A5F' : '#0D7377')
-              : '#FFFFFF'
+              ? (effectiveRole === 'admin' ? '#0F172A' : effectiveRole === 'hr' ? '#1E293B' : colors.primary)
+              : colors.surface
           }}
         />
 
@@ -222,17 +222,19 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                   style={styles.tabBtn}
                   activeOpacity={0.75}
                 >
-                  <View style={[styles.tabIconContainer, active && styles.tabIconContainerActive]}>
+                  <View style={[styles.tabIconContainer, active && { backgroundColor: colors.primaryLight }]}>
                     <IconComp
                       size={20}
-                      color={active ? '#0D7377' : '#64748B'}
+                      color={active ? colors.primary : colors.textSecondary}
                       strokeWidth={active ? 2.5 : 2}
                     />
                   </View>
                   <Text
                     style={[
                       styles.tabLabel,
-                      active ? styles.tabLabelActive : styles.tabLabelInactive,
+                      active
+                        ? [styles.tabLabelActive, { color: colors.primary }]
+                        : styles.tabLabelInactive,
                     ]}
                     numberOfLines={1}
                   >
@@ -248,17 +250,19 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               style={styles.tabBtn}
               activeOpacity={0.75}
             >
-              <View style={[styles.tabIconContainer, showMoreSheet && styles.tabIconContainerActive]}>
+              <View style={[styles.tabIconContainer, showMoreSheet && { backgroundColor: colors.primaryLight }]}>
                 <Grid
                   size={20}
-                  color={showMoreSheet ? '#0D7377' : '#64748B'}
+                  color={showMoreSheet ? colors.primary : colors.textSecondary}
                   strokeWidth={showMoreSheet ? 2.5 : 2}
                 />
               </View>
               <Text
                 style={[
                   styles.tabLabel,
-                  showMoreSheet ? styles.tabLabelActive : styles.tabLabelInactive,
+                  showMoreSheet
+                    ? [styles.tabLabelActive, { color: colors.primary }]
+                    : styles.tabLabelInactive,
                 ]}
                 numberOfLines={1}
               >
@@ -341,19 +345,19 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                         <View
                           style={[
                             styles.appIconCircle,
-                            active && { backgroundColor: '#CCECEC', borderColor: '#0D7377' },
+                            active && { backgroundColor: colors.accentLight, borderColor: colors.primary },
                           ]}
                         >
                           <IconComponent
                             size={22}
-                            color={active ? '#0D7377' : '#1E293B'}
+                            color={active ? colors.primary : colors.text}
                             strokeWidth={active ? 2.5 : 2}
                           />
                         </View>
                         <Text
                           style={[
                             styles.appGridLabel,
-                            active && { color: '#0D7377', fontWeight: '800' },
+                            active && { color: colors.primary, fontWeight: '800' },
                           ]}
                           numberOfLines={2}
                         >
@@ -636,14 +640,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   tabIconContainerActive: {
-    backgroundColor: '#E6F4F4',
+    backgroundColor: '#F0FDFA',
   },
   tabLabel: {
     fontSize: 10,
     marginTop: 2,
   },
   tabLabelActive: {
-    color: '#0D7377',
+    color: '#0F766E',
     fontWeight: '800',
   },
   tabLabelInactive: {
@@ -802,7 +806,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 10,
     marginTop: 20,
-    shadowColor: '#0D7377',
+    shadowColor: '#0F766E',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -903,10 +907,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#0D7377',
+    backgroundColor: '#0F766E',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#0D7377',
+    shadowColor: '#0F766E',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,

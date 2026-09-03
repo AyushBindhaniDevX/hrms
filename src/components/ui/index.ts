@@ -7,6 +7,9 @@ export * from './HeroBalanceCard';
 export * from './ActivityCard';
 export * from './AnalyticalCard';
 export * from './ObjectHeader';
+export * from './ScreenHeader';
+export * from './Section';
+export * from './Typo';
 export * from './Modal';
 export * from './Input';
 export * from './Select';
@@ -15,7 +18,7 @@ export * from './ConfirmDialog';
 export * from './SubedgeBrand';
 export * from './States';
 
-// Universal @expo/ui components
+// Universal components
 export {
   Host,
   RNHostView,

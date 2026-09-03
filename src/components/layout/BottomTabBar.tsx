@@ -29,6 +29,7 @@ import Animated, {
   FadeIn,
   FadeOut,
 } from 'react-native-reanimated';
+import { useTheme } from '@/hooks/use-theme';
 
 const TABS = [
   { key: 'home', label: 'Home', icon: LayoutDashboard, href: '/(employee)/dashboard' },
@@ -66,6 +67,7 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
   const pathname = usePathname();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const colors = useTheme();
   const [moreOpen, setMoreOpen] = useState(false);
 
   // On desktop, just render children (sidebar handles nav)
@@ -89,7 +91,7 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>{children}</View>
 
       {/* More Menu Overlay */}
@@ -100,18 +102,21 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
           style={styles.moreOverlay}
         >
           <TouchableOpacity
-            style={styles.moreBackdrop}
+            style={[styles.moreBackdrop, { backgroundColor: colors.overlay }]}
             activeOpacity={1}
             onPress={() => setMoreOpen(false)}
           />
           <Animated.View
             entering={FadeInDown.duration(300).springify()}
-            style={styles.moreSheet}
+            style={[styles.moreSheet, { backgroundColor: colors.surface }]}
           >
             <View style={styles.moreHeader}>
-              <Text style={styles.moreTitle}>More</Text>
-              <TouchableOpacity onPress={() => setMoreOpen(false)} style={styles.moreCloseBtn}>
-                <X size={20} color="#64748B" />
+              <Text style={[styles.moreTitle, { color: colors.text }]}>More</Text>
+              <TouchableOpacity
+                onPress={() => setMoreOpen(false)}
+                style={[styles.moreCloseBtn, { backgroundColor: colors.backgroundElement }]}
+              >
+                <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <View style={styles.moreGrid}>
@@ -121,14 +126,25 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
                 return (
                   <TouchableOpacity
                     key={item.label}
-                    style={[styles.moreItem, isActive && styles.moreItemActive]}
+                    style={[styles.moreItem, isActive && { backgroundColor: colors.primaryLight }]}
                     onPress={() => handleMoreItemPress(item.href)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.moreItemIcon, isActive && styles.moreItemIconActive]}>
-                      <Icon size={22} color={isActive ? '#006a61' : '#64748B'} />
+                    <View
+                      style={[
+                        styles.moreItemIcon,
+                        { backgroundColor: isActive ? colors.accentLight : colors.backgroundElement },
+                      ]}
+                    >
+                      <Icon size={22} color={isActive ? colors.primary : colors.textSecondary} />
                     </View>
-                    <Text style={[styles.moreItemLabel, isActive && styles.moreItemLabelActive]}>
+                    <Text
+                      style={[
+                        styles.moreItemLabel,
+                        { color: isActive ? colors.primary : colors.textSecondary },
+                        isActive && styles.moreItemLabelActive,
+                      ]}
+                    >
                       {item.label}
                     </Text>
                   </TouchableOpacity>
@@ -140,7 +156,12 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
       )}
 
       {/* Bottom Tab Bar */}
-      <View style={styles.tabBar}>
+      <View
+        style={[
+          styles.tabBar,
+          { backgroundColor: colors.surface, borderTopColor: colors.border },
+        ]}
+      >
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;
           const Icon = tab.icon;
@@ -151,14 +172,25 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
               style={styles.tab}
               activeOpacity={0.7}
             >
-              <View style={[styles.tabIndicator, isActive && styles.tabIndicatorActive]}>
+              <View
+                style={[
+                  styles.tabIndicator,
+                  isActive && { backgroundColor: colors.primaryLight },
+                ]}
+              >
                 <Icon
                   size={22}
-                  color={isActive ? '#006a61' : '#94A3B8'}
+                  color={isActive ? colors.primary : colors.textTertiary}
                   strokeWidth={isActive ? 2.5 : 1.8}
                 />
               </View>
-              <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+              <Text
+                style={[
+                  styles.tabLabel,
+                  { color: isActive ? colors.primary : colors.textTertiary },
+                  isActive && styles.tabLabelActive,
+                ]}
+              >
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -172,7 +204,6 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   content: {
     flex: 1,
@@ -181,17 +212,15 @@ const styles = StyleSheet.create({
   // Tab Bar
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     paddingBottom: Platform.OS === 'ios' ? 20 : 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
     ...Platform.select({
-      web: { boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.04)' },
+      web: { boxShadow: '0 -4px 20px rgba(15, 23, 42, 0.05)' },
       default: {
-        shadowColor: '#000',
+        shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.04,
+        shadowOpacity: 0.05,
         shadowRadius: 12,
         elevation: 8,
       },
@@ -209,17 +238,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabIndicatorActive: {
-    backgroundColor: '#E6F4F4',
-  },
   tabLabel: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#94A3B8',
     letterSpacing: 0.1,
   },
   tabLabelActive: {
-    color: '#006a61',
     fontWeight: '700',
   },
 
@@ -230,21 +254,19 @@ const styles = StyleSheet.create({
   },
   moreBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   moreSheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: Platform.OS === 'ios' ? 34 : 24,
     ...Platform.select({
-      web: { boxShadow: '0 -8px 30px rgba(0, 0, 0, 0.12)' },
+      web: { boxShadow: '0 -8px 30px rgba(15, 23, 42, 0.14)' },
       default: {
-        shadowColor: '#000',
+        shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: -8 },
         shadowOpacity: 0.12,
         shadowRadius: 20,
@@ -263,14 +285,12 @@ const styles = StyleSheet.create({
   moreTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#0F172A',
     letterSpacing: -0.3,
   },
   moreCloseBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -286,29 +306,20 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
   },
-  moreItemActive: {
-    backgroundColor: '#E6F4F4',
-  },
   moreItemIcon: {
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
-  moreItemIconActive: {
-    backgroundColor: '#CCE9E7',
-  },
   moreItemLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#64748B',
     textAlign: 'center',
   },
   moreItemLabelActive: {
-    color: '#006a61',
     fontWeight: '700',
   },
 });

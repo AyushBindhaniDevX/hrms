@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Badge } from './Badge';
+import { useTheme } from '@/hooks/use-theme';
 
 interface AttributeItem {
   label: string;
@@ -37,6 +38,8 @@ export function ObjectHeader({
   kpi,
   actions,
 }: ObjectHeaderProps) {
+  const colors = useTheme();
+
   const getBadgeVariant = (
     state?: 'success' | 'warning' | 'error' | 'neutral' | 'info'
   ) => {
@@ -48,21 +51,37 @@ export function ObjectHeader({
       case 'error':
         return 'dangerLight';
       case 'info':
-        return 'accentLight';
+        return 'infoLight';
       default:
-        return 'default';
+        return 'neutral';
     }
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+      ]}
+    >
       <View style={styles.mainRow}>
-        {icon && <View style={styles.iconWrap}>{icon}</View>}
+        {icon && (
+          <View
+            style={[
+              styles.iconWrap,
+              { backgroundColor: colors.primaryLight, borderColor: colors.accentLight },
+            ]}
+          >
+            {icon}
+          </View>
+        )}
 
         <View style={styles.titleArea}>
-          {intro && <Text style={styles.introText}>{intro.toUpperCase()}</Text>}
+          {intro && (
+            <Text style={[styles.introText, { color: colors.primary }]}>{intro.toUpperCase()}</Text>
+          )}
           <View style={styles.titleRow}>
-            <Text style={styles.titleText}>{title}</Text>
+            <Text style={[styles.titleText, { color: colors.text }]}>{title}</Text>
             {status && (
               <Badge
                 label={status.label}
@@ -70,31 +89,31 @@ export function ObjectHeader({
               />
             )}
           </View>
-          {subtitle && <Text style={styles.subtitleText}>{subtitle}</Text>}
+          {subtitle && <Text style={[styles.subtitleText, { color: colors.textSecondary }]}>{subtitle}</Text>}
         </View>
 
         {actions && <View style={styles.actionsArea}>{actions}</View>}
       </View>
 
       {(attributes || kpi) && (
-        <View style={styles.footerRow}>
+        <View style={[styles.footerRow, { borderTopColor: colors.border }]}>
           {attributes && (
             <View style={styles.attributesGrid}>
               {attributes.map((attr, idx) => (
                 <View key={idx} style={styles.attrItem}>
-                  <Text style={styles.attrLabel}>{attr.label}:</Text>
-                  <Text style={styles.attrValue}>{attr.value}</Text>
+                  <Text style={[styles.attrLabel, { color: colors.textSecondary }]}>{attr.label}:</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{attr.value}</Text>
                 </View>
               ))}
             </View>
           )}
 
           {kpi && (
-            <View style={styles.kpiContainer}>
-              <Text style={styles.kpiLabel}>{kpi.label}</Text>
-              <Text style={styles.kpiValue}>{kpi.value}</Text>
+            <View style={[styles.kpiContainer, { borderLeftColor: colors.border }]}>
+              <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>{kpi.label}</Text>
+              <Text style={[styles.kpiValue, { color: colors.primary }]}>{kpi.value}</Text>
               {kpi.subValue && (
-                <Text style={styles.kpiSubValue}>{kpi.subValue}</Text>
+                <Text style={[styles.kpiSubValue, { color: colors.success }]}>{kpi.subValue}</Text>
               )}
             </View>
           )}
@@ -110,21 +129,19 @@ export type SAPObjectHeaderProps = ObjectHeaderProps;
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
     padding: 18,
     marginBottom: 16,
     ...Platform.select({
       web: {
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
       },
       default: {
-        shadowColor: '#000',
+        shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 3,
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
         elevation: 2,
       },
     }),
@@ -137,12 +154,10 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 48,
     height: 48,
-    borderRadius: 12,
-    backgroundColor: '#EDF8F6',
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#CCECE7',
   },
   titleArea: {
     flex: 1,
@@ -151,7 +166,6 @@ const styles = StyleSheet.create({
   introText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#006a61',
     letterSpacing: 0.8,
   },
   titleRow: {
@@ -163,12 +177,10 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#0F172A',
     letterSpacing: -0.3,
   },
   subtitleText: {
     fontSize: 13,
-    color: '#64748B',
     marginTop: 2,
   },
   actionsArea: {
@@ -183,7 +195,6 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
     gap: 16,
     flexWrap: 'wrap',
   },
@@ -200,34 +211,28 @@ const styles = StyleSheet.create({
   },
   attrLabel: {
     fontSize: 12,
-    color: '#64748B',
     fontWeight: '600',
   },
   attrValue: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#0F172A',
   },
   kpiContainer: {
     alignItems: 'flex-end',
     paddingLeft: 12,
     borderLeftWidth: 1,
-    borderLeftColor: '#E2E8F0',
   },
   kpiLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#64748B',
     textTransform: 'uppercase',
   },
   kpiValue: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#006a61',
   },
   kpiSubValue: {
     fontSize: 11,
-    color: '#107E3E',
     fontWeight: '600',
   },
 });

@@ -52,6 +52,7 @@ import {
 } from 'lucide-react-native';
 import { MONTHS } from '@/constants/config';
 import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
+import { RegularizationModal } from '@/components/attendance/RegularizationModal';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { DEFAULT_SUBEDGE_LOGO as SUBEDGE_LOGO } from '@/components/ui/SubedgeBrand';
 
@@ -81,6 +82,10 @@ export default function AttendanceScreen() {
   const [faceModalType, setFaceModalType] = useState<'in' | 'out'>('in');
   const [pendingLoc, setPendingLoc] = useState<{ latitude: number; longitude: number }>({ latitude: 0, longitude: 0 });
   const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'late' | 'absent'>('all');
+
+  // Attendance Regularization Modal
+  const [showRegularize, setShowRegularize] = useState(false);
+  const [regularizeDate, setRegularizeDate] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!profile) return;
@@ -420,6 +425,21 @@ export default function AttendanceScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+
+          {/* ── Regularize CTA ── */}
+          <View style={{ paddingHorizontal: 20, marginTop: 14 }}>
+            <TouchableOpacity
+              onPress={() => {
+                setRegularizeDate(null);
+                setShowRegularize(true);
+              }}
+              activeOpacity={0.85}
+              style={mAttStyles.regularizeBtn}
+            >
+              <CalendarClock size={16} color="#006a61" />
+              <Text style={mAttStyles.regularizeBtnText}>Request Attendance Regularization</Text>
+            </TouchableOpacity>
           </View>
 
           {/* ── Attendance History Cards ── */}

@@ -149,11 +149,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             imageUrl: authUser.user_metadata?.avatar_url || null,
             user_metadata: authUser.user_metadata,
           };
-          setUser(appUser);
 
           const prof = await syncProfileForAuthUser(authUser);
           if (isMounted) {
             setProfile(prof);
+            setUser(appUser);
 
             if (prof && loggedInUserIdRef.current !== prof.id) {
               loggedInUserIdRef.current = prof.id;
@@ -196,11 +196,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             imageUrl: authUser.user_metadata?.avatar_url || null,
             user_metadata: authUser.user_metadata,
           };
-          setUser(appUser);
 
           const prof = await syncProfileForAuthUser(authUser);
           if (isMounted) {
             setProfile(prof);
+            setUser(appUser);
           }
         }
       } else if (event === 'SIGNED_OUT') {
@@ -239,9 +239,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             imageUrl: data.user.user_metadata?.avatar_url || null,
             user_metadata: data.user.user_metadata,
           };
-          setUser(appUser);
           const prof = await syncProfileForAuthUser(data.user);
           setProfile(prof);
+          setUser(appUser);
         }
       } catch (err: any) {
         if (err.message === 'Network request failed' || err?.toString?.().includes('Network request failed')) {

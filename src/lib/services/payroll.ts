@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { getEmployees } from './employee';
+import { MONTHS } from '@/constants/config';
 import type { PayrollPeriod, Payroll, Payslip, Employee } from '@/types';
 
 export async function getPayslips(employeeId: string): Promise<Payslip[]> {
@@ -234,7 +235,31 @@ export async function calculateStatutoryForEmployee(
 }
 
 export async function createPayrollPeriod(month: number, year: number, orgId: string): Promise<PayrollPeriod> {
+  if (!orgId) {
+    throw new Error(
+      'No organization is linked to your account, so payroll cannot be generated. Please contact your administrator.'
+    );
+  }
+  if (!month || month < 1 || month > 12) {
+    throw new Error('Please choose a valid month before generating payroll.');
+  }
+
   const now = new Date().toISOString();
+
+  // 0. Prevent duplicate periods for the same month/year/org (avoids silent unique-constraint failures)
+  const { data: existingPeriod } = await supabase
+    .from('payroll_periods')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('month', month)
+    .eq('year', year)
+    .maybeSingle();
+
+  if (existingPeriod) {
+    throw new Error(
+      `A payroll period for ${MONTHS[month - 1]} ${year} already exists. Open it from the list to continue.`
+    );
+  }
 
   // 1. Create payroll period
   const { data: period, error: periodErr } = await supabase
@@ -250,34 +275,48 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
     .select('*')
     .single();
 
-  if (periodErr) throw periodErr;
+  if (periodErr || !period) {
+    throw new Error(`Could not create the payroll period: ${periodErr?.message || 'unknown error'}`);
+  }
 
   // 2. Fetch active employees for this organization
   const employees = await getEmployees({ organization_id: orgId, employment_status: 'active' });
 
-  // 3. Generate draft payroll entries reflecting all enrolled PF, TDS, HRA & PT details
-  if (employees && employees.length > 0) {
-    const entries = await Promise.all(
-      employees.map(async (emp) => {
-        const breakdown = await calculateStatutoryForEmployee(emp, month, year);
-        return {
-          payroll_period_id: period.id,
-          employee_id: emp.id,
-          basic_salary: breakdown.basic_salary,
-          allowances: breakdown.allowances,
-          deductions: breakdown.deductions,
-          lop_days: breakdown.lop_days,
-          lop_amount: breakdown.lop_amount,
-          gross_salary: breakdown.gross_salary,
-          net_salary: breakdown.net_salary,
-          status: 'draft',
-          created_at: now,
-          updated_at: now,
-        };
-      })
+  if (!employees || employees.length === 0) {
+    // Roll back the empty period so the user can retry cleanly once employees exist.
+    await supabase.from('payroll_periods').delete().eq('id', period.id);
+    throw new Error(
+      'No active employees were found for this organization, so there is nothing to generate. Add employees first, then try again.'
     );
+  }
 
-    await supabase.from('payroll').insert(entries);
+  // 3. Generate draft payroll entries reflecting all enrolled PF, TDS, HRA & PT details
+  const entries = await Promise.all(
+    employees.map(async (emp) => {
+      const breakdown = await calculateStatutoryForEmployee(emp, month, year);
+      return {
+        payroll_period_id: period.id,
+        employee_id: emp.id,
+        basic_salary: breakdown.basic_salary,
+        allowances: breakdown.allowances,
+        deductions: breakdown.deductions,
+        lop_days: breakdown.lop_days,
+        lop_amount: breakdown.lop_amount,
+        gross_salary: breakdown.gross_salary,
+        net_salary: breakdown.net_salary,
+        status: 'draft',
+        created_at: now,
+        updated_at: now,
+      };
+    })
+  );
+
+  const { error: entriesErr } = await supabase.from('payroll').insert(entries);
+  if (entriesErr) {
+    // Roll back the period + any partial entries so the state stays consistent and retryable.
+    await supabase.from('payroll').delete().eq('payroll_period_id', period.id);
+    await supabase.from('payroll_periods').delete().eq('id', period.id);
+    throw new Error(`Payroll entries could not be generated: ${entriesErr.message}`);
   }
 
   return period as PayrollPeriod;

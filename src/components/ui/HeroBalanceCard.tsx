@@ -39,7 +39,7 @@ export function HeroBalanceCard({
           {title}
         </Text>
         {badge ? (
-          <View style={[styles.badgePill, { backgroundColor: badgeColor ? `${badgeColor}15` : '#EDF8F6' }]}>
+          <View style={[styles.badgePill, { backgroundColor: badgeColor ? `${badgeColor}15` : colors.primaryLight }]}>
             <Text style={[styles.badgeText, { color: badgeColor || colors.primary }]}>
               {badge}
             </Text>
@@ -51,10 +51,10 @@ export function HeroBalanceCard({
         {primaryValue}
       </Text>
 
-      <View style={[styles.balanceStats, { borderTopColor: '#F1F5F9' }]}>
+      <View style={[styles.balanceStats, { borderTopColor: colors.border }]}>
         {stats.map((item, index) => (
           <React.Fragment key={index}>
-            {index > 0 && <View style={[styles.statDivider, { borderColor: '#E2E8F0' }]} />}
+            {index > 0 && <View style={[styles.statDivider, { borderColor: colors.border }]} />}
             <View style={styles.balanceStatItem}>
               <Text style={[styles.balanceStatLabel, { color: colors.textSecondary }]}>
                 {item.label}
@@ -80,17 +80,17 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 22,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: 'transparent',
     ...Platform.select({
       web: {
-        boxShadow: '0 6px 16px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.02)',
+        boxShadow: '0 4px 12px -2px rgba(15,23,42,0.08), 0 2px 4px -2px rgba(15,23,42,0.04)',
       },
       default: {
         elevation: 3,
-        shadowColor: '#000',
+        shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 5,
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
       },
     }),
   },

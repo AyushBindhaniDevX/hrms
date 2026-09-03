@@ -211,7 +211,9 @@ export default function PayrollDetailScreen() {
       });
       setEditingEntry(null);
       await load();
-    } catch {}
+    } catch (e: any) {
+      setError(e?.message || 'Could not save changes to this payroll entry.');
+    }
     setAdding(false);
   };
 
@@ -255,7 +257,9 @@ export default function PayrollDetailScreen() {
       });
       setShowAdd(false);
       await load();
-    } catch {}
+    } catch (e: any) {
+      setError(e?.message || 'Could not add this payroll entry.');
+    }
     setAdding(false);
   };
 
@@ -274,19 +278,25 @@ export default function PayrollDetailScreen() {
 
   const handleProcess = async () => {
     setProcessing(true);
+    setError(null);
     try {
       await processPayrollPeriod(id!);
       await load();
-    } catch {}
+    } catch (e: any) {
+      setError(e?.message || 'Could not finalize this payroll period.');
+    }
     setProcessing(false);
   };
 
   const handleDistribute = async () => {
     setDistributing(true);
+    setError(null);
     try {
       await distributePayroll(id!, period!.month, period!.year);
       await load();
-    } catch {}
+    } catch (e: any) {
+      setError(e?.message || 'Could not distribute payslips for this period.');
+    }
     setDistributing(false);
   };
 
@@ -363,6 +373,16 @@ export default function PayrollDetailScreen() {
             )}
           </View>
         </View>
+
+        {/* ── Inline Error Banner ─────────────────────────────────────────── */}
+        {error ? (
+          <View style={{ backgroundColor: colors.dangerLight, borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={{ flex: 1, color: colors.danger, fontSize: 13, fontWeight: '600' }}>{error}</Text>
+            <TouchableOpacity onPress={() => setError(null)}>
+              <Text style={{ color: colors.danger, fontWeight: '800', fontSize: 13 }}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ── Summary KPI Cards ───────────────────────────────────────────── */}
         <View style={styles.kpiGrid}>
@@ -561,7 +581,7 @@ export default function PayrollDetailScreen() {
           <View style={[styles.batchActionsRow, { borderTopColor: '#f1f5f9' }]}>
             {period?.status === 'open' && (
               <TouchableOpacity
-                style={[styles.processBatchBtn, { backgroundColor: '#006a61' }]}
+                style={[styles.processBatchBtn, { backgroundColor: colors.primary }]}
                 onPress={handleProcess}
                 disabled={processing || entries.length === 0}
               >

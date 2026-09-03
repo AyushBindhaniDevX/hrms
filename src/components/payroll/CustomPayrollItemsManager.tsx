@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { formatCurrency } from '@/utils/format';
 import type { CustomPayrollItem } from '@/types';
-import { Plus, Trash2 } from 'lucide-react-native';
+import { Plus, Trash2, Layers } from 'lucide-react-native';
 
 interface CustomPayrollItemsManagerProps {
   items: CustomPayrollItem[];

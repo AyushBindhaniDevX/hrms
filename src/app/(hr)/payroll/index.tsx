@@ -31,6 +31,7 @@ export default function PayrollScreen() {
   const [newMonth, setNewMonth] = useState<string | null>(null);
   const [newYear, setNewYear] = useState(String(new Date().getFullYear()));
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,15 +50,28 @@ export default function PayrollScreen() {
   useEffect(() => { load(); }, [load]);
 
   const handleCreate = async () => {
-    if (!newMonth) return;
+    if (!newMonth) {
+      setCreateError('Please select a month.');
+      return;
+    }
     setCreating(true);
+    setCreateError(null);
     try {
       const orgId = tenantOrg?.id || profile?.organization_id || '';
       await createPayrollPeriod(parseInt(newMonth), parseInt(newYear), orgId);
       setShowCreate(false);
+      setNewMonth(null);
       await load();
-    } catch {}
-    setCreating(false);
+    } catch (err: any) {
+      setCreateError(err?.message || 'Payroll could not be generated. Please try again.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const closeCreate = () => {
+    setShowCreate(false);
+    setCreateError(null);
   };
 
   const statusVariant = (s: string) => {
@@ -103,7 +117,7 @@ export default function PayrollScreen() {
         />
         )}
 
-        <Modal visible={showCreate} onClose={() => setShowCreate(false)} title="New Payroll Period">
+        <Modal visible={showCreate} onClose={closeCreate} title="New Payroll Period">
           <Select
             label="Month"
             options={MONTHS.map((m, i) => ({ label: m, value: String(i + 1) }))}
@@ -111,6 +125,11 @@ export default function PayrollScreen() {
             onValueChange={setNewMonth}
           />
           <Input label="Year" value={newYear} onChangeText={setNewYear} keyboardType="numeric" />
+          {createError ? (
+            <View style={{ backgroundColor: colors.dangerLight, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <Text style={{ color: colors.danger, fontSize: 13, fontWeight: '600' }}>{createError}</Text>
+            </View>
+          ) : null}
           <Button title="Create Period" onPress={handleCreate} loading={creating} />
         </Modal>
       </View>

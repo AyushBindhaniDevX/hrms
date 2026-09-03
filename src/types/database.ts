@@ -12,6 +12,7 @@ export interface Organization {
   name: string;
   slug?: string | null;
   logo_url?: string | null;
+  primary_color?: string | null;
   package_type?: 'basic' | 'silver' | 'gold';
   settings: Record<string, unknown>;
   created_at: string;
@@ -202,6 +203,26 @@ export interface LeaveRequest {
   leave_type?: LeaveType;
   employee?: Employee;
   reviewer?: Profile;
+}
+
+export interface AttendanceRegularization {
+  id: string;
+  employee_id: string;
+  organization_id: string | null;
+  attendance_id: string | null;
+  date: string; // YYYY-MM-DD
+  requested_clock_in: string | null;
+  requested_clock_out: string | null;
+  requested_status: AttendanceStatus | null;
+  reason: string;
+  status: LeaveRequestStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  employee?: Employee;
 }
 
 export interface PayrollPeriod {

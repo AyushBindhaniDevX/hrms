@@ -11,7 +11,7 @@ import { getDirectory, getDepartments } from '@/lib/services/employee';
 import type { Employee, Department } from '@/types';
 import { Mail, MessageSquare, Search, Users, Phone, Building, Briefcase, MapPin, Calendar, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-
+import { FlashList } from '@shopify/flash-list';
 export default function DirectoryScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
@@ -158,60 +158,66 @@ export default function DirectoryScreen() {
           </Text>
         </View>
       ) : (
-        <View style={styles.grid}>
-          {employees.map(emp => (
-            <TouchableOpacity
-              key={emp.id}
-              activeOpacity={0.85}
-              onPress={() => setSelectedEmp(emp)}
-              style={[
-                styles.card,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.avatarContainer}>
-                <Avatar name={emp.profile?.full_name || emp.employee_code || ''} url={emp.profile?.avatar_url} size={72} />
-                <View style={[styles.statusDot, { backgroundColor: '#1E8E3E', borderColor: colors.surface }]} />
-              </View>
-
-              <View style={styles.infoContainer}>
-                <Text style={[styles.empName, { color: colors.text }]} numberOfLines={1}>
-                  {emp.profile?.full_name || 'Team Member'}
-                </Text>
-                <Text style={[styles.empRole, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {emp.designation || 'Employee'}
-                </Text>
-                <View style={[styles.deptPill, { backgroundColor: colors.primary + '15' }]}>
-                  <Text style={[styles.deptText, { color: colors.primary }]} numberOfLines={1}>
-                    {emp.department?.name || 'General'}
-                  </Text>
-                </View>
-              </View>
-
-              {emp.profile?.email && (
-                <Text style={[styles.email, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {emp.profile.email}
-                </Text>
-              )}
-
-              <View style={styles.actionsContainer}>
+        <View style={{ flex: 1, minHeight: 600, width: '100%' }}>
+          <FlashList
+            data={employees}
+            numColumns={isDesktop ? 3 : 1}
+            estimatedItemSize={220}
+            renderItem={({ item: emp }) => (
+              <View style={{ flex: 1, padding: 8 }}>
                 <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnOutline, { borderColor: colors.primary }]}
-                  onPress={() => handleEmail(emp.profile?.email)}
+                  activeOpacity={0.85}
+                  onPress={() => setSelectedEmp(emp)}
+                  style={[
+                    styles.card,
+                    { backgroundColor: colors.surface, borderColor: colors.border, width: '100%', minWidth: 'auto' },
+                  ]}
                 >
-                  <Mail size={14} color={colors.primary} />
-                  <Text style={[styles.actionBtnText, { color: colors.primary }]}>Email</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnSolid, { backgroundColor: colors.primary }]}
-                  onPress={() => handleChat(emp)}
-                >
-                  <MessageSquare size={14} color="#FFF" />
-                  <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Chat</Text>
+                  <View style={styles.avatarContainer}>
+                    <Avatar name={emp.profile?.full_name || emp.employee_code || ''} url={emp.profile?.avatar_url} size={72} />
+                    <View style={[styles.statusDot, { backgroundColor: '#1E8E3E', borderColor: colors.surface }]} />
+                  </View>
+
+                  <View style={styles.infoContainer}>
+                    <Text style={[styles.empName, { color: colors.text }]} numberOfLines={1}>
+                      {emp.profile?.full_name || 'Team Member'}
+                    </Text>
+                    <Text style={[styles.empRole, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {emp.designation || 'Employee'}
+                    </Text>
+                    <View style={[styles.deptPill, { backgroundColor: colors.primary + '15' }]}>
+                      <Text style={[styles.deptText, { color: colors.primary }]} numberOfLines={1}>
+                        {emp.department?.name || 'General'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {emp.profile?.email && (
+                    <Text style={[styles.email, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {emp.profile.email}
+                    </Text>
+                  )}
+
+                  <View style={styles.actionsContainer}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionBtnOutline, { borderColor: colors.primary }]}
+                      onPress={() => handleEmail(emp.profile?.email)}
+                    >
+                      <Mail size={14} color={colors.primary} />
+                      <Text style={[styles.actionBtnText, { color: colors.primary }]}>Email</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionBtnSolid, { backgroundColor: colors.primary }]}
+                      onPress={() => handleChat(emp)}
+                    >
+                      <MessageSquare size={14} color="#FFF" />
+                      <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Chat</Text>
+                    </TouchableOpacity>
+                  </View>
                 </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-          ))}
+            )}
+          />
         </View>
       )}
 

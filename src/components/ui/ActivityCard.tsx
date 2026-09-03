@@ -21,7 +21,7 @@ export function ActivityCard({
   subtitle,
   category,
   icon,
-  iconBg = '#F1F5F9',
+  iconBg,
   rightValue,
   rightSub,
   rightValueColor,
@@ -35,11 +35,11 @@ export function ActivityCard({
     <View
       style={[
         styles.card,
-        { backgroundColor: colors.surface },
+        { backgroundColor: colors.surface, borderColor: colors.border },
         style,
       ]}
     >
-      <View style={[styles.iconContainer, { backgroundColor: iconBg }]}>
+      <View style={[styles.iconContainer, { backgroundColor: iconBg || colors.backgroundElement }]}>
         {icon}
       </View>
 
@@ -88,22 +88,21 @@ export function ActivityCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
     ...Platform.select({
       web: {
-        boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.05)',
       },
       default: {
         elevation: 1,
-        shadowColor: '#000',
+        shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
+        shadowOpacity: 0.05,
         shadowRadius: 3,
       },
     }),

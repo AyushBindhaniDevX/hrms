@@ -2,6 +2,10 @@ import { supabase } from '@/lib/supabase';
 import { calculateDistance } from './location';
 import type { Attendance, GeofenceResponse, Employee, Workplace, Profile } from '@/types';
 
+function getLocalYMD(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 async function getEmployeeData(profileId?: string): Promise<{ emp: Employee; wp: Workplace | null } | null> {
   let targetProfileId = profileId;
 
@@ -82,7 +86,7 @@ export async function clockIn(
     isWithinGeofence = distance <= (wp.radius_meters || 200);
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalYMD();
   const now = new Date().toISOString();
   const attendanceId = `${emp.id}_${today}`;
 
@@ -168,7 +172,7 @@ export async function clockOut(
   if (!data) throw new Error('Employee record not found');
   const { emp, wp } = data;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalYMD();
   const now = new Date().toISOString();
   const attendanceId = `${emp.id}_${today}`;
 
@@ -289,7 +293,7 @@ export async function endBreak(attendanceId: string): Promise<boolean> {
 }
 
 export async function getTodayAttendance(employeeId: string): Promise<Attendance | null> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalYMD();
   const attendanceId = `${employeeId}_${today}`;
 
   const { data, error } = await supabase
@@ -346,7 +350,7 @@ export async function getAttendanceHistory(
   for (let i = 0; i < calculatedLimit; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = getLocalYMD(d);
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
     const existingRecord = rawRecords.find((r) => r.date === dateStr);
