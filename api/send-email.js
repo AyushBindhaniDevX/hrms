@@ -42,7 +42,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: from || 'Oasis HRMS <onboarding@resend.dev>',
+        from: from || process.env.EXPO_PUBLIC_RESEND_FROM_EMAIL || 'Oasis HRMS <notifications@subedge.com>',
         to: recipients,
         subject: subject || 'Notification from Oasis HRMS',
         html: html || '<p>Notification from Oasis HRMS</p>',
@@ -51,26 +51,8 @@ export default async function handler(req, res) {
 
     let data = await resendRes.json();
 
-    // If custom domain is not yet verified on Resend (403), fallback to onboarding@resend.dev
-    if (!resendRes.ok && from && !from.includes('resend.dev')) {
-      try {
-        resendRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: 'Oasis HRMS <onboarding@resend.dev>',
-            to: recipients,
-            subject: subject || 'Notification from Oasis HRMS',
-            html: html || '<p>Notification from Oasis HRMS</p>',
-          }),
-        });
-        data = await resendRes.json();
-      } catch (fallbackErr) {
-        console.warn('Fallback send error:', fallbackErr);
-      }
+    if (!resendRes.ok) {
+      console.error('Resend API error:', data);
     }
 
     // Return 200 OK so client UI workflows (e.g. ticket resolution, hiring) never crash

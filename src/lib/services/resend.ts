@@ -22,7 +22,7 @@ export interface EmailLog {
 }
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
-const DEFAULT_FROM = process.env.EXPO_PUBLIC_RESEND_FROM_EMAIL || 'Oasis HRMS <onboarding@resend.dev>';
+const DEFAULT_FROM = process.env.EXPO_PUBLIC_RESEND_FROM_EMAIL || 'Oasis HRMS <notifications@subedge.com>';
 const RESEND_API_KEY = process.env.EXPO_PUBLIC_RESEND_API_KEY;
 
 // Delivery Logs
