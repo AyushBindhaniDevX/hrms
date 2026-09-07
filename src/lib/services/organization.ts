@@ -25,7 +25,8 @@ function generateUuid(): string {
 
 export async function getOrganization(orgId: string): Promise<Organization | null> {
   try {
-    const snap = await getDoc(doc(db, 'organizations', orgId));
+    const targetId = orgId === 'smh' ? 'shanti-memorial-hospital' : orgId;
+    const snap = await getDoc(doc(db, 'organizations', targetId));
     if (!snap.exists()) return null;
     return { id: snap.id, ...snap.data() } as Organization;
   } catch (err) {
@@ -280,6 +281,42 @@ export async function createSystemUser(params: {
       has_employee_record: !!params.create_employee_record,
     });
   } catch (e) {}
+
+  // Dispatch Welcome & Credentials Email to the provisioned user
+  try {
+    const { sendWelcomeEmail } = await import('./resend');
+    let deptName = '';
+    let wpName = '';
+    if (params.department_id) {
+      try {
+        const dSnap = await getDoc(doc(db, 'departments', params.department_id));
+        if (dSnap.exists()) deptName = dSnap.data()?.name || '';
+      } catch (dErr) {}
+    }
+    if (params.workplace_id) {
+      try {
+        const wSnap = await getDoc(doc(db, 'workplaces', params.workplace_id));
+        if (wSnap.exists()) wpName = wSnap.data()?.name || '';
+      } catch (wErr) {}
+    }
+
+    const defaultPassword = params.password || (params.phone ? `Pass@${params.phone.slice(-4)}` : 'Welcome@123');
+    await sendWelcomeEmail(
+      cleanEmail,
+      params.full_name,
+      params.employee_code || `EMP-${uid.slice(0, 6).toUpperCase()}`,
+      params.designation || (params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Staff'),
+      {
+        organizationId: orgId,
+        department: deptName,
+        workplace: wpName,
+        temporaryPassword: defaultPassword,
+        designation: params.designation,
+      }
+    );
+  } catch (mailErr) {
+    console.warn('System user welcome email notification dispatch warning:', mailErr);
+  }
 
   return uid;
 }

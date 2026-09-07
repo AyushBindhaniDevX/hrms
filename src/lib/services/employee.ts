@@ -313,11 +313,33 @@ export async function createEmployee(params: {
   // Send Welcome Email
   try {
     const { sendWelcomeEmail } = await import('./resend');
+    let deptName = '';
+    let wpName = '';
+    if (params.department_id) {
+      try {
+        const dSnap = await getDoc(doc(db, 'departments', params.department_id));
+        if (dSnap.exists()) deptName = dSnap.data()?.name || '';
+      } catch (dErr) {}
+    }
+    if (params.workplace_id) {
+      try {
+        const wSnap = await getDoc(doc(db, 'workplaces', params.workplace_id));
+        if (wSnap.exists()) wpName = wSnap.data()?.name || '';
+      } catch (wErr) {}
+    }
+
     await sendWelcomeEmail(
       params.email,
       params.full_name || 'Team Member',
       params.employee_code,
-      params.designation || 'Staff'
+      params.designation || 'Staff',
+      {
+        organizationId: params.organization_id,
+        department: deptName,
+        workplace: wpName,
+        designation: params.designation || 'Staff',
+        temporaryPassword: params.password,
+      }
     );
   } catch (mailErr) {
     console.warn('Resend welcome notification dispatch warning:', mailErr);

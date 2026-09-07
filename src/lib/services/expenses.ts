@@ -98,7 +98,17 @@ export async function updateExpenseStatus(
         const empSnap = await getDoc(doc(db, 'employees', expData.employee_id));
         if (empSnap.exists()) {
           const emp = empSnap.data() as Employee;
+          let recipientEmail = '';
+          let recipientName = 'Colleague';
+
           if (emp.profile_id) {
+            const profSnap = await getDoc(doc(db, 'profiles', emp.profile_id));
+            if (profSnap.exists()) {
+              const prof = profSnap.data() as Profile;
+              recipientEmail = prof.email || '';
+              recipientName = prof.full_name || recipientName;
+            }
+
             const { createNotification } = await import('./notifications');
             const claimTitle = expData.title || 'Expense Reimbursement';
             const claimAmount = expData.amount || 0;
@@ -108,6 +118,26 @@ export async function updateExpenseStatus(
               status === 'approved' ? 'Expense Claim Approved' : 'Expense Claim Rejected',
               `Your claim "${claimTitle}" (₹${claimAmount}) has been ${status}.`
             );
+          }
+
+          if (recipientEmail) {
+            try {
+              const { sendExpenseStatusEmail } = await import('./resend');
+              await sendExpenseStatusEmail(
+                recipientEmail,
+                recipientName,
+                expData.title || 'Expense Reimbursement',
+                expData.amount || 0,
+                status as 'approved' | 'rejected',
+                {
+                  organizationId: expData.organization_id || emp.organization_id || undefined,
+                  claimId: expenseId,
+                  reviewerNote: comments,
+                }
+              );
+            } catch (mailErr) {
+              console.warn('Expense status email dispatch warning:', mailErr);
+            }
           }
         }
       }

@@ -1,14 +1,29 @@
 /**
  * Official Resend API Client & Universal Email Notification Service
- * Subedge Technology Pvt Ltd — Oasis Platform: Oasis HRMS
+ * Multi-Tenant Platform: Oasis HRMS
  * API Endpoint: https://api.resend.com/emails
  */
+
+import { Platform } from 'react-native';
+
+export interface OrgEmailContext {
+  organizationId?: string | null;
+  organizationName?: string | null;
+  logoUrl?: string | null;
+  brandColor?: string | null;
+  accentColor?: string | null;
+  portalUrl?: string | null;
+  supportEmail?: string | null;
+}
 
 export interface ResendEmailPayload {
   to: string | string[];
   subject: string;
   htmlContent: string;
   category?: 'onboarding' | 'leave' | 'payroll' | 'ticket' | 'appraisal' | 'expense' | 'shift' | 'policy' | 'general';
+  organizationId?: string | null;
+  orgContext?: OrgEmailContext;
+  from?: string;
 }
 
 export interface EmailLog {
@@ -25,7 +40,7 @@ const RESEND_API_URL = 'https://api.resend.com/emails';
 const DEFAULT_FROM = process.env.EXPO_PUBLIC_RESEND_FROM_EMAIL || 'Oasis HRMS <notifications@subedge.com>';
 const RESEND_API_KEY = process.env.EXPO_PUBLIC_RESEND_API_KEY;
 
-// Delivery Logs
+// Delivery Logs In-Memory Store
 const EMAIL_LOGS_STORE: EmailLog[] = [
   {
     id: 'log_seed_1',
@@ -47,7 +62,191 @@ const EMAIL_LOGS_STORE: EmailLog[] = [
   },
 ];
 
-import { Platform } from 'react-native';
+/**
+ * Resolve Tenant Organization Context
+ * Reads organization record from Firestore or known tenant defaults (e.g. Shanti Memorial Hospital).
+ */
+export async function resolveOrgContext(orgInput?: string | OrgEmailContext | null): Promise<OrgEmailContext> {
+  const defaultPortalUrl =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : (process.env.EXPO_PUBLIC_PORTAL_URL || 'https://hrms-ayushbindhanidevxs-projects.vercel.app');
+
+  const defaultContext: OrgEmailContext = {
+    organizationId: '00000000-0000-0000-0000-000000000001',
+    organizationName: 'Subedge Technology Pvt Ltd',
+    logoUrl: null,
+    brandColor: '#0D7377',
+    accentColor: '#14FFEC',
+    portalUrl: defaultPortalUrl,
+    supportEmail: 'support@subedge.com',
+  };
+
+  if (!orgInput) return defaultContext;
+
+  if (typeof orgInput === 'object') {
+    return {
+      ...defaultContext,
+      ...orgInput,
+      brandColor: orgInput.brandColor || defaultContext.brandColor,
+      portalUrl: orgInput.portalUrl || defaultPortalUrl,
+    };
+  }
+
+  const orgId = orgInput.trim();
+  const isSMH = orgId === 'shanti-memorial-hospital' || orgId === 'smh';
+
+  if (isSMH) {
+    return {
+      organizationId: 'shanti-memorial-hospital',
+      organizationName: 'Shanti Memorial Hospital',
+      logoUrl: 'https://www.shantimemorialhospital.com/wp-content/uploads/2021/05/SMH-Logo.jpg',
+      brandColor: '#006a61',
+      accentColor: '#48cbb5',
+      portalUrl: defaultPortalUrl,
+      supportEmail: 'contact@shantimemorialhospital.com',
+    };
+  }
+
+  try {
+    const { getOrganization } = await import('./organization');
+    const org = await getOrganization(orgId);
+    if (org && org.name) {
+      return {
+        organizationId: org.id,
+        organizationName: org.name,
+        logoUrl: org.logo_url || null,
+        brandColor: org.primary_color || defaultContext.brandColor,
+        accentColor: org.accent_color || defaultContext.accentColor,
+        portalUrl: defaultPortalUrl,
+        supportEmail: (org.settings as any)?.support_email || `support@${org.slug || 'subedge'}.com`,
+      };
+    }
+  } catch (err) {
+    console.warn('Could not resolve organization context for email:', err);
+  }
+
+  return defaultContext;
+}
+
+/**
+ * Modern, Responsive Multi-Tenant Email Template Frame
+ */
+export function wrapInOrgTemplate(title: string, bodyContent: string, orgCtx: OrgEmailContext): string {
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const brandColor = orgCtx.brandColor || '#0D7377';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+  const logoUrl = orgCtx.logoUrl;
+  const currentYear = new Date().getFullYear();
+
+  // Create clean logo badge or fallback initials emblem
+  const logoHtml = logoUrl
+    ? `<div style="display: inline-block; background: #ffffff; padding: 10px 18px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); border: 1px solid rgba(255,255,255,0.3);">
+        <img src="${logoUrl}" alt="${orgName}" style="max-height: 44px; max-width: 220px; object-fit: contain; display: block;" />
+       </div>`
+    : `<div style="display: inline-block; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.3); color: #ffffff; padding: 8px 18px; border-radius: 10px; font-weight: 800; font-size: 14px; letter-spacing: 1px; margin-bottom: 12px; text-transform: uppercase;">
+        ${orgName.slice(0, 4)} HRMS
+       </div>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #F1F5F9;
+      margin: 0;
+      padding: 24px 12px;
+      -webkit-font-smoothing: antialiased;
+      color: #1E293B;
+    }
+    .wrapper {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #FFFFFF;
+      border-radius: 16px;
+      border: 1px solid #E2E8F0;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.02);
+    }
+    .header {
+      background: ${brandColor};
+      background: linear-gradient(135deg, ${brandColor} 0%, #0F172A 100%);
+      padding: 32px 24px;
+      text-align: center;
+      color: #FFFFFF;
+    }
+    .header h1 {
+      color: #FFFFFF;
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.4px;
+      line-height: 1.3;
+    }
+    .header p {
+      color: rgba(255, 255, 255, 0.85);
+      margin: 6px 0 0 0;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .content {
+      padding: 32px 28px;
+      color: #1E293B;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    .content h2 {
+      margin-top: 0;
+      font-size: 20px;
+      font-weight: 700;
+      color: #0F172A;
+      letter-spacing: -0.3px;
+    }
+    .content p {
+      margin: 0 0 16px 0;
+    }
+    .footer {
+      background: #F8FAFC;
+      padding: 24px 28px;
+      text-align: center;
+      font-size: 12px;
+      color: #64748B;
+      border-top: 1px solid #E2E8F0;
+    }
+    .footer p {
+      margin: 4px 0;
+    }
+    .footer a {
+      color: ${brandColor};
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      ${logoHtml}
+      <h1>${orgName}</h1>
+      <p>Oasis HRMS · Enterprise Platform</p>
+    </div>
+    <div class="content">
+      ${bodyContent}
+    </div>
+    <div class="footer">
+      <p>This is an automated administrative notification for <strong>${orgName}</strong>.</p>
+      <p>Access your workspace: <a href="${portalUrl}">${portalUrl.replace(/^https?:\/\//, '')}</a></p>
+      <p style="margin-top: 12px; font-size: 11px; color: #94A3B8;">© ${currentYear} ${orgName}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
 
 /**
  * Universal Resend Dispatcher
@@ -56,7 +255,12 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
   const recipients = Array.isArray(payload.to) ? payload.to : [payload.to];
   const primaryTo = recipients[0];
 
-  const html = wrapInSubedgeTemplate(payload.subject, payload.htmlContent);
+  const orgCtx = await resolveOrgContext(payload.orgContext || payload.organizationId);
+  const html = wrapInOrgTemplate(payload.subject, payload.htmlContent, orgCtx);
+
+  // Dynamic sender name: e.g. "Shanti Memorial Hospital <notifications@subedge.com>"
+  const fromAddress = payload.from || (orgCtx.organizationName ? `${orgCtx.organizationName} <notifications@subedge.com>` : DEFAULT_FROM);
+
   let resendMessageId = `resend_${Date.now()}`;
   let status: 'delivered' | 'sent' | 'queued' | 'simulated' = 'delivered';
 
@@ -70,7 +274,7 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from: DEFAULT_FROM,
+            from: fromAddress,
             to: recipients,
             subject: payload.subject,
             html,
@@ -97,7 +301,7 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: DEFAULT_FROM,
+            from: fromAddress,
             to: recipients,
             subject: payload.subject,
             html,
@@ -149,247 +353,767 @@ export function getEmailDeliveryLogs(): EmailLog[] {
   return [...EMAIL_LOGS_STORE];
 }
 
-/**
- * Template Helper: Subedge Technology Branded Email Frame
- */
-function wrapInSubedgeTemplate(title: string, bodyContent: string): string {
-  return `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="utf-8">
-    <title>${title}</title>
-    <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; margin: 0; padding: 20px; }
-      .container { max-width: 600px; margin: 0 auto; background: #FFFFFF; border-radius: 14px; border: 1px solid #E2E8F0; overflow: hidden; }
-      .header { background: #0D7377; padding: 24px; text-align: center; }
-      .header h1 { color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
-      .header p { color: #CCECEC; margin: 4px 0 0 0; font-size: 12px; }
-      .content { padding: 32px 24px; color: #1A1A2E; line-height: 1.6; }
-      .footer { background: #F1F5F9; padding: 18px 24px; text-align: center; font-size: 11px; color: #64748B; border-top: 1px solid #E2E8F0; }
-      .btn { display: inline-block; background: #0D7377; color: #FFFFFF; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 13px; margin-top: 16px; }
-      .pill { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h1>OASIS HRMS</h1>
-        <p>Subedge Technology Pvt Ltd</p>
-      </div>
-      <div class="content">
-        ${bodyContent}
-      </div>
-      <div class="footer">
-        <p>This is an automated notification from Oasis Platform: Oasis HRMS.</p>
-        <p>© 2026 Subedge Technology Pvt Ltd. All rights reserved.</p>
-      </div>
-    </div>
-  </body>
-  </html>
-  `;
-}
-
 // ----------------------------------------------------
 // DEDICATED NOTIFICATION DISPATCHERS FOR EVERY MODULE
 // ----------------------------------------------------
 
+export interface WelcomeEmailExtra {
+  organizationId?: string | null;
+  organizationName?: string | null;
+  logoUrl?: string | null;
+  brandColor?: string | null;
+  department?: string | null;
+  workplace?: string | null;
+  designation?: string | null;
+  temporaryPassword?: string | null;
+  portalUrl?: string | null;
+}
+
 /**
  * 1. Employee Welcome / Account Access
  */
-export async function sendWelcomeEmail(to: string, name: string, employeeCode: string, role: string) {
+export async function sendWelcomeEmail(
+  to: string,
+  name: string,
+  employeeCode: string,
+  role: string,
+  extra?: WelcomeEmailExtra
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId,
+          organizationName: extra?.organizationName,
+          logoUrl: extra?.logoUrl,
+          brandColor: extra?.brandColor,
+          portalUrl: extra?.portalUrl,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+  const effectiveDesignation = extra?.designation || role || 'Staff';
+  const department = extra?.department || 'General Operations';
+  const workplace = extra?.workplace || 'Main Campus / Headquarters';
+  const tempPassword = extra?.temporaryPassword;
+
+  const credentialsHtml = tempPassword
+    ? `
+      <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 12px; padding: 18px 20px; margin: 22px 0;">
+        <div style="font-weight: 700; color: #166534; font-size: 14px; margin-bottom: 12px;">
+          🔐 Your Oasis HRMS Access Credentials
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <tr>
+            <td style="padding: 6px 0; color: #4B5563; font-weight: 500; width: 140px;">Portal Sign-in:</td>
+            <td style="padding: 6px 0; font-weight: 700; color: #111827;">
+              <a href="${portalUrl}" style="color: ${orgCtx.brandColor || '#0D7377'}; text-decoration: underline;">${portalUrl.replace(/^https?:\/\//, '')}</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #4B5563; font-weight: 500;">Login Username:</td>
+            <td style="padding: 6px 0; font-weight: 700; color: #111827;">${to}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #4B5563; font-weight: 500;">Temporary Password:</td>
+            <td style="padding: 6px 0;">
+              <span style="font-family: monospace; font-size: 14px; font-weight: 700; background: #DCFCE7; color: #15803D; padding: 3px 10px; border-radius: 6px; border: 1px solid #BBF7D0; letter-spacing: 0.5px;">
+                ${tempPassword}
+              </span>
+            </td>
+          </tr>
+        </table>
+        <div style="margin-top: 12px; padding: 10px 14px; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; font-size: 12px; color: #92400E;">
+          ⚠️ <strong>Security Notice:</strong> For your protection, you will be prompted to change this temporary password upon your first sign-in.
+        </div>
+      </div>
+    `
+    : '';
+
+  const htmlContent = `
+    <h2>Welcome to ${orgName}, ${name}!</h2>
+    <p>Your official employee profile and workspace access have been configured on the <strong>Oasis HRMS platform</strong>.</p>
+    
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <h3 style="margin: 0 0 12px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: #64748B;">
+        Profile & Deployment Summary
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 8px 0; color: #64748B;">Organization:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${orgName}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 8px 0; color: #64748B;">Employee Code:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${employeeCode}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 8px 0; color: #64748B;">Designation:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${effectiveDesignation}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 8px 0; color: #64748B;">Department:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${department}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748B;">Workplace Campus:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${workplace}</td>
+        </tr>
+      </table>
+    </div>
+
+    ${credentialsHtml}
+
+    <p style="margin-top: 20px;">Through your Oasis HRMS employee portal, you can:</p>
+    <ul style="color: #475569; font-size: 13px; line-height: 1.8; margin-bottom: 24px; padding-left: 20px;">
+      <li>Punch daily attendance with geofenced mobile verification</li>
+      <li>Submit leave requests and view real-time quota balances</li>
+      <li>Access digital salary slips and submit tax declarations</li>
+      <li>View your assigned monthly shift rosters and organizational notices</li>
+    </ul>
+
+    <div style="text-align: center; margin: 30px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 14px 36px; border-radius: 10px; font-weight: 700; font-size: 14px; text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,0.15);">
+        Sign In to ${orgName} Portal →
+      </a>
+    </div>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Welcome to Subedge Technology Pvt Ltd — Your Oasis Access`,
+    subject: `Welcome to ${orgName} — Your Oasis Access Credentials`,
     category: 'onboarding',
-    htmlContent: `
-      <h2>Welcome aboard, ${name}!</h2>
-      <p>Your employee profile has been provisioned on the <strong>Oasis Platform</strong>.</p>
-      <div style="background: #F0F7F7; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #CCECEC;">
-        <p style="margin: 0 0 6px 0;"><strong>Employee Code:</strong> ${employeeCode}</p>
-        <p style="margin: 0 0 6px 0;"><strong>Designation / Role:</strong> ${role}</p>
-        <p style="margin: 0;"><strong>Organization:</strong> Subedge Technology Pvt Ltd</p>
-      </div>
-      <p>Log in to set up your geofenced clock-in, submit tax declarations, and explore the L&D Academy.</p>
-      <a href="https://subedge.vercel.app" class="btn">Access Oasis Portal →</a>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 2. Leave Request Approval / Rejection
  */
-export async function sendLeaveStatusEmail(to: string, name: string, status: 'approved' | 'rejected', leaveType: string, dates: string, reviewer: string) {
+export async function sendLeaveStatusEmail(
+  to: string,
+  name: string,
+  status: 'approved' | 'rejected',
+  leaveType: string,
+  dates: string,
+  reviewer: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+    reason?: string | null;
+    remainingDays?: number | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
   const isApproved = status === 'approved';
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  const htmlContent = `
+    <h2>Hello ${name},</h2>
+    <p>Your leave application for <strong>${leaveType}</strong> has been <strong>${status.toUpperCase()}</strong>.</p>
+    
+    <div style="background: ${isApproved ? '#ECFDF5' : '#FEF2F2'}; border: 1px solid ${isApproved ? '#A7F3D0' : '#FECACA'}; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <div style="margin-bottom: 12px;">
+        <span style="font-weight: 700; font-size: 14px; color: ${isApproved ? '#065F46' : '#991B1B'};">
+          Decision: ${isApproved ? '✅ Approved' : '❌ Declined'}
+        </span>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Leave Category:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${leaveType}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Duration / Dates:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${dates}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Reviewed By:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${reviewer}</td>
+        </tr>
+        ${extra?.reason ? `
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Application Note:</td>
+          <td style="padding: 6px 0; color: #334155; text-align: right;">${extra.reason}</td>
+        </tr>
+        ` : ''}
+        ${extra?.remainingDays != null ? `
+        <tr>
+          <td style="padding: 6px 0; color: #64748B;">Remaining Balance:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #059669; text-align: right;">${extra.remainingDays} Days</td>
+        </tr>
+        ` : ''}
+      </table>
+    </div>
+
+    <p style="color: #475569; font-size: 13px;">
+      ${isApproved
+        ? `Your team roster and leave records for ${orgName} have been updated.`
+        : `If you have questions regarding this decision, please reach out to ${reviewer} or your HR department.`}
+    </p>
+
+    <div style="text-align: center; margin: 26px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;">
+        View Leave History & Balances →
+      </a>
+    </div>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Leave Request ${isApproved ? 'Approved' : 'Rejected'} — ${leaveType}`,
+    subject: `Leave Request ${isApproved ? 'Approved ✅' : 'Declined ❌'} — ${leaveType} | ${orgName}`,
     category: 'leave',
-    htmlContent: `
-      <h2>Hello ${name},</h2>
-      <p>Your leave request for <strong>${leaveType}</strong> (${dates}) has been <strong>${status.toUpperCase()}</strong> by ${reviewer}.</p>
-      <div style="background: ${isApproved ? '#ECFDF5' : '#FEF2F2'}; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid ${isApproved ? '#A7F3D0' : '#FECACA'};">
-        <p style="margin: 0; color: ${isApproved ? '#065F46' : '#991B1B'}; font-weight: 700;">Status: ${status.toUpperCase()}</p>
-      </div>
-      <p>Your leave balances have been updated accordingly.</p>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 3. Expense Claim Settlement
  */
-export async function sendExpenseStatusEmail(to: string, name: string, title: string, amount: number, status: 'approved' | 'rejected') {
+export async function sendExpenseStatusEmail(
+  to: string,
+  name: string,
+  title: string,
+  amount: number,
+  status: 'approved' | 'rejected',
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+    claimId?: string | null;
+    reviewerNote?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
   const isApproved = status === 'approved';
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  const htmlContent = `
+    <h2>Hello ${name},</h2>
+    <p>Your expense reimbursement claim has been reviewed by the <strong>${orgName} Finance Team</strong>.</p>
+    
+    <div style="background: ${isApproved ? '#ECFDF5' : '#FEF2F2'}; border: 1px solid ${isApproved ? '#A7F3D0' : '#FECACA'}; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Claim Title:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${title}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Claim Amount:</td>
+          <td style="padding: 6px 0; font-weight: 800; color: #0F172A; font-size: 15px; text-align: right;">₹${amount.toLocaleString('en-IN')}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Status:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: ${isApproved ? '#065F46' : '#991B1B'}; text-align: right;">
+            ${isApproved ? 'Approved ✅' : 'Declined ❌'}
+          </td>
+        </tr>
+        ${extra?.reviewerNote ? `
+        <tr>
+          <td style="padding: 6px 0; color: #64748B;">Finance Note:</td>
+          <td style="padding: 6px 0; color: #334155; text-align: right;">${extra.reviewerNote}</td>
+        </tr>
+        ` : ''}
+      </table>
+    </div>
+
+    <p style="color: #475569; font-size: 13px;">
+      ${isApproved
+        ? `The approved amount of ₹${amount.toLocaleString('en-IN')} will be credited in your upcoming monthly payroll cycle.`
+        : `Please check your Oasis portal or contact Finance if further documentation or receipt clarification is needed.`}
+    </p>
+
+    <div style="text-align: center; margin: 26px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;">
+        View Reimbursement Claims →
+      </a>
+    </div>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Expense Claim ${isApproved ? 'Approved' : 'Rejected'}: ₹${amount.toLocaleString('en-IN')}`,
+    subject: `Expense Claim ${isApproved ? 'Approved ✅' : 'Declined ❌'}: ₹${amount.toLocaleString('en-IN')} | ${orgName}`,
     category: 'expense',
-    htmlContent: `
-      <h2>Hello ${name},</h2>
-      <p>Your reimbursement claim for <strong>"${title}"</strong> has been reviewed by Finance.</p>
-      <p><strong>Claim Amount:</strong> ₹${amount.toLocaleString('en-IN')}</p>
-      <p><strong>Status:</strong> ${status.toUpperCase()}</p>
-      ${isApproved ? '<p>The approved amount will be credited in your upcoming monthly payroll cycle.</p>' : '<p>Please check the Oasis portal for feedback comments from Finance.</p>'}
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 4. Helpdesk Support Ticket Resolution
  */
-export async function sendTicketStatusEmail(to: string, ticketNumber: string, title: string, resolutionNotes: string) {
+export async function sendTicketStatusEmail(
+  to: string,
+  ticketNumber: string,
+  title: string,
+  resolutionNotes: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+    priority?: string | null;
+    category?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  const htmlContent = `
+    <h2>Support Ticket Resolved</h2>
+    <p>Your support ticket <strong>[${ticketNumber}] ${title}</strong> has been marked as resolved by the <strong>${orgName} Operations & IT Support Team</strong>.</p>
+    
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 14px;">
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Ticket ID:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${ticketNumber}</td>
+        </tr>
+        ${extra?.category ? `
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Category:</td>
+          <td style="padding: 6px 0; font-weight: 600; color: #0F172A; text-align: right; text-transform: capitalize;">${extra.category}</td>
+        </tr>
+        ` : ''}
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Status:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #059669; text-align: right;">Resolved ✅</td>
+        </tr>
+      </table>
+
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 14px;">
+        <p style="margin: 0 0 6px 0; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: ${orgCtx.brandColor || '#0D7377'};">
+          Resolution Summary:
+        </p>
+        <p style="margin: 0; color: #334155; font-size: 13px; line-height: 1.5;">${resolutionNotes}</p>
+      </div>
+    </div>
+
+    <p style="color: #64748B; font-size: 12px;">
+      If this issue persists or you need further assistance, you can reopen or update this ticket anytime from your employee portal.
+    </p>
+
+    <div style="text-align: center; margin: 26px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;">
+        Open Support Helpdesk →
+      </a>
+    </div>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Ticket Resolved: [${ticketNumber}] ${title}`,
+    subject: `Ticket Resolved: [${ticketNumber}] ${title} | ${orgName}`,
     category: 'ticket',
-    htmlContent: `
-      <h2>Support Ticket Resolved</h2>
-      <p>Your support ticket <strong>${ticketNumber}</strong> has been marked as resolved by the Subedge IT & Operations desk.</p>
-      <div style="background: #F0F7F7; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #CCECEC;">
-        <p style="margin: 0 0 6px 0; font-weight: 700; color: #0D7377;">Resolution Notes:</p>
-        <p style="margin: 0; color: #1A1A2E;">${resolutionNotes}</p>
-      </div>
-      <p>If you need further assistance, you may reopen this ticket from your employee portal.</p>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 5. Recruitment Interview Invitation
  */
-export async function sendInterviewInviteEmail(to: string, candidateName: string, roundName: string, scheduledTime: string, meetLink: string) {
+export async function sendInterviewInviteEmail(
+  to: string,
+  candidateName: string,
+  roundName: string,
+  scheduledTime: string,
+  meetLink: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+    jobTitle?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+
+  const htmlContent = `
+    <h2>Hello ${candidateName},</h2>
+    <p>We are pleased to invite you to the <strong>${roundName}</strong> interview with our panel at <strong>${orgName}</strong>.</p>
+    
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        ${extra?.jobTitle ? `
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Role Applied:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${extra.jobTitle}</td>
+        </tr>
+        ` : ''}
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Interview Round:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${roundName}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Scheduled Time:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${new Date(scheduledTime).toLocaleString()}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748B;">Meeting Link:</td>
+          <td style="padding: 6px 0; font-weight: 700; text-align: right;">
+            <a href="${meetLink}" style="color: ${orgCtx.brandColor || '#0D7377'}; text-decoration: underline;">Join Video Call</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="color: #475569; font-size: 13px;">
+      Please ensure you have a stable internet connection and are in a quiet environment 5 minutes prior to the scheduled start time.
+    </p>
+
+    <div style="text-align: center; margin: 26px 0 10px 0;">
+      <a href="${meetLink}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 12px 32px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;">
+        Join Video Interview →
+      </a>
+    </div>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Interview Invitation: ${roundName} — Subedge Technology`,
+    subject: `Interview Invitation: ${roundName} — ${orgName}`,
     category: 'onboarding',
-    htmlContent: `
-      <h2>Hello ${candidateName},</h2>
-      <p>We are pleased to invite you to the <strong>${roundName}</strong> with our technical panel.</p>
-      <div style="background: #F0F7F7; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #CCECEC;">
-        <p style="margin: 0 0 6px 0;"><strong>Scheduled Time:</strong> ${new Date(scheduledTime).toLocaleString()}</p>
-        <p style="margin: 0;"><strong>Meeting Link:</strong> <a href="${meetLink}">${meetLink}</a></p>
-      </div>
-      <a href="${meetLink}" class="btn">Join Video Interview →</a>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 6. Official Offer Letter
  */
-export async function sendOfferLetterEmail(to: string, candidateName: string, designation: string, ctc: number, joiningDate: string) {
+export async function sendOfferLetterEmail(
+  to: string,
+  candidateName: string,
+  designation: string,
+  ctc: number,
+  joiningDate: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+    department?: string | null;
+    location?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  const htmlContent = `
+    <h2>Congratulations, ${candidateName}!</h2>
+    <p><strong>${orgName}</strong> is delighted to extend you an official offer of employment for the position of <strong>${designation}</strong>.</p>
+    
+    <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 12px; padding: 20px; margin: 22px 0;">
+      <h3 style="margin: 0 0 14px 0; font-size: 14px; color: #065F46; font-weight: 700;">
+        Offer Terms & Compensation Overview
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+          <td style="padding: 8px 0; color: #475569;">Designation:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${designation}</td>
+        </tr>
+        ${extra?.department ? `
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+          <td style="padding: 8px 0; color: #475569;">Department:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${extra.department}</td>
+        </tr>
+        ` : ''}
+        ${extra?.location ? `
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+          <td style="padding: 8px 0; color: #475569;">Location / Campus:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${extra.location}</td>
+        </tr>
+        ` : ''}
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+          <td style="padding: 8px 0; color: #475569;">Annual CTC:</td>
+          <td style="padding: 8px 0; font-weight: 800; color: #047857; font-size: 16px; text-align: right;">₹${ctc.toLocaleString('en-IN')}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #475569;">Target Joining Date:</td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0F172A; text-align: right;">${joiningDate}</td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="color: #334155; font-size: 13px;">
+      Please review your formal offer terms, compensation breakdown, and digital acceptance contract through the candidate portal.
+    </p>
+
+    <div style="text-align: center; margin: 28px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 14px 34px; border-radius: 10px; font-weight: 700; font-size: 14px; text-decoration: none; box-shadow: 0 4px 12px rgba(0,0,0,0.12);">
+        Review & Accept Offer →
+      </a>
+    </div>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Official Offer of Employment: ${designation} — Subedge Technology Pvt Ltd`,
+    subject: `Official Offer of Employment: ${designation} — ${orgName}`,
     category: 'onboarding',
-    htmlContent: `
-      <h2>Congratulations, ${candidateName}!</h2>
-      <p>Subedge Technology Pvt Ltd is delighted to extend you an official offer of employment for the position of <strong>${designation}</strong>.</p>
-      <div style="background: #ECFDF5; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #A7F3D0;">
-        <p style="margin: 0 0 6px 0;"><strong>Designation:</strong> ${designation}</p>
-        <p style="margin: 0 0 6px 0;"><strong>Annual CTC:</strong> ₹${ctc.toLocaleString('en-IN')}</p>
-        <p style="margin: 0;"><strong>Target Joining Date:</strong> ${joiningDate}</p>
-      </div>
-      <p>Please review and sign your digital offer letter in the candidate portal.</p>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 7. Shift Roster Notification
  */
-export async function sendShiftRosterEmail(to: string, name: string, shiftName: string, timings: string, effectiveDate: string) {
+export async function sendShiftRosterEmail(
+  to: string,
+  name: string,
+  shiftName: string,
+  timings: string,
+  effectiveDate: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+    workplace?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  const htmlContent = `
+    <h2>Hello ${name},</h2>
+    <p>Your work shift schedule has been published for <strong>${effectiveDate}</strong> at <strong>${orgName}</strong>.</p>
+    
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Assigned Shift:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${shiftName}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Shift Timings:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${timings}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Effective Date:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${effectiveDate}</td>
+        </tr>
+        ${extra?.workplace ? `
+        <tr>
+          <td style="padding: 6px 0; color: #64748B;">Campus / Location:</td>
+          <td style="padding: 6px 0; font-weight: 600; color: #0F172A; text-align: right;">${extra.workplace}</td>
+        </tr>
+        ` : ''}
+      </table>
+    </div>
+
+    <p style="color: #64748B; font-size: 12px;">
+      Remember to clock-in on the Oasis mobile app within your geofenced perimeter.
+    </p>
+
+    <div style="text-align: center; margin: 24px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;">
+        View Shift Calendar →
+      </a>
+    </div>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Shift Roster Update: ${shiftName}`,
+    subject: `Shift Schedule Update: ${shiftName} | ${orgName}`,
     category: 'shift',
-    htmlContent: `
-      <h2>Hello ${name},</h2>
-      <p>Your shift schedule has been published for <strong>${effectiveDate}</strong>.</p>
-      <p><strong>Assigned Shift:</strong> ${shiftName} (${timings})</p>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 8. Candidate Application Received Confirmation
  */
-export async function sendApplicationReceivedEmail(to: string, candidateName: string, jobTitle: string) {
+export async function sendApplicationReceivedEmail(
+  to: string,
+  candidateName: string,
+  jobTitle: string,
+  extra?: { organizationId?: string | null; organizationName?: string | null }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+
+  const htmlContent = `
+    <h2>Thank you for applying, ${candidateName}!</h2>
+    <p>We have successfully received your direct application for <strong>${jobTitle}</strong> at <strong>${orgName}</strong>.</p>
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Position:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${jobTitle}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #EDF2F7;">
+          <td style="padding: 6px 0; color: #64748B;">Organization:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${orgName}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748B;">Status:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #059669; text-align: right;">Application Ingested into ATS Pipeline</td>
+        </tr>
+      </table>
+    </div>
+    <p style="color: #475569; font-size: 13px;">
+      Our Talent Acquisition team will evaluate your profile. If your qualifications match our current requirements, we will contact you with interview scheduling details.
+    </p>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Application Received: ${jobTitle} — Subedge Technology Pvt Ltd`,
+    subject: `Application Received: ${jobTitle} — ${orgName}`,
     category: 'onboarding',
-    htmlContent: `
-      <h2>Thank you for applying, ${candidateName}!</h2>
-      <p>We have successfully received your direct application for <strong>${jobTitle}</strong> at Subedge Technology Pvt Ltd.</p>
-      <div style="background: #F0F7F7; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #CCECEC;">
-        <p style="margin: 0 0 6px 0;"><strong>Role:</strong> ${jobTitle}</p>
-        <p style="margin: 0 0 6px 0;"><strong>Company:</strong> Subedge Technology Pvt Ltd</p>
-        <p style="margin: 0;"><strong>Status:</strong> Application Ingested into ATS Pipeline</p>
-      </div>
-      <p>Our Talent Acquisition team will evaluate your profile and technical background. If your experience aligns with the role, we will reach out with interview details.</p>
-      <p style="color: #64748B; font-size: 12px; margin-top: 16px;">Subedge Technology · Engineering & Cloud Innovation</p>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 9. Bulk Candidate Status Update Notification
  */
-export async function sendBulkCandidateUpdateEmail(to: string, candidateName: string, subject: string, messageBody: string) {
+export async function sendBulkCandidateUpdateEmail(
+  to: string,
+  candidateName: string,
+  subject: string,
+  messageBody: string,
+  extra?: { organizationId?: string | null; organizationName?: string | null }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+
+  const htmlContent = `
+    <h2>Hello ${candidateName},</h2>
+    <div style="background: #F8FAFC; padding: 18px 20px; border-radius: 12px; margin: 18px 0; border: 1px solid #E2E8F0; font-size: 14px; line-height: 1.6; color: #1E293B;">
+      ${messageBody}
+    </div>
+    <p style="color: #64748B; font-size: 12px; margin-top: 20px;">
+      Sent on behalf of ${orgName} Talent Acquisition & ATS.
+    </p>
+  `;
+
   return sendResendEmail({
     to,
     subject,
     category: 'onboarding',
-    htmlContent: `
-      <h2>Hello ${candidateName},</h2>
-      <div style="background: #F8FAFC; padding: 16px; border-radius: 10px; margin: 16px 0; border: 1px solid #E2E8F0;">
-        <p style="margin: 0; line-height: 1.6; color: #1A1A2E;">${messageBody}</p>
-      </div>
-      <p>Please feel free to reply to this email or connect with your recruiter coordinator if you have any questions.</p>
-      <p style="color: #64748B; font-size: 12px; margin-top: 16px;">Oasis Recruitment & ATS · Subedge Technology Pvt Ltd</p>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
 
 /**
  * 10. Candidate Courteous Rejection Notification
  */
-export async function sendRejectionEmail(to: string, candidateName: string, jobTitle: string, reasonNote?: string) {
+export async function sendRejectionEmail(
+  to: string,
+  candidateName: string,
+  jobTitle: string,
+  reasonNote?: string,
+  extra?: { organizationId?: string | null; organizationName?: string | null }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+
+  const htmlContent = `
+    <h2>Dear ${candidateName},</h2>
+    <p>Thank you for taking the time to apply and interview for the <strong>${jobTitle}</strong> position at <strong>${orgName}</strong>.</p>
+    <p>While we were impressed with your skills and background, we have decided to proceed with other candidates whose experience more closely matches our immediate operational needs at this time.</p>
+    ${reasonNote ? `
+    <div style="background: #F8FAFC; padding: 14px 16px; border-radius: 8px; margin: 16px 0; border: 1px solid #E2E8F0; font-size: 13px; color: #475569;">
+      <p style="margin: 0;">${reasonNote}</p>
+    </div>` : ''}
+    <p>We will keep your profile active in our talent database and will proactively reach out should relevant openings matching your background arise in the future.</p>
+    <p>We sincerely appreciate your interest in ${orgName} and wish you every success in your career endeavors.</p>
+    <p style="color: #64748B; font-size: 12px; margin-top: 20px;">
+      Warm regards,<br/>
+      <strong>${orgName} Talent Acquisition Team</strong>
+    </p>
+  `;
+
   return sendResendEmail({
     to,
-    subject: `Application Update: ${jobTitle} — Subedge Technology Pvt Ltd`,
+    subject: `Application Update: ${jobTitle} — ${orgName}`,
     category: 'onboarding',
-    htmlContent: `
-      <h2>Dear ${candidateName},</h2>
-      <p>Thank you for taking the time to apply and interview for the <strong>${jobTitle}</strong> position at Subedge Technology Pvt Ltd.</p>
-      <p>While we were impressed with your skills and background, we have decided to proceed with other candidates whose experience more closely matches our immediate project requirements at this time.</p>
-      ${reasonNote ? `<div style="background: #F8FAFC; padding: 12px; border-radius: 8px; margin: 12px 0; border: 1px solid #E2E8F0; font-size: 13px; color: #475569;"><p style="margin: 0;">${reasonNote}</p></div>` : ''}
-      <p>We will keep your profile active in our <strong>Subedge Talent Pool</strong> and will proactively reach out should future openings matching your profile arise.</p>
-      <p>We sincerely appreciate your interest in Subedge and wish you every success in your career endeavors.</p>
-      <p style="color: #64748B; font-size: 12px; margin-top: 16px;">Warm regards,<br/>Subedge Talent Acquisition Team</p>
-    `,
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
   });
 }
-

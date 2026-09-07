@@ -64,26 +64,54 @@ export async function createTicket(
 
 export async function resolveTicket(ticketId: string, resolutionNotes: string): Promise<void> {
   const now = new Date().toISOString();
-  await updateDoc(doc(db, 'tickets', ticketId), {
+  const ticketRef = doc(db, 'tickets', ticketId);
+  const ticketSnap = await getDoc(ticketRef);
+  const ticketData = ticketSnap.exists() ? (ticketSnap.data() as SupportTicket) : null;
+
+  await updateDoc(ticketRef, {
     status: 'resolved',
     resolution_notes: resolutionNotes,
     updated_at: now,
   });
 
   await triggerAutomationEvent('on_ticket_resolved', {
-    ticketNumber: ticketId,
+    ticketNumber: ticketData?.ticket_number || ticketId,
     resolutionNotes,
+    organization_id: ticketData?.organization_id,
   });
 
-  try {
-    const { sendTicketStatusEmail } = await import('./resend');
-    await sendTicketStatusEmail(
-      'employee@oasis.io',
-      ticketId,
-      'Service Ticket',
-      resolutionNotes
-    );
-  } catch (mailErr) {
-    console.warn('Resend ticket email warning:', mailErr);
+  if (ticketData) {
+    try {
+      let recipientEmail = '';
+      if (ticketData.employee_id) {
+        const empSnap = await getDoc(doc(db, 'employees', ticketData.employee_id));
+        if (empSnap.exists()) {
+          const emp = empSnap.data();
+          if (emp.profile_id) {
+            const profSnap = await getDoc(doc(db, 'profiles', emp.profile_id));
+            if (profSnap.exists()) {
+              recipientEmail = profSnap.data().email || '';
+            }
+          }
+        }
+      }
+
+      if (recipientEmail) {
+        const { sendTicketStatusEmail } = await import('./resend');
+        await sendTicketStatusEmail(
+          recipientEmail,
+          ticketData.ticket_number || ticketId,
+          ticketData.title || 'Support Ticket',
+          resolutionNotes,
+          {
+            organizationId: ticketData.organization_id,
+            priority: ticketData.priority,
+            category: ticketData.category,
+          }
+        );
+      }
+    } catch (mailErr) {
+      console.warn('Resend ticket email warning:', mailErr);
+    }
   }
 }

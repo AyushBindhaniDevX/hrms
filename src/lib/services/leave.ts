@@ -374,12 +374,22 @@ export async function processLeaveRequest(
     updated_at: now,
   });
 
-  // Notify employee
+  // Notify employee via In-App Notification & Resend Email
   try {
     const empSnap = await getDoc(doc(db, 'employees', reqData.employee_id));
     if (empSnap.exists()) {
       const emp = empSnap.data() as Employee;
+      let recipientEmail = '';
+      let recipientName = 'Colleague';
+
       if (emp.profile_id) {
+        const profSnap = await getDoc(doc(db, 'profiles', emp.profile_id));
+        if (profSnap.exists()) {
+          const prof = profSnap.data() as Profile;
+          recipientEmail = prof.email || '';
+          recipientName = prof.full_name || recipientName;
+        }
+
         const { createNotification } = await import('./notifications');
         await createNotification(
           emp.profile_id,
@@ -387,6 +397,29 @@ export async function processLeaveRequest(
           `Leave Request ${action === 'approve' ? 'Approved' : 'Rejected'}`,
           `Your leave request for ${reqData.days} day(s) from ${reqData.start_date} to ${reqData.end_date} has been ${action === 'approve' ? 'approved' : 'rejected'}.`
         );
+      }
+
+      if (recipientEmail) {
+        try {
+          const { sendLeaveStatusEmail } = await import('./resend');
+          const types = await getLeaveTypes(emp.organization_id || undefined);
+          const lt = types.find((t) => t.id === reqData.leave_type_id);
+
+          await sendLeaveStatusEmail(
+            recipientEmail,
+            recipientName,
+            action === 'approve' ? 'approved' : 'rejected',
+            lt?.name || 'Leave Request',
+            `${reqData.start_date} to ${reqData.end_date} (${reqData.days} day${reqData.days > 1 ? 's' : ''})`,
+            approverName || 'HR Management',
+            {
+              organizationId: emp.organization_id || undefined,
+              reason: reqData.reason || undefined,
+            }
+          );
+        } catch (mailErr) {
+          console.warn('Leave status email dispatch warning:', mailErr);
+        }
       }
     }
   } catch (e) {}

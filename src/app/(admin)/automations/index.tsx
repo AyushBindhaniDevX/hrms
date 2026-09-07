@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
+import { useTenant } from '@/context/TenantContext';
 import {
   getAutomationRules,
   toggleAutomationRule,
@@ -50,6 +51,7 @@ import {
 
 export default function AutomationsScreen() {
   const colors = useTheme();
+  const { organization: tenantOrg } = useTenant();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
@@ -97,27 +99,51 @@ export default function AutomationsScreen() {
     setSendingTest(true);
     setTestSuccess(null);
     try {
+      const orgId = tenantOrg?.id;
+      const orgName = tenantOrg?.name || 'Oasis HRMS';
+
       if (type === 'onboarding') {
-        await sendWelcomeEmail(testEmail, 'Alex Morgan', 'SUB-EMP-9021', 'Senior Full Stack Engineer');
-        setTestSuccess(`Onboarding welcome email dispatched to ${testEmail}!`);
+        await sendWelcomeEmail(testEmail, 'Dr. Rajesh Mohanty', 'SMH-MED-9021', 'Senior Consultant Physician', {
+          organizationId: orgId,
+          organizationName: orgName,
+          department: 'Emergency & Critical Care',
+          workplace: 'Main Hospital Campus',
+          designation: 'Senior Consultant Physician',
+          temporaryPassword: 'TempPassword@2026',
+        });
+        setTestSuccess(`Dynamic onboarding welcome email dispatched to ${testEmail}!`);
       } else if (type === 'leave') {
-        await sendLeaveStatusEmail(testEmail, 'Alex Morgan', 'approved', 'Annual Paid Leave', 'Aug 25 - Aug 28, 2026', 'HR Operations Lead');
+        await sendLeaveStatusEmail(testEmail, 'Dr. Rajesh Mohanty', 'approved', 'Casual Leave (CL)', 'Aug 25 - Aug 28, 2026', 'Medical Superintendent', {
+          organizationId: orgId,
+          organizationName: orgName,
+          remainingDays: 14,
+        });
         setTestSuccess(`Leave status notification dispatched to ${testEmail}!`);
       } else if (type === 'ticket') {
-        await sendTicketStatusEmail(testEmail, 'TKT-8842', 'VPN / Subedge Network Gateway Access', 'Configured access keys and verified tunnel connectivity.');
+        await sendTicketStatusEmail(testEmail, 'TKT-8842', 'HIS / EMR System Terminal Connection', 'Configured terminal client and verified biometric login.', {
+          organizationId: orgId,
+          organizationName: orgName,
+          category: 'IT Infrastructure',
+        });
         setTestSuccess(`Ticket resolution email dispatched to ${testEmail}!`);
       } else if (type === 'offer') {
-        await sendOfferLetterEmail(testEmail, 'Alex Morgan', 'Lead Cloud Architect', 2400000, 'Sept 1, 2026');
+        await sendOfferLetterEmail(testEmail, 'Dr. Rajesh Mohanty', 'Senior Consultant Physician', 2400000, 'Sept 1, 2026', {
+          organizationId: orgId,
+          organizationName: orgName,
+          department: 'Cardiology',
+          location: 'Main Hospital Campus',
+        });
         setTestSuccess(`Official Offer Letter email dispatched to ${testEmail}!`);
       } else {
         await sendResendEmail({
           to: testEmail,
-          subject: 'Resend Gateway Test from Oasis HRMS Engine',
+          subject: `Resend Gateway Test — ${orgName}`,
           htmlContent: `<div style="font-family: sans-serif; padding: 20px; background: #F8FAFC;">
-            <h2>Oasis Automated Notification Test</h2>
-            <p>This email confirms that the Subedge Resend transactional pipeline is healthy and active.</p>
+            <h2>Oasis Notification Gateway Active</h2>
+            <p>This email confirms that the transactional notification pipeline for <strong>${orgName}</strong> is fully operational and synchronized.</p>
           </div>`,
           category: 'general',
+          organizationId: orgId,
         });
         setTestSuccess(`Gateway diagnostic ping sent to ${testEmail}!`);
       }

@@ -520,15 +520,27 @@ export default function UserManagementScreen() {
     try {
       const { sendWelcomeEmail } = await import('@/lib/services/resend');
       const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+      const targetOrgId = u.organization_id || tenantOrg?.id;
+      const dept = departments.find(d => d.id === emp?.department_id);
+      const wp = workplaces.find(w => w.id === emp?.workplace_id);
+
       await sendWelcomeEmail(
         u.email,
         u.full_name || 'Team Member',
         emp?.employee_code || 'EMP-ACCESS',
-        u.role === 'admin' ? 'Administrator' : u.role === 'hr' ? 'HR Manager' : 'Employee'
+        emp?.designation || (u.role === 'admin' ? 'Administrator' : u.role === 'hr' ? 'HR Manager' : 'Employee'),
+        {
+          organizationId: targetOrgId,
+          organizationName: tenantOrg?.name,
+          department: dept?.name,
+          workplace: wp?.name,
+          designation: emp?.designation || undefined,
+          temporaryPassword: u.phone ? `Pass@${u.phone.slice(-4)}` : 'Welcome@123',
+        }
       );
       setInfoBanner({
         type: 'success',
-        message: `Welcome & login invitation sent to ${u.email} successfully.`,
+        message: `Welcome & login invitation sent to ${u.email} successfully with ${tenantOrg?.name || 'organization'} credentials.`,
       });
       setTimeout(() => setInfoBanner(null), 4000);
     } catch (err: any) {

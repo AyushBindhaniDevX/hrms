@@ -80,8 +80,14 @@ export async function triggerAutomationEvent(trigger: AutomationTrigger, payload
         await sendWelcomeEmail(
           payload.email,
           payload.name || 'Team Member',
-          payload.employeeCode || 'SUB-EMP-001',
-          payload.designation || 'Specialist'
+          payload.employeeCode || 'EMP-001',
+          payload.designation || 'Specialist',
+          {
+            organizationId: payload.organization_id,
+            department: payload.department,
+            workplace: payload.workplace,
+            temporaryPassword: payload.password,
+          }
         );
       } else if (trigger === 'on_leave_approved' && payload.email) {
         await sendLeaveStatusEmail(
@@ -90,7 +96,10 @@ export async function triggerAutomationEvent(trigger: AutomationTrigger, payload
           'approved',
           payload.leaveType || 'Paid Leave',
           payload.dates || 'selected dates',
-          'HR Approver'
+          payload.reviewer || 'HR Approver',
+          {
+            organizationId: payload.organization_id,
+          }
         );
       }
     }
