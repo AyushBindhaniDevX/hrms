@@ -165,6 +165,7 @@ export default function DirectoryScreen() {
             data={employees}
             numColumns={isDesktop ? 3 : 1}
             estimatedItemSize={220}
+            contentContainerStyle={{ paddingBottom: 110 }}
             renderItem={({ item: emp }: any) => (
               <View style={{ flex: 1, padding: 8 }}>
                 <TouchableOpacity

@@ -84,6 +84,7 @@ interface SidebarProps {
 
 export function SidebarLayout({ items, children }: SidebarProps) {
   const colors = useTheme();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const router = useRouter();
   const pathname = usePathname();
@@ -343,7 +344,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               onPress={() => setShowMoreSheet(false)}
             />
 
-            <View style={styles.sheetContainer}>
+            <View style={[styles.sheetContainer, { paddingBottom: Math.max(insets.bottom, 20) + 12 }]}>
               {/* Sheet Handle */}
               <View style={styles.sheetHandle} />
 
@@ -381,7 +382,11 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               </View>
 
               {/* 3-Column Modern App Icon Grid */}
-              <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+              <ScrollView
+                style={styles.sheetScroll}
+                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 24 }}
+                showsVerticalScrollIndicator={false}
+              >
                 <View style={styles.appLauncherGrid}>
                   {filteredMoreModules.map((item) => {
                     const active = isItemActive(item.href);

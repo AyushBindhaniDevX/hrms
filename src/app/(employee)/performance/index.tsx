@@ -783,7 +783,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
   tabTextActive: { color: '#FFFFFF', fontWeight: '700' },
 
-  scrollContent: { padding: 16 },
+  scrollContent: { padding: 16, paddingBottom: 110 },
 
   appraisalCard: {
     backgroundColor: '#FFFFFF',

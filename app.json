@@ -2,11 +2,21 @@
   "expo": {
     "name": "Oasis",
     "slug": "oasis-hrms",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "oasis",
     "userInterfaceStyle": "automatic",
+    "androidNavigationBar": {
+      "visible": "always",
+      "barStyle": "dark-content",
+      "backgroundColor": "#FFFFFF"
+    },
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#FFFFFF",
+      "translucent": false
+    },
     "ios": {
       "icon": "./assets/expo.icon",
       "infoPlist": {
@@ -17,7 +27,7 @@
     },
     "android": {
       "package": "com.oasis.hrms",
-      "versionCode": 2,
+      "versionCode": 3,
       "_comment_googleMaps": "Set a REAL 'Maps SDK for Android' key below to enable the native map. Until then the app safely renders a static geofence card (see GeofenceMap.tsx). A placeholder/blank key must NOT crash the release build.",
       "config": {
         "googleMaps": {

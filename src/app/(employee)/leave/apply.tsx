@@ -447,7 +447,7 @@ export default function ApplyLeaveScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 24, gap: 24, paddingBottom: 60 },
+  content: { padding: 24, gap: 24, paddingBottom: 110 },
   contentDesktop: {
     maxWidth: 720,
     alignSelf: 'center',

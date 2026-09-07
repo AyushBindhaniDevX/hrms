@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { X, CalendarClock, AlertCircle, CheckCircle2, Trash2, History } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
@@ -69,6 +70,7 @@ export function RegularizationModal({
   onSubmitted,
 }: RegularizationModalProps) {
   const colors = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [requests, setRequests] = useState<AttendanceRegularization[]>([]);
   const [loadingList, setLoadingList] = useState(false);
@@ -177,7 +179,7 @@ export function RegularizationModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, 16) }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
@@ -198,7 +200,7 @@ export function RegularizationModal({
 
           <ScrollView
             style={{ maxHeight: 520 }}
-            contentContainerStyle={{ padding: 18, gap: 16 }}
+            contentContainerStyle={{ padding: 18, gap: 16, paddingBottom: Math.max(insets.bottom, 16) + 24 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >

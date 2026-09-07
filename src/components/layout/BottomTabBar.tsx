@@ -40,6 +40,7 @@ import Animated, {
   FadeOut,
 } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/use-theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/hooks/useAuth';
 import { FeatureGate } from '@/components/ui/FeatureGate';
@@ -100,9 +101,13 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const colors = useTheme();
+  const insets = useSafeAreaInsets();
   const { isFeatureEnabled, organization, companyName, companyLogoUrl, activePlan } = useTenant();
   const { profile, signOut } = useAuth();
   const { unreadCount } = useNotifications();
+
+  // Safe bottom inset: ensures Android 3-button nav / gesture bar & iOS home indicators never cover UI
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 12);
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -196,7 +201,13 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
           />
           <Animated.View
             entering={FadeInDown.duration(280).springify().damping(18)}
-            style={[styles.moreSheet, { backgroundColor: '#FFFFFF' }]}
+            style={[
+              styles.moreSheet,
+              {
+                backgroundColor: '#FFFFFF',
+                paddingBottom: Math.max(insets.bottom, 16) + 12,
+              },
+            ]}
           >
             {/* Sheet Handle */}
             <View style={styles.sheetHandleWrap}>
@@ -256,7 +267,7 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
             {/* Modules List */}
             <ScrollView
               style={styles.sheetScroll}
-              contentContainerStyle={{ paddingBottom: 24 }}
+              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 32 }}
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.moreGrid}>
@@ -348,6 +359,8 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
           {
             backgroundColor: '#FFFFFF',
             borderTopColor: '#E2E8F0',
+            paddingBottom: bottomInset,
+            minHeight: 56 + bottomInset,
           },
         ]}
       >
@@ -412,7 +425,6 @@ const styles = StyleSheet.create({
   // Bottom Navigation Bar
   tabBar: {
     flexDirection: 'row',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
     paddingTop: 8,
     borderTopWidth: 1,
     ...(Platform.select({

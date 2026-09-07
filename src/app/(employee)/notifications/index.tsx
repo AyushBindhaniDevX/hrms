@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontWeight: '600' },
   tabTextActive: { fontWeight: '800' },
 
-  scrollContent: { paddingBottom: 40 },
+  scrollContent: { paddingBottom: 110 },
 
   notifCard: {
     flexDirection: 'row',

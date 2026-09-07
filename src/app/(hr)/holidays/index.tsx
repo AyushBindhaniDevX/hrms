@@ -632,7 +632,7 @@ export default function HolidaysCalendarScreen({ wrapInSidebar = true }: Holiday
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16 },
+  content: { padding: 16, paddingBottom: 110 },
   contentDesktop: { padding: 32, maxWidth: 1400, alignSelf: 'center', width: '100%' },
   headerRow: {
     flexDirection: 'row',
