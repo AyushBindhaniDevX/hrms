@@ -538,7 +538,7 @@ export default function UserManagementScreen() {
           department: dept?.name,
           workplace: wp?.name,
           designation: emp?.designation || undefined,
-          temporaryPassword: u.phone ? `Pass@${u.phone.slice(-4)}` : 'Welcome@123',
+          temporaryPassword: u.phone || 'Welcome@123',
         }
       );
       setInfoBanner({
