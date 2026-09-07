@@ -10,14 +10,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDfm6Y3LjDzeeK7a7hg6FvaE5rL4FgBIh8',
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'project-9d1aa.firebaseapp.com',
-  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL || 'https://project-9d1aa-default-rtdb.firebaseio.com',
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'project-9d1aa',
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'project-9d1aa.firebasestorage.app',
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '970423945867',
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:970423945867:web:41cde39590eed383a1e28e',
-  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-WD23318M8K',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 // 1. Initialize or retrieve the Firebase App instance
