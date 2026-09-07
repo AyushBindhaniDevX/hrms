@@ -7,7 +7,12 @@ const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 export function SessionManager({ children }: { children: React.ReactNode }) {
   const { signOut, user } = useAuth();
-  const pathname = usePathname();
+  let pathname = '';
+  try {
+    pathname = usePathname();
+  } catch {
+    pathname = '';
+  }
   const timerRef = useRef<any>(null);
 
   const resetTimer = () => {

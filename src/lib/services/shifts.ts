@@ -1,69 +1,63 @@
 /**
- * Shifts & Roster Scheduling Service (Supabase)
+ * Shifts & Roster Scheduling Service (Cloud Firestore)
  * Oasis HRMS Multi-Tenant Platform
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from 'firebase/firestore';
 import { WorkShift, EmployeeShift } from '@/types/database';
 
 export const DEFAULT_SHIFTS: Omit<WorkShift, 'id' | 'created_at'>[] = [];
 
 export async function getShifts(organizationId?: string): Promise<WorkShift[]> {
   try {
-    let query = supabase
-      .from('shifts')
-      .select('*')
-      .order('name', { ascending: true });
+    const snap = await getDocs(collection(db, 'shifts'));
+    const shifts: WorkShift[] = [];
+    snap.forEach((d) => {
+      const s = { id: d.id, ...d.data() } as WorkShift;
+      if (!organizationId || s.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && s.organization_id === 'smh')) {
+        shifts.push(s);
+      }
+    });
 
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId);
-    }
-
-    const { data, error } = await query;
-
-    if (!error && data) {
-      return data as WorkShift[];
-    }
+    shifts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return shifts;
   } catch (err) {
     console.error('Error querying shifts:', err);
+    return [];
   }
-
-  return [];
 }
 
 export async function createShift(shift: Omit<WorkShift, 'id' | 'created_at'>): Promise<WorkShift> {
+  const shiftId = `shift-${Date.now()}`;
   const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('shifts')
-    .insert({
-      ...shift,
-      created_at: now,
-    })
-    .select('*')
-    .single();
+  const newShift: WorkShift = {
+    id: shiftId,
+    ...shift,
+    created_at: now,
+  };
 
-  if (error) {
-    throw error;
-  }
-  return data as WorkShift;
+  await setDoc(doc(db, 'shifts', shiftId), newShift);
+  return newShift;
 }
 
 export async function updateShift(id: string, updates: Partial<WorkShift>): Promise<void> {
-  const { error } = await supabase
-    .from('shifts')
-    .update(updates)
-    .eq('id', id);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'shifts', id), updates);
 }
 
 export async function deleteShift(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('shifts')
-    .delete()
-    .eq('id', id);
-
-  if (error) throw error;
+  await deleteDoc(doc(db, 'shifts', id));
 }
 
 export async function getRoster(
@@ -72,25 +66,30 @@ export async function getRoster(
   organizationId?: string
 ): Promise<EmployeeShift[]> {
   try {
-    let query = supabase
-      .from('employee_shifts')
-      .select('*, shift:shifts(*)')
-      .gte('date', startDate)
-      .lte('date', endDate);
+    const [rosterSnap, shiftsSnap] = await Promise.all([
+      getDocs(collection(db, 'employee_shifts')),
+      getDocs(collection(db, 'shifts')),
+    ]);
 
-    if (organizationId) {
-      query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
-    }
+    const shiftMap = new Map<string, WorkShift>();
+    shiftsSnap.forEach((d) => shiftMap.set(d.id, { id: d.id, ...d.data() } as WorkShift));
 
-    const { data, error } = await query;
-    if (!error && data) {
-      return data as EmployeeShift[];
-    }
+    const roster: EmployeeShift[] = [];
+    rosterSnap.forEach((d) => {
+      const entry = { id: d.id, ...d.data() } as EmployeeShift;
+      if (entry.date >= startDate && entry.date <= endDate) {
+        if (!organizationId || !entry.organization_id || entry.organization_id === organizationId) {
+          entry.shift = entry.shift_id ? shiftMap.get(entry.shift_id) : undefined;
+          roster.push(entry);
+        }
+      }
+    });
+
+    return roster;
   } catch (e) {
     console.error('Error fetching roster:', e);
+    return [];
   }
-
-  return [];
 }
 
 export async function assignEmployeeShift(
@@ -104,26 +103,20 @@ export async function assignEmployeeShift(
 
   try {
     if (!shiftId || shiftId === 'OFF') {
-      await supabase.from('employee_shifts').delete().eq('id', id);
+      await deleteDoc(doc(db, 'employee_shifts', id));
       return;
     }
 
-    const payload: Record<string, any> = {
+    const payload: EmployeeShift = {
       id,
       employee_id: employeeId,
       date,
       shift_id: shiftId,
+      organization_id: organizationId || '00000000-0000-0000-0000-000000000001',
       created_at: now,
     };
-    if (organizationId) {
-      payload.organization_id = organizationId;
-    }
 
-    let { error } = await supabase.from('employee_shifts').upsert(payload);
-    if (error && error.code === 'PGRST204') {
-      delete payload.organization_id;
-      await supabase.from('employee_shifts').upsert(payload);
-    }
+    await setDoc(doc(db, 'employee_shifts', id), payload);
   } catch (err) {
     console.error('Error assigning employee shift:', err);
   }

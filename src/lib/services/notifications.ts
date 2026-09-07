@@ -1,9 +1,22 @@
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  onSnapshot,
+} from 'firebase/firestore';
 import type { Notification } from '@/types';
 import { Platform } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 
-// Safely lazy-load ExpoNotifications only on native devices (iOS/Android) and non-Expo Go
 const isExpoGo = Constants?.executionEnvironment === ExecutionEnvironment.StoreClient;
 let ExpoNotifications: typeof import('expo-notifications') | null = null;
 
@@ -19,9 +32,7 @@ if (Platform.OS !== 'web' && !isExpoGo) {
         shouldShowList: true,
       }),
     });
-  } catch (e) {
-    // Native notifications module not available in this environment
-  }
+  } catch (e) {}
 }
 
 export async function requestNotificationPermissions() {
@@ -77,15 +88,20 @@ export async function cancelClockInNotification() {
 export async function getUserNotifications(profileId: string): Promise<Notification[]> {
   if (!profileId) return [];
 
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('profile_id', profileId)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (error || !data) return [];
-  return data as Notification[];
+  try {
+    const q = query(
+      collection(db, 'notifications'),
+      where('profile_id', '==', profileId)
+    );
+    const snap = await getDocs(q);
+    const notifs: Notification[] = [];
+    snap.forEach((d) => notifs.push({ id: d.id, ...d.data() } as Notification));
+    notifs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return notifs.slice(0, 50);
+  } catch (err) {
+    console.error('getUserNotifications error:', err);
+    return [];
+  }
 }
 
 export async function createNotification(
@@ -112,12 +128,14 @@ export async function createNotification(
     type = typeParam || 'general';
     title = titleParam || '';
     message = messageParam || '';
-    action_url = actionUrlParam || null;
+    actionUrlParam = actionUrlParam || null;
   }
 
   if (!profile_id) return;
 
-  const notifObj = {
+  const notifId = `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const notifObj: Notification = {
+    id: notifId,
     profile_id,
     title,
     message,
@@ -127,7 +145,7 @@ export async function createNotification(
     created_at: new Date().toISOString(),
   };
 
-  await supabase.from('notifications').insert(notifObj);
+  await setDoc(doc(db, 'notifications', notifId), notifObj);
 
   if (Platform.OS !== 'web' && ExpoNotifications) {
     try {
@@ -145,22 +163,29 @@ export async function createNotification(
 }
 
 export async function markNotificationAsRead(id: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('id', id);
-
-  return !error;
+  try {
+    await updateDoc(doc(db, 'notifications', id), { is_read: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function markAllNotificationsAsRead(profileId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('profile_id', profileId)
-    .eq('is_read', false);
-
-  return !error;
+  try {
+    const q = query(
+      collection(db, 'notifications'),
+      where('profile_id', '==', profileId),
+      where('is_read', '==', false)
+    );
+    const snap = await getDocs(q);
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, 'notifications', d.id), { is_read: true });
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function subscribeToUserNotifications(
@@ -172,27 +197,23 @@ export function subscribeToUserNotifications(
     return () => {};
   }
 
-  // Initial fetch
-  getUserNotifications(profileId).then(onUpdate);
+  const q = query(
+    collection(db, 'notifications'),
+    where('profile_id', '==', profileId)
+  );
 
-  // Realtime subscription via Supabase channel
-  const channel = supabase
-    .channel(`public:notifications:profile_id=eq.${profileId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'notifications',
-        filter: `profile_id=eq.${profileId}`,
-      },
-      () => {
-        getUserNotifications(profileId).then(onUpdate);
-      }
-    )
-    .subscribe();
+  const unsubscribe = onSnapshot(
+    q,
+    (snapshot) => {
+      const notifs: Notification[] = [];
+      snapshot.forEach((d) => notifs.push({ id: d.id, ...d.data() } as Notification));
+      notifs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      onUpdate(notifs.slice(0, 50));
+    },
+    (err) => {
+      console.warn('subscribeToUserNotifications error:', err);
+    }
+  );
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return unsubscribe;
 }

@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   Image,
+  Alert,
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { Avatar } from '@/components/ui/Avatar';
+import { FeatureGate } from '@/components/ui/FeatureGate';
 import {
   LogOut,
   HelpCircle,
@@ -50,10 +52,30 @@ import {
   Grid,
   X,
   ChevronRight,
+  Lock,
 } from 'lucide-react-native';
 import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
 import { useNotifications } from '@/context/NotificationContext';
 import { getNavForRole, ADMIN_NAV, HR_NAV, EMPLOYEE_NAV, NavItem } from '@/constants/navigation';
+
+export function getRouteFeature(pathname: string): { feature: string; name: string } | null {
+  if (pathname.includes('/attendance')) return { feature: 'attendance', name: 'Attendance & Time Tracking' };
+  if (pathname.includes('/leave')) return { feature: 'leave', name: 'Leave & Time Off' };
+  if (pathname.includes('/holidays')) return { feature: 'holidays', name: 'Holiday Calendar' };
+  if (pathname.includes('/shifts')) return { feature: 'shifts', name: 'Shifts & Rosters' };
+  if (pathname.includes('/performance')) return { feature: 'performance', name: 'Performance Management' };
+  if (pathname.includes('/payroll') || pathname.includes('/payslips')) return { feature: 'payroll', name: 'Payroll & Compensation' };
+  if (pathname.includes('/users') || pathname.includes('/directory')) return { feature: 'users', name: 'Staff & User Directory' };
+  if (pathname.includes('/departments')) return { feature: 'departments', name: 'Department Management' };
+  if (pathname.includes('/locations')) return { feature: 'locations', name: 'Office Locations' };
+  if (pathname.includes('/audit-logs')) return { feature: 'audit_logs', name: 'Audit & Compliance Logs' };
+  if (pathname.includes('/expenses')) return { feature: 'expenses', name: 'Expense Management' };
+  if (pathname.includes('/helpdesk')) return { feature: 'helpdesk', name: 'Helpdesk & Support' };
+  if (pathname.includes('/assets')) return { feature: 'assets', name: 'Asset Management' };
+  if (pathname.includes('/learning')) return { feature: 'learning', name: 'Learning & LMS' };
+  if (pathname.includes('/recruitment')) return { feature: 'recruitment', name: 'Recruitment & ATS' };
+  return null;
+}
 
 interface SidebarProps {
   items?: NavItem[];
@@ -66,7 +88,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { profile, role, signOut } = useAuth();
-  const { companyName, companyLogoUrl, organization } = useTenant();
+  const { companyName, companyLogoUrl, organization, isFeatureEnabled } = useTenant();
   const { unreadCount } = useNotifications();
   const [showAssistant, setShowAssistant] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
@@ -77,17 +99,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
   const effectiveRole = profile?.role || role || 'employee';
 
   const effectiveItems: NavItem[] = React.useMemo(() => {
-    if (effectiveRole === 'admin') {
-      return ADMIN_NAV;
-    }
-    if (effectiveRole === 'hr') {
-      return HR_NAV;
-    }
-    if (effectiveRole === 'employee') {
-      return EMPLOYEE_NAV;
-    }
-    return items || getNavForRole(effectiveRole);
-  }, [effectiveRole, items]);
+    return items || getNavForRole(effectiveRole, profile?.email);
+  }, [effectiveRole, items, profile?.email]);
 
   const isDesktop = width >= 1024;
 
@@ -110,27 +123,48 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     if (effectiveRole === 'admin') {
       return [
         { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
-        { label: 'Users & Staff', href: '/(admin)/users', icon: Users },
-        { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
-        { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
+        { label: 'Users & Staff', href: '/(admin)/users', icon: Users, feature: 'users' },
+        { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
+        { label: 'Leave', href: '/(hr)/leave', icon: Umbrella, feature: 'leave' },
       ];
     }
     if (effectiveRole === 'hr') {
       return [
         { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
-        { label: 'Users & Staff', href: '/(admin)/users', icon: Users },
-        { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
-        { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
+        { label: 'Users & Staff', href: '/(admin)/users', icon: Users, feature: 'users' },
+        { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
+        { label: 'Leave', href: '/(hr)/leave', icon: Umbrella, feature: 'leave' },
       ];
     }
     // Employee
     return [
       { label: 'Dashboard', href: '/(employee)/dashboard', icon: LayoutDashboard },
-      { label: 'Attendance', href: '/(employee)/attendance', icon: CalendarClock },
-      { label: 'Leave', href: '/(employee)/leave', icon: CalendarDays },
-      { label: 'Salary', href: '/(employee)/payslips', icon: Banknote },
+      { label: 'Attendance', href: '/(employee)/attendance', icon: CalendarClock, feature: 'attendance' },
+      { label: 'Leave', href: '/(employee)/leave', icon: CalendarDays, feature: 'leave' },
+      { label: 'Salary', href: '/(employee)/payslips', icon: Banknote, feature: 'payroll' },
     ];
   }, [effectiveRole]);
+
+  const isItemLocked = (item: NavItem) => {
+    if (item.feature) {
+      return !isFeatureEnabled(item.feature);
+    }
+    if (item.href === '/(admin)/portal' && profile?.email !== 'ayushbindhani001@gmail.com') {
+      return true;
+    }
+    return false;
+  };
+
+  const handleLockedItemPress = (label: string) => {
+    Alert.alert(
+      'Feature Locked',
+      `The "${label}" module is currently locked for your organization. Please contact your organization administrator or super admin to unlock this module.`,
+      [{ text: 'OK' }]
+    );
+  };
+
+  const currentRouteFeat = getRouteFeature(pathname);
+  const isCurrentRouteLocked = currentRouteFeat ? !isFeatureEnabled(currentRouteFeat.feature) : false;
 
   const handleSearchSubmit = () => {
     if (!searchQuery.trim()) return;
@@ -204,7 +238,15 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         />
 
         {/* Main Screen Content */}
-        <View style={styles.mobileContentWrapper}>{children}</View>
+        <View style={styles.mobileContentWrapper}>
+          {isCurrentRouteLocked && currentRouteFeat ? (
+            <FeatureGate feature={currentRouteFeat.feature} featureName={currentRouteFeat.name}>
+              {children}
+            </FeatureGate>
+          ) : (
+            children
+          )}
+        </View>
 
         {/* ==================================================== */}
         {/* NATIVE BOTTOM TAB NAVIGATION BAR */}
@@ -214,20 +256,32 @@ export function SidebarLayout({ items, children }: SidebarProps) {
             {mobileTabs.map((tab) => {
               const active = isItemActive(tab.href);
               const IconComp = tab.icon;
+              const isLocked = tab.feature ? !isFeatureEnabled(tab.feature) : false;
 
               return (
                 <TouchableOpacity
                   key={tab.href}
-                  onPress={() => router.push(tab.href as never)}
-                  style={styles.tabBtn}
+                  onPress={() => {
+                    if (isLocked) {
+                      handleLockedItemPress(tab.label);
+                    } else {
+                      router.push(tab.href as never);
+                    }
+                  }}
+                  style={[styles.tabBtn, isLocked && { opacity: 0.55 }]}
                   activeOpacity={0.75}
                 >
                   <View style={[styles.tabIconContainer, active && { backgroundColor: colors.primaryLight }]}>
                     <IconComp
                       size={20}
-                      color={active ? colors.primary : colors.textSecondary}
+                      color={active ? colors.primary : isLocked ? '#94A3B8' : colors.textSecondary}
                       strokeWidth={active ? 2.5 : 2}
                     />
+                    {isLocked && (
+                      <View style={styles.tabLockBadge}>
+                        <Lock size={8} color="#FFFFFF" />
+                      </View>
+                    )}
                   </View>
                   <Text
                     style={[
@@ -235,6 +289,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                       active
                         ? [styles.tabLabelActive, { color: colors.primary }]
                         : styles.tabLabelInactive,
+                      isLocked && { color: '#94A3B8' },
                     ]}
                     numberOfLines={1}
                   >
@@ -297,7 +352,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                 <View>
                   <Text style={styles.sheetTitle}>All Oasis Modules</Text>
                   <Text style={styles.sheetSubtitle}>
-                    {effectiveRole.toUpperCase()} Console & Workflows
+                    {String(effectiveRole || 'employee').toUpperCase()} Console & Workflows
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -331,38 +386,55 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                   {filteredMoreModules.map((item) => {
                     const active = isItemActive(item.href);
                     const IconComponent = item.icon || LayoutDashboard;
+                    const isLocked = isItemLocked(item);
 
                     return (
                       <TouchableOpacity
                         key={item.href}
                         onPress={() => {
                           setShowMoreSheet(false);
-                          router.push(item.href as never);
+                          if (isLocked) {
+                            handleLockedItemPress(item.label);
+                          } else {
+                            router.push(item.href as never);
+                          }
                         }}
-                        style={styles.appGridItem}
+                        style={[styles.appGridItem, isLocked && { opacity: 0.6 }]}
                         activeOpacity={0.8}
                       >
                         <View
                           style={[
                             styles.appIconCircle,
                             active && { backgroundColor: colors.accentLight, borderColor: colors.primary },
+                            isLocked && { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' },
                           ]}
                         >
                           <IconComponent
                             size={22}
-                            color={active ? colors.primary : colors.text}
+                            color={active ? colors.primary : isLocked ? '#94A3B8' : colors.text}
                             strokeWidth={active ? 2.5 : 2}
                           />
+                          {isLocked && (
+                            <View style={styles.moreLockBadge}>
+                              <Lock size={9} color="#FFFFFF" />
+                            </View>
+                          )}
                         </View>
                         <Text
                           style={[
                             styles.appGridLabel,
                             active && { color: colors.primary, fontWeight: '800' },
+                            isLocked && { color: '#94A3B8' },
                           ]}
                           numberOfLines={2}
                         >
                           {item.label}
                         </Text>
+                        {isLocked && (
+                          <View style={styles.moreLockedPill}>
+                            <Text style={styles.moreLockedPillText}>LOCKED</Text>
+                          </View>
+                        )}
                       </TouchableOpacity>
                     );
                   })}
@@ -454,12 +526,12 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                     {companyName}
                   </Text>
                   <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '600', letterSpacing: 0.5, marginTop: 2 }}>
-                    {`${effectiveRole.toUpperCase()} SUITE`}
+                    {`${String(effectiveRole || 'employee').toUpperCase()} SUITE`}
                   </Text>
                 </View>
               </View>
             ) : (
-              <SubedgeBrand size="md" subtitle={`${effectiveRole.toUpperCase()} SUITE`} />
+              <SubedgeBrand size="md" subtitle={`${String(effectiveRole || 'employee').toUpperCase()} SUITE`} />
             )}
           </TouchableOpacity>
 
@@ -478,35 +550,49 @@ export function SidebarLayout({ items, children }: SidebarProps) {
           {effectiveItems.map((item) => {
             const active = isItemActive(item.href);
             const IconComponent = item.icon;
+            const isLocked = isItemLocked(item);
 
             return (
               <TouchableOpacity
                 key={item.href}
-                onPress={() => router.push(item.href as never)}
+                onPress={() => {
+                  if (isLocked) {
+                    handleLockedItemPress(item.label);
+                  } else {
+                    router.push(item.href as never);
+                  }
+                }}
                 style={[
                   styles.navItem,
                   active && { backgroundColor: colors.backgroundSelected },
+                  isLocked && { opacity: 0.55 },
                 ]}
               >
                 <View style={styles.navItemContent}>
                   {IconComponent && (
                     <IconComponent
                       size={20}
-                      color={active ? colors.primary : colors.textSecondary}
+                      color={active ? colors.primary : isLocked ? '#94A3B8' : colors.textSecondary}
                       strokeWidth={active ? 2.5 : 2}
                     />
                   )}
                   <Text
                     style={[
                       styles.navLabel,
-                      { color: active ? colors.primary : colors.textSecondary },
+                      { color: active ? colors.primary : isLocked ? '#94A3B8' : colors.textSecondary },
                       active && styles.navLabelActive,
                     ]}
                   >
                     {item.label}
                   </Text>
+                  {isLocked && (
+                    <View style={styles.lockedPill}>
+                      <Lock size={10} color="#DC2626" />
+                      <Text style={styles.lockedPillText}>LOCKED</Text>
+                    </View>
+                  )}
                 </View>
-                {active && (
+                {active && !isLocked && (
                   <View
                     style={[styles.activeIndicator, { backgroundColor: colors.primary }]}
                   />
@@ -577,7 +663,15 @@ export function SidebarLayout({ items, children }: SidebarProps) {
           </View>
         </View>
 
-        <View style={styles.mainContentScroll}>{children}</View>
+        <View style={styles.mainContentScroll}>
+          {isCurrentRouteLocked && currentRouteFeat ? (
+            <FeatureGate feature={currentRouteFeat.feature} featureName={currentRouteFeat.name}>
+              {children}
+            </FeatureGate>
+          ) : (
+            children
+          )}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -916,5 +1010,56 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
     zIndex: 999,
+  },
+  tabLockBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreLockBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreLockedPill: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  moreLockedPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#DC2626',
+    letterSpacing: 0.5,
+  },
+  lockedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 'auto',
+    gap: 3,
+  },
+  lockedPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#DC2626',
+    letterSpacing: 0.5,
   },
 });

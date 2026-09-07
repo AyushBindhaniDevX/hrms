@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Badge } from '@/components/ui/Badge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -31,7 +32,7 @@ function getLeaveIcon(name: string, size = 20) {
   const color = '#006a61';
   if (n.includes('annual') || n.includes('vacation') || n.includes('earned')) return <Plane size={size} color={color} />;
   if (n.includes('sick') || n.includes('medical')) return <BriefcaseMedical size={size} color={color} />;
-  if (n.includes('casual') || n.includes('personal') || n.includes('comp')) return <Coffee size={size} color={color} />;
+  if (n.includes('casual') || n.includes('personal') || n.includes('comp') || n.includes('cme') || n.includes('on-call')) return <Coffee size={size} color={color} />;
   return <Calendar size={size} color={color} />;
 }
 
@@ -42,11 +43,14 @@ function statusVariant(s: string): 'warningLight' | 'successLight' | 'dangerLigh
 export default function LeaveScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization, employee: tenantEmp } = useTenant();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
+
+  const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id;
 
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -58,14 +62,17 @@ export default function LeaveScreen() {
 
   const loadData = useCallback(async () => {
     if (!profile) return;
-    const emp = await getEmployeeByProfileId(profile.id);
+    const emp = tenantEmp || (await getEmployeeByProfileId(profile.id, activeOrgId));
     if (emp) {
-      const [b, r] = await Promise.all([getLeaveBalances(emp.id), getLeaveRequests(emp.id)]);
+      const [b, r] = await Promise.all([
+        getLeaveBalances(emp.id, undefined, activeOrgId),
+        getLeaveRequests(emp.id, activeOrgId),
+      ]);
       setBalances(b);
       setRequests(r);
     }
     setLoading(false);
-  }, [profile]);
+  }, [profile, activeOrgId, tenantEmp]);
 
   useFocusEffect(
     useCallback(() => {
@@ -88,9 +95,18 @@ export default function LeaveScreen() {
   const totalAllocated = balances.reduce((sum, b) => sum + (b.allocated_days || 0), 0);
   const totalUsed = balances.reduce((sum, b) => sum + (b.used_days || 0), 0);
 
-  const annualB = balances.find(b => (b.leave_type?.name || '').toLowerCase().includes('annual'));
-  const sickB = balances.find(b => (b.leave_type?.name || '').toLowerCase().includes('sick'));
-  const casualB = balances.find(b => (b.leave_type?.name || '').toLowerCase().includes('casual'));
+  const annualB = balances.find((b) => {
+    const n = (b.leave_type?.name || '').toLowerCase();
+    return n.includes('annual') || n.includes('earned') || n.includes('privilege') || n.includes('vacation');
+  });
+  const sickB = balances.find((b) => {
+    const n = (b.leave_type?.name || '').toLowerCase();
+    return n.includes('sick') || n.includes('med');
+  });
+  const casualB = balances.find((b) => {
+    const n = (b.leave_type?.name || '').toLowerCase();
+    return n.includes('casual') || n.includes('personal') || n.includes('cme');
+  });
 
   const displayedRequests = requests.filter((r) => {
     if (statusFilter === 'all') return true;

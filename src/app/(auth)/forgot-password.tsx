@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { auth } from '@/lib/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -16,7 +17,7 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Send reset password email via Supabase
+  // Send reset password email via Firebase Auth
   const handleSendResetEmail = async () => {
     if (!email) {
       setError('Please enter your work email address.');
@@ -27,18 +28,7 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
 
     try {
-      const redirectTo = Platform.OS === 'web' && typeof window !== 'undefined'
-        ? `${window.location.origin}/`
-        : undefined;
-
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo,
-      });
-
-      if (resetErr) {
-        throw new Error(resetErr.message);
-      }
-
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
       setSuccess(true);
     } catch (err: any) {
       console.error('Reset password error:', err);

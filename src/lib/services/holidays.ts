@@ -1,4 +1,17 @@
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
 import type { Holiday, HolidayType } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -36,75 +49,63 @@ async function saveLocalCustomHolidays(holidays: Holiday[]): Promise<void> {
   } catch {}
 }
 
-/**
- * Fetch all holidays for an organization, optionally filtered by year
- */
 export async function getHolidays(organizationId?: string, year?: number): Promise<Holiday[]> {
   const currentYear = year ?? new Date().getFullYear();
   const startOfYear = `${currentYear}-01-01`;
   const endOfYear = `${currentYear}-12-31`;
 
   try {
-    let query = supabase
-      .from('holidays')
-      .select('*')
-      .gte('date', startOfYear)
-      .lte('date', endOfYear)
-      .order('date', { ascending: true });
+    const snap = await getDocs(collection(db, 'holidays'));
+    const allHolidays: Holiday[] = [];
+    snap.forEach((d) => {
+      const h = { id: d.id, ...d.data() } as Holiday;
+      if (h.date >= startOfYear && h.date <= endOfYear) {
+        if (organizationId) {
+          if (h.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && h.organization_id === 'smh')) {
+            allHolidays.push(h);
+          }
+        } else {
+          allHolidays.push(h);
+        }
+      }
+    });
 
-    if (organizationId) {
-      query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
+    if (allHolidays.length > 0) {
+      allHolidays.sort((a, b) => a.date.localeCompare(b.date));
+      return allHolidays;
     }
+  } catch (err) {
+    console.warn('Error querying Firestore holidays:', err);
+  }
 
-    const { data, error } = await query;
-
-    if (!error && data && data.length > 0) {
-      return data as Holiday[];
-    }
-  } catch {}
-
-  // Fallback: merge default holidays with any locally saved custom entries
   return await getFallbackHolidays(organizationId, currentYear);
 }
 
-/**
- * Seed default calendar holidays into Supabase
- */
 export async function seedDefaultHolidays(organizationId?: string, year?: number): Promise<Holiday[]> {
   const targetYear = year ?? new Date().getFullYear();
+  const orgId = organizationId || '00000000-0000-0000-0000-000000000001';
 
-  let resolvedOrgId = organizationId;
-  if (!resolvedOrgId) {
-    try {
-      const { data: anyOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-      if (anyOrg?.id) resolvedOrgId = anyOrg.id;
-    } catch {}
+  const seeded: Holiday[] = [];
+  for (let i = 0; i < DEFAULT_HOLIDAYS.length; i++) {
+    const h = DEFAULT_HOLIDAYS[i];
+    const holId = `hol_${targetYear}_${i + 1}`;
+    const holData: Holiday = {
+      id: holId,
+      organization_id: orgId,
+      name: h.name,
+      date: `${targetYear}${h.date_suffix}`,
+      type: h.type,
+      description: h.description,
+      is_recurring: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    await setDoc(doc(db, 'holidays', holId), holData);
+    seeded.push(holData);
   }
 
-  const payload = DEFAULT_HOLIDAYS.map((h) => ({
-    organization_id: resolvedOrgId || null,
-    name: h.name,
-    date: `${targetYear}${h.date_suffix}`,
-    type: h.type,
-    description: h.description,
-    is_recurring: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }));
-
-  try {
-    const { data, error } = await supabase
-      .from('holidays')
-      .insert(payload)
-      .select('*')
-      .order('date', { ascending: true });
-
-    if (!error && data && data.length > 0) {
-      return data as Holiday[];
-    }
-  } catch {}
-
-  return getFallbackHolidays(organizationId, targetYear);
+  seeded.sort((a, b) => a.date.localeCompare(b.date));
+  return seeded;
 }
 
 async function getFallbackHolidays(organizationId?: string, year?: number): Promise<Holiday[]> {
@@ -129,9 +130,6 @@ async function getFallbackHolidays(organizationId?: string, year?: number): Prom
   return all;
 }
 
-/**
- * Add a new holiday (HR / Admin)
- */
 export async function createHoliday(holiday: {
   organization_id?: string | null;
   name: string;
@@ -141,18 +139,12 @@ export async function createHoliday(holiday: {
   is_recurring?: boolean;
 }): Promise<Holiday> {
   const now = new Date().toISOString();
-
-  let orgId = holiday.organization_id;
-  if (!orgId) {
-    try {
-      const { data: anyOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-      orgId = anyOrg?.id || null;
-    } catch {}
-  }
+  const holId = `hol_custom_${Date.now()}`;
+  const orgId = holiday.organization_id || '00000000-0000-0000-0000-000000000001';
 
   const newEntry: Holiday = {
-    id: `hol_custom_${Date.now()}`,
-    organization_id: orgId || '',
+    id: holId,
+    organization_id: orgId,
     name: holiday.name.trim(),
     date: holiday.date,
     type: holiday.type,
@@ -163,56 +155,34 @@ export async function createHoliday(holiday: {
   };
 
   try {
-    const { data, error } = await supabase
-      .from('holidays')
-      .insert({
-        organization_id: orgId,
-        name: holiday.name.trim(),
-        date: holiday.date,
-        type: holiday.type,
-        description: holiday.description?.trim() || null,
-        is_recurring: holiday.is_recurring ?? false,
-        created_at: now,
-        updated_at: now,
-      })
-      .select('*')
-      .single();
+    await setDoc(doc(db, 'holidays', holId), newEntry);
+    return newEntry;
+  } catch (err) {
+    console.warn('Firestore createHoliday fallback to local storage:', err);
+  }
 
-    if (!error && data) {
-      return data as Holiday;
-    }
-  } catch {}
-
-  // Local storage fallback if Supabase table is not yet migrated
   const current = await getLocalCustomHolidays();
   const updated = [...current, newEntry];
   await saveLocalCustomHolidays(updated);
   return newEntry;
 }
 
-/**
- * Update an existing holiday
- */
 export async function updateHoliday(id: string, updates: Partial<Holiday>): Promise<Holiday> {
   const now = new Date().toISOString();
 
   try {
-    const { data, error } = await supabase
-      .from('holidays')
-      .update({
-        ...updates,
-        updated_at: now,
-      })
-      .eq('id', id)
-      .select('*')
-      .single();
-
-    if (!error && data) {
-      return data as Holiday;
+    await updateDoc(doc(db, 'holidays', id), {
+      ...updates,
+      updated_at: now,
+    });
+    const snap = await getDoc(doc(db, 'holidays', id));
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as Holiday;
     }
-  } catch {}
+  } catch (err) {
+    console.warn('Firestore updateHoliday fallback to local:', err);
+  }
 
-  // Local storage fallback
   const current = await getLocalCustomHolidays();
   const idx = current.findIndex((h) => h.id === id);
   if (idx >= 0) {
@@ -234,40 +204,33 @@ export async function updateHoliday(id: string, updates: Partial<Holiday>): Prom
   };
 }
 
-/**
- * Delete a holiday
- */
 export async function deleteHoliday(id: string): Promise<void> {
   try {
-    await supabase.from('holidays').delete().eq('id', id);
-  } catch {}
+    await deleteDoc(doc(db, 'holidays', id));
+  } catch (err) {
+    console.warn('Firestore deleteHoliday error:', err);
+  }
 
   const current = await getLocalCustomHolidays();
   const filtered = current.filter((h) => h.id !== id);
   await saveLocalCustomHolidays(filtered);
 }
 
-/**
- * Check if a specific date is a declared Holiday
- */
 export async function isHoliday(
   dateStr: string,
   organizationId?: string
 ): Promise<{ isHoliday: boolean; holiday?: Holiday }> {
   try {
-    let query = supabase.from('holidays').select('*').eq('date', dateStr);
-    if (organizationId) {
-      query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
-    }
-
-    const { data } = await query.maybeSingle();
-    if (data) {
-      return { isHoliday: true, holiday: data as Holiday };
+    const q = query(collection(db, 'holidays'), where('date', '==', dateStr));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const match = { id: snap.docs[0].id, ...snap.docs[0].data() } as Holiday;
+      return { isHoliday: true, holiday: match };
     }
   } catch {}
 
   // Check local defaults
-  const d = dateStr.slice(5); // -MM-DD
+  const d = dateStr.slice(5);
   const match = DEFAULT_HOLIDAYS.find((h) => h.date_suffix === `-${d}`);
   if (match) {
     return {
@@ -293,85 +256,86 @@ export async function isHoliday(
   return { isHoliday: false };
 }
 
-/**
- * Get all holidays falling within a specific date range [startDate, endDate]
- */
 export async function getHolidaysForDateRange(
   startDate: string,
   endDate: string,
   organizationId?: string
 ): Promise<Holiday[]> {
   try {
-    let query = supabase
-      .from('holidays')
-      .select('*')
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date', { ascending: true });
+    const snap = await getDocs(collection(db, 'holidays'));
+    const range: Holiday[] = [];
+    snap.forEach((d) => {
+      const h = { id: d.id, ...d.data() } as Holiday;
+      if (h.date >= startDate && h.date <= endDate) {
+        if (!organizationId || !h.organization_id || h.organization_id === organizationId) {
+          range.push(h);
+        }
+      }
+    });
 
-    if (organizationId) {
-      query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
+    if (range.length > 0) {
+      range.sort((a, b) => a.date.localeCompare(b.date));
+      return range;
     }
-
-    const { data, error } = await query;
-    if (!error && data && data.length > 0) return data as Holiday[];
   } catch {}
 
-  // Fallback from combined list
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const year = start.getFullYear();
-  const allHols = await getFallbackHolidays(organizationId, year);
-  return allHols.filter((h) => {
-    const d = new Date(h.date);
-    return d >= start && d <= end;
-  });
+  const startYear = parseInt(startDate.slice(0, 4), 10);
+  const endYear = parseInt(endDate.slice(0, 4), 10);
+  const all: Holiday[] = [];
+
+  for (let y = startYear; y <= endYear; y++) {
+    const fallback = await getFallbackHolidays(organizationId, y);
+    for (const h of fallback) {
+      if (h.date >= startDate && h.date <= endDate) {
+        all.push(h);
+      }
+    }
+  }
+
+  all.sort((a, b) => a.date.localeCompare(b.date));
+  return all;
 }
 
-/**
- * Calculate net working days between startDate and endDate
- * EXCLUDING Saturdays/Sundays and declared Public/Company Holidays.
- * This guarantees holidays are NOT deducted against leave balances or counted for Loss of Pay (LOP)!
- */
 export async function getWorkingDaysCount(
   startDate: string,
   endDate: string,
   organizationId?: string,
-  isHalfDay: boolean = false
-): Promise<{ workingDays: number; holidayDays: number; holidaysInRange: Holiday[] }> {
+  isHalfDay?: boolean
+): Promise<{ totalDays: number; weekendDays: number; holidayDays: number; workingDays: number; holidaysInRange: Holiday[] }> {
   const start = new Date(startDate);
   const end = new Date(endDate);
 
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
-    return { workingDays: 0, holidayDays: 0, holidaysInRange: [] };
+    return { totalDays: 0, weekendDays: 0, holidayDays: 0, workingDays: 0, holidaysInRange: [] };
   }
 
-  const holidays = await getHolidaysForDateRange(startDate, endDate, organizationId);
-  const holidayDateSet = new Set(holidays.filter((h) => h.type !== 'optional').map((h) => h.date));
+  const holidaysInRange = await getHolidaysForDateRange(startDate, endDate, organizationId);
+  const holidayDateSet = new Set(
+    holidaysInRange.filter((h) => h.type === 'public' || h.type === 'company').map((h) => h.date)
+  );
 
-  let workingDays = 0;
+  let totalDays = 0;
+  let weekendDays = 0;
   let holidayDays = 0;
+  let workingDays = 0;
 
   const current = new Date(start);
   while (current <= end) {
-    const dayOfWeek = current.getDay(); // 0 = Sun, 6 = Sat
+    totalDays++;
+    const dayOfWeek = current.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const dateStr = current.toISOString().split('T')[0];
 
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const isDeclaredHoliday = holidayDateSet.has(dateStr);
-
-    if (isDeclaredHoliday) {
+    if (isWeekend) {
+      weekendDays++;
+    } else if (holidayDateSet.has(dateStr)) {
       holidayDays++;
-    } else if (!isWeekend) {
-      workingDays += isHalfDay ? 0.5 : 1.0;
+    } else {
+      workingDays += isHalfDay ? 0.5 : 1;
     }
 
     current.setDate(current.getDate() + 1);
   }
 
-  return {
-    workingDays,
-    holidayDays,
-    holidaysInRange: holidays,
-  };
+  return { totalDays, weekendDays, holidayDays, workingDays, holidaysInRange };
 }

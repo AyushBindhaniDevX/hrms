@@ -12,9 +12,5 @@ const NAV_ITEMS = [
 ];
 
 export default function EmployeeHelpScreen() {
-  return (
-    <SidebarLayout items={NAV_ITEMS}>
-      <HelpCenter />
-    </SidebarLayout>
-  );
+  return <HelpCenter />;
 }

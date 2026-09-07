@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWin
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { LoadingState } from '@/components/ui/States';
@@ -12,16 +13,19 @@ import { Button } from '@/components/ui/Button';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
 import { formatDate } from '@/utils/format';
 import type { Employee } from '@/types';
+import { updateUserProfileData } from '@/lib/services/organization';
 import { Edit2, Mail, Phone, MapPin, Building, User, FileText, Upload, CheckCircle2 } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
 
 export default function ProfileScreen() {
   const colors = useTheme();
   const { profile, refreshProfile } = useAuth();
+  const { organization } = useTenant();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
+
+  const activeOrgId = organization?.id || profile?.organization_id;
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,11 +40,12 @@ export default function ProfileScreen() {
   useEffect(() => {
     (async () => {
       if (!profile) return;
-      const emp = await getEmployeeByProfileId(profile.id);
+      setLoading(true);
+      const emp = await getEmployeeByProfileId(profile.id, activeOrgId);
       setEmployee(emp);
       setLoading(false);
     })();
-  }, [profile]);
+  }, [profile, activeOrgId]);
 
   const openEdit = () => {
     setEditName(profile?.full_name || '');
@@ -53,16 +58,11 @@ export default function ProfileScreen() {
     if (!profile) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: editName.trim() || profile.full_name,
-          phone: editPhone.trim() || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', profile.id);
+      await updateUserProfileData(profile.id, {
+        full_name: editName.trim() || profile.full_name,
+        phone: editPhone.trim() || undefined,
+      });
 
-      if (error) throw error;
       await refreshProfile();
       setSaveSuccess(true);
       setTimeout(() => {

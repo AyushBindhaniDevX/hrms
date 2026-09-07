@@ -14,9 +14,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { LoadingState } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
 import { getExpenses, createExpenseClaim } from '@/lib/services/expenses';
+import { getEmployeeByProfileId } from '@/lib/services/employee';
 import { ExpenseClaim, ExpenseCategory } from '@/types/database';
 import { formatCurrency } from '@/utils/format';
 import {
@@ -43,15 +46,20 @@ const CATEGORIES: { key: ExpenseCategory; label: string; Icon: React.ElementType
 
 export default function EmployeeExpensesScreen() {
   const colors = useTheme();
+  const { profile } = useAuth();
+  const { organization, employee: tenantEmp } = useTenant();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
+  const isDesktop = width >= 1024;
   const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
+
+  const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
 
   const [expenses, setExpenses] = useState<ExpenseClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [empId, setEmpId] = useState('');
 
   // Form
   const [title, setTitle] = useState('');
@@ -62,8 +70,12 @@ export default function EmployeeExpensesScreen() {
   const [kmDistance, setKmDistance] = useState('');
 
   const loadData = async () => {
+    if (!profile) return;
     try {
-      const data = await getExpenses('emp_demo');
+      const emp = tenantEmp || (await getEmployeeByProfileId(profile.id, activeOrgId));
+      const targetEmpId = emp?.id || profile.id;
+      setEmpId(targetEmpId);
+      const data = await getExpenses(targetEmpId);
       setExpenses(data);
     } catch (e) {
       console.error(e);
@@ -75,7 +87,7 @@ export default function EmployeeExpensesScreen() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [profile, activeOrgId, tenantEmp]);
 
   const handleMileageChange = (km: string) => {
     setKmDistance(km);
@@ -97,8 +109,8 @@ export default function EmployeeExpensesScreen() {
     }
 
     await createExpenseClaim({
-      organization_id: 'subedge_org',
-      employee_id: 'emp_demo',
+      organization_id: activeOrgId,
+      employee_id: empId || profile?.id || 'emp-user',
       title,
       category,
       amount: finalAmt,
@@ -173,7 +185,7 @@ export default function EmployeeExpensesScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={[mStyles.cardTitle, { color: colors.text }]}>{item.title}</Text>
                         <Text style={[mStyles.cardMeta, { color: colors.textSecondary }]}>
-                          {item.category.toUpperCase()} · {item.spent_at}
+                          {String(item.category || '').toUpperCase()} · {item.spent_at}
                         </Text>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 6 }}>
@@ -194,7 +206,7 @@ export default function EmployeeExpensesScreen() {
                               item.status === 'rejected' && { color: '#DC2626' },
                             ]}
                           >
-                            {item.status.toUpperCase()}
+                            {String(item.status || '').toUpperCase()}
                           </Text>
                         </View>
                       </View>
@@ -204,7 +216,7 @@ export default function EmployeeExpensesScreen() {
               </View>
             )}
           </Animated.View>
-          <View style={{ height: 80 }} />
+          <View style={{ height: 120 }} />
         </ScrollView>
 
         {/* FAB */}
@@ -339,7 +351,7 @@ export default function EmployeeExpensesScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{item.title}</Text>
                   <Text style={styles.cardDesc}>{item.description}</Text>
-                  <Text style={styles.cardMeta}>Category: {item.category.toUpperCase()} · Date: {item.spent_at}</Text>
+                  <Text style={styles.cardMeta}>Category: {String(item.category || '').toUpperCase()} · Date: {item.spent_at}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 6 }}>
                   <Text style={styles.cardAmount}>{formatCurrency(item.amount)}</Text>
@@ -359,7 +371,7 @@ export default function EmployeeExpensesScreen() {
                         item.status === 'rejected' && { color: '#DC2626' },
                       ]}
                     >
-                      {item.status.toUpperCase()}
+                      {String(item.status || '').toUpperCase()}
                     </Text>
                   </View>
                 </View>

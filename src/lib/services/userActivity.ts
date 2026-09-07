@@ -1,4 +1,16 @@
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
 import { Platform } from 'react-native';
 import type { Profile, AuditLog } from '@/types';
 
@@ -15,22 +27,15 @@ export interface UserActivityPayload {
   actorRole?: string;
 }
 
-/**
- * Tracks an authenticated user activity event in Supabase (in audit_logs and updates profile timestamp)
- */
 export async function trackUserActivity(payload: UserActivityPayload): Promise<void> {
   try {
     const now = new Date().toISOString();
     let orgId = payload.organizationId || null;
 
     if (!orgId && payload.userId) {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('organization_id, full_name, email, role')
-        .eq('id', payload.userId)
-        .maybeSingle();
-
-      if (prof) {
+      const profSnap = await getDoc(doc(db, 'profiles', payload.userId));
+      if (profSnap.exists()) {
+        const prof = profSnap.data() as Profile;
         orgId = prof.organization_id;
         payload.actorName = payload.actorName || prof.full_name;
         payload.actorEmail = payload.actorEmail || prof.email;
@@ -39,15 +44,12 @@ export async function trackUserActivity(payload: UserActivityPayload): Promise<v
     }
 
     if (!orgId) {
-      const { data: defaultOrg } = await supabase
-        .from('organizations')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
-      orgId = defaultOrg?.id || null;
+      orgId = '00000000-0000-0000-0000-000000000001';
     }
 
-    const logEntry = {
+    const logId = `act-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const logEntry: AuditLog = {
+      id: logId,
       organization_id: orgId,
       user_id: payload.userId || null,
       action: payload.action,
@@ -62,31 +64,27 @@ export async function trackUserActivity(payload: UserActivityPayload): Promise<v
       user: {
         full_name: payload.actorName || 'User',
         email: payload.actorEmail || '',
-        role: payload.actorRole || 'employee',
+        role: (payload.actorRole as any) || 'employee',
       },
       created_at: now,
     };
 
-    await supabase.from('audit_logs').insert(logEntry);
+    await setDoc(doc(db, 'audit_logs', logId), logEntry);
 
-    // Update profile last_active timestamp if user is identified
+    // Update profile last_active timestamp
     if (payload.userId) {
-      await supabase
-        .from('profiles')
-        .update({
+      try {
+        await updateDoc(doc(db, 'profiles', payload.userId), {
           last_active: now,
           updated_at: now,
-        })
-        .eq('id', payload.userId);
+        });
+      } catch {}
     }
   } catch (err) {
     console.warn('Track user activity error (non-fatal):', err);
   }
 }
 
-/**
- * Logs a user sign-in session in Supabase, updating IP and session records
- */
 export async function logUserLogin(
   profile: Profile,
   ipAddress?: string | null,
@@ -96,18 +94,15 @@ export async function logUserLogin(
     const now = new Date().toISOString();
     const effectiveSessionId = sessionId || `sess_${Math.random().toString(36).substring(2, 15)}`;
 
-    // Update profile session & IP info
-    await supabase
-      .from('profiles')
-      .update({
+    try {
+      await updateDoc(doc(db, 'profiles', profile.id), {
         last_login_ip: ipAddress || null,
         session_id: effectiveSessionId,
         last_active: now,
         updated_at: now,
-      })
-      .eq('id', profile.id);
+      });
+    } catch {}
 
-    // Write audit log entry
     await trackUserActivity({
       userId: profile.id,
       organizationId: profile.organization_id,
@@ -130,9 +125,6 @@ export async function logUserLogin(
   }
 }
 
-/**
- * Logs a user sign-out session in Supabase
- */
 export async function logUserLogout(profile?: Profile | null): Promise<void> {
   if (!profile) return;
   try {
@@ -155,30 +147,27 @@ export async function logUserLogout(profile?: Profile | null): Promise<void> {
   }
 }
 
-/**
- * Fetches recent user activity records from Supabase
- */
 export async function getUserActivities(
   organizationId?: string,
   userId?: string,
   limitCount = 50
 ): Promise<AuditLog[]> {
   try {
-    let query = supabase
-      .from('audit_logs')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const snap = await getDocs(collection(db, 'audit_logs'));
+    const logs: AuditLog[] = [];
+    snap.forEach((d) => {
+      const l = { id: d.id, ...d.data() } as AuditLog;
+      if (organizationId && l.organization_id && l.organization_id !== organizationId) {
+        return;
+      }
+      if (userId && l.user_id !== userId) {
+        return;
+      }
+      logs.push(l);
+    });
 
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId);
-    }
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data, error } = await query.limit(limitCount);
-    if (error || !data) return [];
-    return data as AuditLog[];
+    logs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return logs.slice(0, limitCount);
   } catch (err) {
     console.error('Failed to get user activities:', err);
     return [];

@@ -1,5 +1,19 @@
-import { supabase } from '@/lib/supabase';
-import type { Organization, Profile, Department, Workplace } from '@/types';
+import { db, auth } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
+import { createUserWithEmailAndPassword, updateProfile as fbUpdateProfile } from 'firebase/auth';
+import type { Organization, Profile, Department, Workplace, Employee } from '@/types';
 
 function generateUuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -9,63 +23,68 @@ function generateUuid(): string {
   });
 }
 
-function cleanUuid(val?: string | null): string | null {
-  if (!val || typeof val !== 'string') return null;
-  const trimmed = val.trim();
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(trimmed) ? trimmed : null;
-}
-
 export async function getOrganization(orgId: string): Promise<Organization | null> {
-  const { data, error } = await supabase
-    .from('organizations')
-    .select('*')
-    .eq('id', orgId)
-    .maybeSingle();
-
-  if (error || !data) return null;
-  return data as Organization;
+  try {
+    const snap = await getDoc(doc(db, 'organizations', orgId));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as Organization;
+  } catch (err) {
+    console.error('getOrganization error:', err);
+    return null;
+  }
 }
 
 export async function updateOrganization(orgId: string, updates: Partial<Organization>): Promise<void> {
-  const { error } = await supabase
-    .from('organizations')
-    .update(updates)
-    .eq('id', orgId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'organizations', orgId), {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export async function getOrgUsers(organizationId?: string): Promise<Profile[]> {
   try {
-    let query = supabase
-      .from('profiles')
-      .select('*, employee:employees(*, department:departments!employees_department_id_fkey(*), workplace:workplaces(*))')
-      .order('role', { ascending: true })
-      .order('full_name', { ascending: true });
-
+    let q = query(collection(db, 'profiles'));
     if (organizationId) {
-      query = query.eq('organization_id', organizationId);
+      q = query(collection(db, 'profiles'), where('organization_id', '==', organizationId));
     }
 
-    const { data, error } = await query;
+    const [profilesSnap, employeesSnap, deptsSnap, workplacesSnap] = await Promise.all([
+      getDocs(q),
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'departments')),
+      getDocs(collection(db, 'workplaces')),
+    ]);
 
-    if (!error && data) {
-      return data as Profile[];
-    }
+    const deptsMap = new Map<string, Department>();
+    deptsSnap.forEach((d) => deptsMap.set(d.id, { id: d.id, ...d.data() } as Department));
 
-    let fallbackQuery = supabase
-      .from('profiles')
-      .select('*')
-      .order('role', { ascending: true })
-      .order('full_name', { ascending: true });
+    const workplacesMap = new Map<string, Workplace>();
+    workplacesSnap.forEach((w) => workplacesMap.set(w.id, { id: w.id, ...w.data() } as Workplace));
 
-    if (organizationId) {
-      fallbackQuery = fallbackQuery.eq('organization_id', organizationId);
-    }
+    const employeesByProfileId = new Map<string, Employee>();
+    employeesSnap.forEach((e) => {
+      const empData = { id: e.id, ...e.data() } as Employee;
+      if (empData.profile_id) {
+        empData.department = empData.department_id ? deptsMap.get(empData.department_id) : undefined;
+        empData.workplace = empData.workplace_id ? workplacesMap.get(empData.workplace_id) : undefined;
+        employeesByProfileId.set(empData.profile_id, empData);
+      }
+    });
 
-    const { data: fallbackData } = await fallbackQuery;
-    return (fallbackData || []) as Profile[];
+    const profiles: Profile[] = [];
+    profilesSnap.forEach((p) => {
+      const prof = { id: p.id, ...p.data() } as Profile;
+      (prof as any).employee = employeesByProfileId.get(prof.id);
+      profiles.push(prof);
+    });
+
+    // Sort by role then full_name
+    profiles.sort((a, b) => {
+      if (a.role !== b.role) return a.role.localeCompare(b.role);
+      return (a.full_name || '').localeCompare(b.full_name || '');
+    });
+
+    return profiles;
   } catch (err) {
     console.error('getOrgUsers error:', err);
     return [];
@@ -73,12 +92,10 @@ export async function getOrgUsers(organizationId?: string): Promise<Profile[]> {
 }
 
 export async function updateUserRole(userId: string, role: string): Promise<void> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ role, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'profiles', userId), {
+    role,
+    updated_at: new Date().toISOString(),
+  });
 
   try {
     const { createAuditLog } = await import('./audit');
@@ -90,12 +107,10 @@ export async function updateUserProfileData(
   userId: string,
   data: { full_name?: string; phone?: string | null; role?: string }
 ): Promise<void> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ ...data, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'profiles', userId), {
+    ...data,
+    updated_at: new Date().toISOString(),
+  });
 
   try {
     const { createAuditLog } = await import('./audit');
@@ -104,12 +119,10 @@ export async function updateUserProfileData(
 }
 
 export async function toggleUserActive(userId: string, isActive: boolean): Promise<void> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ is_active: isActive, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'profiles', userId), {
+    is_active: isActive,
+    updated_at: new Date().toISOString(),
+  });
 
   try {
     const { createAuditLog } = await import('./audit');
@@ -124,10 +137,14 @@ export async function toggleUserActive(userId: string, isActive: boolean): Promi
 
 export async function deleteUserRecord(userId: string): Promise<void> {
   // Delete linked employee records
-  await supabase.from('employees').delete().eq('profile_id', userId);
+  const empQ = query(collection(db, 'employees'), where('profile_id', '==', userId));
+  const empSnap = await getDocs(empQ);
+  for (const empDoc of empSnap.docs) {
+    await deleteDoc(doc(db, 'employees', empDoc.id));
+  }
+
   // Delete from profiles
-  const { error } = await supabase.from('profiles').delete().eq('id', userId);
-  if (error) throw error;
+  await deleteDoc(doc(db, 'profiles', userId));
 
   try {
     const { createAuditLog } = await import('./audit');
@@ -161,95 +178,52 @@ export async function createSystemUser(params: {
   custom_items?: any[];
   tax_config?: Record<string, any>;
 }): Promise<string> {
-  // 0. Check Organization User Limit
   let orgId = params.organization_id;
   if (!orgId) {
-    const { data: defaultOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-    orgId = defaultOrg?.id;
-  }
-  const org = orgId ? await getOrganization(orgId) : null;
-  const currentUsers = orgId ? await getOrgUsers(orgId) : [];
-  const currentCount = currentUsers.filter(u => u.is_active).length; // Count active users
-
-  const pkg = org?.package_type?.toLowerCase() || 'basic';
-  const limit = pkg === 'gold' ? 250 : pkg === 'silver' ? 100 : 50;
-
-  if (currentCount >= limit) {
-    throw new Error(`User limit reached for ${pkg.toUpperCase()} package (${currentCount}/${limit} users). Please upgrade to add more.`);
+    const orgsQ = query(collection(db, 'organizations'), limit(1));
+    const orgsSnap = await getDocs(orgsQ);
+    if (!orgsSnap.empty) {
+      orgId = orgsSnap.docs[0].id;
+    } else {
+      orgId = '00000000-0000-0000-0000-000000000001';
+    }
   }
 
-  // 1. Check if user already exists in profiles or register in Supabase Auth
-  let uid: string = '';
   const cleanEmail = params.email.trim().toLowerCase();
+  let uid = generateUuid();
 
-  const { data: existingProf } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('email', cleanEmail)
-    .maybeSingle();
-
-  if (existingProf?.id) {
-    uid = existingProf.id;
-  } else {
-    // Register user account in Supabase Auth
-    try {
-      const defaultPassword = params.password || (params.phone ? `Pass@${params.phone.slice(-4)}` : 'Welcome@123');
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: defaultPassword,
-        options: {
-          data: {
-            full_name: params.full_name,
-            role: params.role,
-            organization_id: orgId,
-          },
-        },
-      });
-
-      if (authData?.user?.id) {
-        uid = authData.user.id;
-      }
-    } catch (authErr) {
-      console.warn('Supabase Auth pre-registration notice:', authErr);
+  // Try creating in Firebase Auth
+  try {
+    const defaultPassword = params.password || (params.phone ? `Pass@${params.phone.slice(-4)}` : 'Welcome@123');
+    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, defaultPassword);
+    if (cred.user?.uid) {
+      uid = cred.user.uid;
+      await fbUpdateProfile(cred.user, { displayName: params.full_name });
     }
-
-    if (!uid) {
-      uid = generateUuid();
-    }
+  } catch (authErr: any) {
+    // If account exists in Firebase Auth or admin context
+    console.warn('Firebase Auth user creation notice:', authErr?.message || authErr);
   }
 
-  // 2. Insert Profile
   const now = new Date().toISOString();
-  const profPayload: Record<string, any> = {
+  const profPayload: Profile = {
     id: uid,
     full_name: params.full_name,
     email: cleanEmail,
     role: params.role,
     organization_id: orgId,
     phone: params.phone || null,
+    avatar_url: null,
     is_active: true,
-    needs_password_change: true,
     created_at: now,
     updated_at: now,
   };
 
-  let { error: profError } = await supabase.from('profiles').upsert(profPayload);
-  if (profError && profError.code === 'PGRST204') {
-    delete profPayload.needs_password_change;
-    const retry = await supabase.from('profiles').upsert(profPayload);
-    profError = retry.error;
-  }
+  await setDoc(doc(db, 'profiles', uid), profPayload);
 
-  if (profError) {
-    console.error('Failed to create profile row:', profError);
-    if (profError.message?.includes('profiles_id_fkey')) {
-      throw new Error("Database Foreign Key constraint 'profiles_id_fkey' is preventing profile creation. Please run 'ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;' in Supabase SQL editor.");
-    }
-    throw new Error(`Failed to create profile: ${profError.message}`);
-  }
-
-  // 3. Create employee record if requested
+  // Create employee record if requested
   if (params.create_employee_record) {
+    const empId = `emp-${Date.now()}`;
     const taxConfig = {
       ...(params.tax_config || {}),
       epf_percentage: params.epf_percentage != null ? Number(params.epf_percentage) : 12,
@@ -262,67 +236,38 @@ export async function createSystemUser(params: {
       custom_items: params.custom_items || params.tax_config?.custom_items || [],
     };
 
-    const empPayload: Record<string, any> = {
+    const empPayload: Employee = {
+      id: empId,
       profile_id: uid,
       organization_id: orgId,
       employee_code: params.employee_code || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
-      department_id: cleanUuid(params.department_id),
+      department_id: params.department_id || null,
       designation: params.designation || (params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Staff'),
-      employment_type: params.employment_type || 'full_time',
       joining_date: params.joining_date || now.split('T')[0],
-      workplace_id: cleanUuid(params.workplace_id),
+      workplace_id: params.workplace_id || null,
+      manager_id: params.manager_id || null,
+      default_shift_id: params.default_shift_id || null,
       basic_salary: params.basic_salary || 0,
-      default_shift_id: cleanUuid(params.default_shift_id),
-      manager_id: cleanUuid(params.manager_id),
-      tax_config: taxConfig,
       employment_status: 'active',
       onboarding_completed: true,
+      tax_config: taxConfig,
       created_at: now,
       updated_at: now,
     };
 
-    let empRecord: any = null;
-    let attempts = 0;
-    while (attempts < 6) {
-      attempts++;
-      const { data: insData, error: empError } = await supabase
-        .from('employees')
-        .insert(empPayload)
-        .select()
-        .maybeSingle();
+    await setDoc(doc(db, 'employees', empId), empPayload);
 
-      if (!empError) {
-        empRecord = insData;
-        break;
-      }
-
-      if (empError.code === 'PGRST204' || empError.message?.includes('schema cache')) {
-        const missingColMatch = empError.message?.match(/Could not find the '([^']+)' column/);
-        if (missingColMatch && missingColMatch[1]) {
-          delete empPayload[missingColMatch[1]];
-          continue;
-        }
-      }
-
-      console.error('Failed to create employee row:', empError);
-      throw new Error(`Failed to create employee record: ${empError.message}`);
-    }
-
-    // If shift was selected, also link in employee_shifts for roster
-    if (params.default_shift_id && empRecord?.id) {
-      try {
-        const today = now.split('T')[0];
-        await supabase.from('employee_shifts').upsert({
-          id: `${empRecord.id}_${today}`,
-          employee_id: empRecord.id,
-          date: today,
-          shift_id: cleanUuid(params.default_shift_id),
-          organization_id: orgId,
-          created_at: now,
-        });
-      } catch (e) {
-        console.warn('Could not assign initial employee shift:', e);
-      }
+    if (params.default_shift_id) {
+      const today = now.split('T')[0];
+      const shiftDocId = `${empId}_${today}`;
+      await setDoc(doc(db, 'employee_shifts', shiftDocId), {
+        id: shiftDocId,
+        employee_id: empId,
+        date: today,
+        shift_id: params.default_shift_id,
+        organization_id: orgId,
+        created_at: now,
+      });
     }
   }
 
@@ -336,36 +281,22 @@ export async function createSystemUser(params: {
     });
   } catch (e) {}
 
-  // Send Resend Welcome / Onboarding invitation email
-  try {
-    const { sendWelcomeEmail } = await import('./resend');
-    await sendWelcomeEmail(
-      params.email,
-      params.full_name || 'Team Member',
-      params.employee_code || 'EMP-ACCESS',
-      params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Employee'
-    );
-  } catch (mailErr) {
-    console.warn('Welcome notification dispatch warning:', mailErr);
-  }
-
   return uid;
 }
 
 export async function createDepartment(orgId: string, name: string, description: string): Promise<string> {
-  const { data, error } = await supabase
-    .from('departments')
-    .insert({
-      organization_id: orgId,
-      name,
-      description,
-      created_at: new Date().toISOString(),
-    })
-    .select('id')
-    .single();
-
-  if (error) throw error;
-  return data.id;
+  const deptId = `dept-${Date.now()}`;
+  const now = new Date().toISOString();
+  await setDoc(doc(db, 'departments', deptId), {
+    id: deptId,
+    organization_id: orgId,
+    name,
+    description,
+    manager_id: null,
+    created_at: now,
+    updated_at: now,
+  });
+  return deptId;
 }
 
 export async function createWorkplace(
@@ -376,21 +307,19 @@ export async function createWorkplace(
   longitude: number,
   radiusMeters: number
 ): Promise<string> {
-  const { data, error } = await supabase
-    .from('workplaces')
-    .insert({
-      organization_id: orgId,
-      name,
-      address,
-      latitude,
-      longitude,
-      radius_meters: radiusMeters,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    })
-    .select('id')
-    .single();
-
-  if (error) throw error;
-  return data.id;
+  const wpId = `wp-${Date.now()}`;
+  const now = new Date().toISOString();
+  await setDoc(doc(db, 'workplaces', wpId), {
+    id: wpId,
+    organization_id: orgId,
+    name,
+    address,
+    latitude,
+    longitude,
+    radius_meters: radiusMeters,
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+  });
+  return wpId;
 }

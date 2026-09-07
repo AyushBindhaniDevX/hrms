@@ -1,24 +1,39 @@
 /**
- * Real-Time Asset & IT Hardware Inventory Service (Supabase)
+ * Real-Time Asset & IT Hardware Inventory Service (Cloud Firestore)
  * Oasis HRMS Multi-Tenant Platform
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  onSnapshot,
+} from 'firebase/firestore';
 import { CompanyAsset, AssetStatus } from '@/types/database';
 
 export async function getAssets(organizationId?: string): Promise<CompanyAsset[]> {
-  let query = supabase
-    .from('assets')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId);
+  try {
+    const snap = await getDocs(collection(db, 'assets'));
+    const assets: CompanyAsset[] = [];
+    snap.forEach((d) => {
+      const a = { id: d.id, ...d.data() } as CompanyAsset;
+      if (!organizationId || !a.organization_id || a.organization_id === organizationId) {
+        assets.push(a);
+      }
+    });
+    assets.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return assets;
+  } catch (err) {
+    console.error('getAssets error:', err);
+    return [];
   }
-
-  const { data, error } = await query;
-  if (error || !data) return [];
-  return data as CompanyAsset[];
 }
 
 export function subscribeToAssets(
@@ -26,47 +41,41 @@ export function subscribeToAssets(
   onError?: (err: any) => void,
   organizationId?: string
 ): () => void {
-  // Initial fetch
-  getAssets(organizationId).then(onUpdate).catch(onError);
+  const q = collection(db, 'assets');
 
-  const channel = supabase
-    .channel('public:assets')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'assets',
-      },
-      () => {
-        getAssets(organizationId).then(onUpdate).catch(onError);
-      }
-    )
-    .subscribe();
+  const unsubscribe = onSnapshot(
+    q,
+    (snapshot) => {
+      const assets: CompanyAsset[] = [];
+      snapshot.forEach((d) => {
+        const a = { id: d.id, ...d.data() } as CompanyAsset;
+        if (!organizationId || !a.organization_id || a.organization_id === organizationId) {
+          assets.push(a);
+        }
+      });
+      assets.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      onUpdate(assets);
+    },
+    (err) => {
+      console.warn('subscribeToAssets error:', err);
+      if (onError) onError(err);
+    }
+  );
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return unsubscribe;
 }
 
 export async function createAsset(asset: Omit<CompanyAsset, 'id' | 'created_at'>): Promise<CompanyAsset> {
+  const assetId = `ast_${Date.now()}`;
   const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('assets')
-    .insert({
-      ...asset,
-      created_at: now,
-      updated_at: now,
-    })
-    .select('*')
-    .single();
+  const newAsset: CompanyAsset = {
+    ...asset,
+    id: assetId,
+    created_at: now,
+  };
 
-  if (error) {
-    console.error('Error creating asset in Supabase:', error);
-    throw error;
-  }
-
-  return data as CompanyAsset;
+  await setDoc(doc(db, 'assets', assetId), newAsset);
+  return newAsset;
 }
 
 export async function updateAssetStatus(
@@ -85,54 +94,32 @@ export async function updateAssetStatus(
     updatePayload.assigned_employee_name = assignedToName;
   }
 
-  const { error } = await supabase
-    .from('assets')
-    .update(updatePayload)
-    .eq('id', assetId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'assets', assetId), updatePayload);
 }
 
 export async function verifyAndAuditAsset(assetId: string, auditorName: string): Promise<any> {
   const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('assets')
-    .update({
-      last_audited_at: now,
-      last_auditor_name: auditorName,
-      updated_at: now,
-    })
-    .eq('id', assetId)
-    .select('*')
-    .single();
-
-  if (error) {
-    console.warn('Audit update fallback:', error);
-  }
-  return data;
+  const updates = {
+    last_audited_at: now,
+    last_auditor_name: auditorName,
+    updated_at: now,
+  };
+  await updateDoc(doc(db, 'assets', assetId), updates);
+  const snap = await getDoc(doc(db, 'assets', assetId));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
 export async function disposeAsset(assetId: string, salvageValue: number, reason: string): Promise<void> {
   const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('assets')
-    .update({
-      status: 'retired',
-      salvage_value: salvageValue,
-      disposal_reason: reason,
-      disposed_at: now,
-      updated_at: now,
-    })
-    .eq('id', assetId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'assets', assetId), {
+    status: 'retired',
+    salvage_value: salvageValue,
+    disposal_reason: reason,
+    disposed_at: now,
+    updated_at: now,
+  });
 }
 
 export async function deleteAsset(assetId: string): Promise<void> {
-  const { error } = await supabase
-    .from('assets')
-    .delete()
-    .eq('id', assetId);
-
-  if (error) throw error;
+  await deleteDoc(doc(db, 'assets', assetId));
 }

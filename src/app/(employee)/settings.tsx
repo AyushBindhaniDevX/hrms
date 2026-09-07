@@ -23,6 +23,8 @@ import {
   UserCheck,
 } from 'lucide-react-native';
 import { trackUserActivity } from '@/lib/services/userActivity';
+import { auth } from '@/lib/firebase';
+import { updatePassword } from 'firebase/auth';
 
 export default function SettingsScreen() {
   const colors = useTheme();
@@ -88,14 +90,10 @@ export default function SettingsScreen() {
     setPwError('');
     setSavingPw(true);
     try {
-      const { supabase } = await import('@/lib/supabase');
-      const { error: updateErr } = await supabase.auth.updateUser({
-        password: newPw.trim(),
-      });
-
-      if (updateErr) {
-        throw new Error(updateErr.message);
+      if (!auth.currentUser) {
+        throw new Error('No authenticated user session found.');
       }
+      await updatePassword(auth.currentUser, newPw.trim());
 
       if (profile?.id) {
         await trackUserActivity({
@@ -253,10 +251,10 @@ export default function SettingsScreen() {
             <View style={{ flex: 1, paddingRight: 24 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <Text style={[styles.blockTitle, { color: colors.text }]}>Account Security</Text>
-                <Badge label="Supabase Auth" variant="successLight" />
+                <Badge label="Firebase Auth" variant="successLight" />
               </View>
               <Text style={[styles.blockDesc, { color: colors.textSecondary }]}>
-                Secured by Supabase Auth with encrypted sessions, biometric token storage, and verified email authentication.
+                Secured by Firebase Auth with encrypted sessions, biometric token storage, and verified email authentication.
               </Text>
             </View>
           </View>

@@ -1,4 +1,18 @@
-import { supabase } from '@/lib/supabase';
+import { db, auth } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
+import { createUserWithEmailAndPassword, updateProfile as fbUpdateProfile } from 'firebase/auth';
 import type { Employee, Profile, Department, Workplace } from '@/types';
 
 function generateUuid(): string {
@@ -9,69 +23,105 @@ function generateUuid(): string {
   });
 }
 
-function cleanUuid(val?: string | null): string | null {
-  if (!val || typeof val !== 'string') return null;
-  const trimmed = val.trim();
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(trimmed) ? trimmed : null;
-}
-
-export async function getEmployeeByProfileId(profileId: string): Promise<Employee | null> {
+export async function getEmployeeByProfileId(profileId: string, organizationId?: string): Promise<Employee | null> {
   try {
-    let { data: simpleEmp, error } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('profile_id', profileId)
-      .maybeSingle();
+    const empQ = query(collection(db, 'employees'), where('profile_id', '==', profileId));
+    const empSnap = await getDocs(empQ);
 
-    // Auto-provision an employee record if user has a profile but no employee row yet
-    if (!simpleEmp) {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', profileId)
-        .maybeSingle();
+    let simpleEmp: Employee | null = null;
 
-      if (prof) {
-        const empCode = 'EMP-' + Math.floor(1000 + Math.random() * 9000);
-        const { data: newEmp } = await supabase
-          .from('employees')
-          .insert({
-            profile_id: prof.id,
-            employee_code: empCode,
-            designation: prof.role === 'admin' ? 'System Administrator' : prof.role === 'hr' ? 'HR Manager' : 'Team Member',
-            employment_status: 'active',
-            joining_date: new Date().toISOString().split('T')[0],
-          })
-          .select('*')
-          .maybeSingle();
-
-        if (newEmp) {
-          simpleEmp = newEmp;
+    if (!empSnap.empty) {
+      if (organizationId) {
+        const match = empSnap.docs.find((d) => {
+          const data = d.data();
+          return (
+            data.organization_id === organizationId ||
+            (organizationId === 'shanti-memorial-hospital' && data.organization_id === 'smh')
+          );
+        });
+        if (match) {
+          simpleEmp = { id: match.id, ...match.data() } as Employee;
         }
+      }
+      if (!simpleEmp && empSnap.docs.length > 0) {
+        const firstDoc = empSnap.docs[0];
+        simpleEmp = { id: firstDoc.id, ...firstDoc.data() } as Employee;
+      }
+    }
+
+    // Auto-provision or link an employee record if user has a profile but no employee row in this org
+    if (!simpleEmp || (organizationId && simpleEmp.organization_id !== organizationId && !(organizationId === 'shanti-memorial-hospital' && simpleEmp.organization_id === 'smh'))) {
+      const profSnap = await getDoc(doc(db, 'profiles', profileId));
+      if (profSnap.exists()) {
+        const prof = profSnap.data() as Profile;
+        const targetOrg = organizationId || prof.organization_id || '00000000-0000-0000-0000-000000000001';
+        const isSMH = targetOrg === 'shanti-memorial-hospital' || targetOrg === 'smh';
+        const empId = `emp-${Date.now()}`;
+        const empCode = isSMH ? 'SMH-' + Math.floor(1000 + Math.random() * 9000) : 'EMP-' + Math.floor(1000 + Math.random() * 9000);
+        
+        const newEmpPayload: Employee = {
+          id: empId,
+          profile_id: profileId,
+          organization_id: targetOrg,
+          employee_code: empCode,
+          designation: prof.role === 'admin' ? (isSMH ? 'Medical Director / Administrator' : 'System Administrator') : prof.role === 'hr' ? (isSMH ? 'Hospital Operations & HR' : 'HR Manager') : (isSMH ? 'Clinical Staff Member' : 'Team Member'),
+          department_id: isSMH ? 'dept-smh-admin' : null,
+          workplace_id: isSMH ? 'wp-smh-main' : null,
+          default_shift_id: isSMH ? 'shift-smh-general' : null,
+          employment_status: 'active',
+          joining_date: new Date().toISOString().split('T')[0],
+          basic_salary: isSMH ? 75000 : 35000,
+          onboarding_completed: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        await setDoc(doc(db, 'employees', empId), newEmpPayload);
+        simpleEmp = newEmpPayload;
       }
     }
 
     if (!simpleEmp) return null;
 
-    const [profRes, deptRes, wpRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', profileId).maybeSingle(),
-      simpleEmp.department_id
-        ? supabase.from('departments').select('*').eq('id', simpleEmp.department_id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      simpleEmp.workplace_id
-        ? supabase.from('workplaces').select('*').eq('id', simpleEmp.workplace_id).maybeSingle()
-        : Promise.resolve({ data: null }),
+    // Fetch associated Profile, Department, and Workplace
+    const [profSnap, deptSnap, wpSnap] = await Promise.all([
+      getDoc(doc(db, 'profiles', profileId)),
+      simpleEmp.department_id ? getDoc(doc(db, 'departments', simpleEmp.department_id)) : Promise.resolve(null),
+      simpleEmp.workplace_id ? getDoc(doc(db, 'workplaces', simpleEmp.workplace_id)) : Promise.resolve(null),
     ]);
 
     return {
       ...simpleEmp,
-      profile: (profRes.data || undefined) as Profile,
-      department: (deptRes.data || undefined) as Department,
-      workplace: (wpRes.data || undefined) as Workplace,
-    } as Employee;
+      profile: profSnap?.exists() ? ({ id: profSnap.id, ...profSnap.data() } as Profile) : undefined,
+      department: deptSnap?.exists() ? ({ id: deptSnap.id, ...deptSnap.data() } as Department) : undefined,
+      workplace: wpSnap?.exists() ? ({ id: wpSnap.id, ...wpSnap.data() } as Workplace) : undefined,
+    };
   } catch (err) {
     console.error('Error fetching employee by profile ID:', err);
+    return null;
+  }
+}
+
+export async function getEmployeeById(id: string): Promise<Employee | null> {
+  try {
+    const empSnap = await getDoc(doc(db, 'employees', id));
+    if (!empSnap.exists()) return null;
+    const simpleEmp = { id: empSnap.id, ...empSnap.data() } as Employee;
+
+    const [profSnap, deptSnap, wpSnap] = await Promise.all([
+      simpleEmp.profile_id ? getDoc(doc(db, 'profiles', simpleEmp.profile_id)) : Promise.resolve(null),
+      simpleEmp.department_id ? getDoc(doc(db, 'departments', simpleEmp.department_id)) : Promise.resolve(null),
+      simpleEmp.workplace_id ? getDoc(doc(db, 'workplaces', simpleEmp.workplace_id)) : Promise.resolve(null),
+    ]);
+
+    return {
+      ...simpleEmp,
+      profile: profSnap?.exists() ? ({ id: profSnap.id, ...profSnap.data() } as Profile) : undefined,
+      department: deptSnap?.exists() ? ({ id: deptSnap.id, ...deptSnap.data() } as Department) : undefined,
+      workplace: wpSnap?.exists() ? ({ id: wpSnap.id, ...wpSnap.data() } as Workplace) : undefined,
+    };
+  } catch (err) {
+    console.error('Error fetching employee by ID:', err);
     return null;
   }
 }
@@ -84,128 +134,71 @@ export async function getEmployees(params?: {
   organization_id?: string;
 }): Promise<Employee[]> {
   const { department_id, workplace_id, employment_status, search, organization_id } = params || {};
-  
-  // 1. Fetch existing employees from database
-  let query = supabase
-    .from('employees')
-    .select(`
-      *,
-      profile:profiles(*),
-      department:departments!employees_department_id_fkey(*),
-      workplace:workplaces(*)
-    `);
 
-  if (department_id) query = query.eq('department_id', department_id);
-  if (workplace_id) query = query.eq('workplace_id', workplace_id);
-  if (employment_status) query = query.eq('employment_status', employment_status);
-
-  const { data, error } = await query.order('created_at', { ascending: false });
-  let existingEmps: Employee[] = (!error && data) ? (data as Employee[]) : [];
-
-  // 2. Fetch all active profiles to ensure any registered user has an employee record
   try {
-    let profQuery = supabase
-      .from('profiles')
-      .select('*')
-      .eq('is_active', true);
+    const [empSnap, profSnap, deptSnap, wpSnap] = await Promise.all([
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'profiles')),
+      getDocs(collection(db, 'departments')),
+      getDocs(collection(db, 'workplaces')),
+    ]);
 
+    const profMap = new Map<string, Profile>();
+    profSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
+
+    const deptMap = new Map<string, Department>();
+    deptSnap.forEach((d) => deptMap.set(d.id, { id: d.id, ...d.data() } as Department));
+
+    const wpMap = new Map<string, Workplace>();
+    wpSnap.forEach((d) => wpMap.set(d.id, { id: d.id, ...d.data() } as Workplace));
+
+    const employees: Employee[] = [];
+    empSnap.forEach((d) => {
+      const emp = { id: d.id, ...d.data() } as Employee;
+      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+      emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
+      emp.workplace = emp.workplace_id ? wpMap.get(emp.workplace_id) : undefined;
+      employees.push(emp);
+    });
+
+    let results = employees;
+
+    if (department_id) {
+      results = results.filter((e) => e.department_id === department_id);
+    }
+    if (workplace_id) {
+      results = results.filter((e) => e.workplace_id === workplace_id);
+    }
+    if (employment_status) {
+      results = results.filter((e) => e.employment_status === employment_status);
+    }
     if (organization_id) {
-      profQuery = profQuery.eq('organization_id', organization_id);
+      results = results.filter(
+        (e) =>
+          e.organization_id === organization_id ||
+          e.profile?.organization_id === organization_id ||
+          e.workplace?.organization_id === organization_id ||
+          e.department?.organization_id === organization_id ||
+          (organization_id === 'shanti-memorial-hospital' &&
+            (e.organization_id === 'smh' || e.profile?.organization_id === 'smh'))
+      );
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      results = results.filter(
+        (e) =>
+          e.profile?.full_name?.toLowerCase().includes(s) ||
+          e.designation?.toLowerCase().includes(s) ||
+          e.employee_code?.toLowerCase().includes(s) ||
+          e.profile?.email?.toLowerCase().includes(s)
+      );
     }
 
-    const { data: activeProfiles } = await profQuery;
-
-    if (activeProfiles && activeProfiles.length > 0) {
-      const existingProfileIds = new Set(existingEmps.map(e => e.profile_id || (e.profile as any)?.id));
-      
-      for (const prof of activeProfiles) {
-        if (!existingProfileIds.has(prof.id)) {
-          const empCode = 'EMP-' + Math.floor(1000 + Math.random() * 9000);
-          const targetOrgId = prof.organization_id || organization_id;
-          
-          try {
-            const { data: newEmp } = await supabase
-              .from('employees')
-              .insert({
-                profile_id: prof.id,
-                employee_code: empCode,
-                designation: prof.role === 'admin' ? 'System Administrator' : prof.role === 'hr' ? 'HR Manager' : 'Team Member',
-                employment_status: 'active',
-                joining_date: new Date().toISOString().split('T')[0],
-                basic_salary: 35000,
-              })
-              .select(`
-                *,
-                profile:profiles(*),
-                department:departments!employees_department_id_fkey(*),
-                workplace:workplaces(*)
-              `)
-              .maybeSingle();
-
-            if (newEmp) {
-              existingEmps.push(newEmp as Employee);
-            } else {
-              existingEmps.push({
-                id: prof.id,
-                profile_id: prof.id,
-                organization_id: targetOrgId || '',
-                employee_code: empCode,
-                designation: prof.role === 'admin' ? 'System Administrator' : prof.role === 'hr' ? 'HR Manager' : 'Team Member',
-                employment_status: 'active',
-                joining_date: new Date().toISOString().split('T')[0],
-                basic_salary: 35000,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                profile: prof,
-              } as unknown as Employee);
-            }
-          } catch {
-            existingEmps.push({
-              id: prof.id,
-              profile_id: prof.id,
-              organization_id: targetOrgId || '',
-              employee_code: empCode,
-              designation: prof.role === 'admin' ? 'System Administrator' : prof.role === 'hr' ? 'HR Manager' : 'Team Member',
-              employment_status: 'active',
-              joining_date: new Date().toISOString().split('T')[0],
-              basic_salary: 35000,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              profile: prof,
-            } as unknown as Employee);
-          }
-          existingProfileIds.add(prof.id);
-        }
-      }
-    }
-  } catch (profErr) {
-    console.warn('Error syncing active profiles in getEmployees:', profErr);
+    return results;
+  } catch (err) {
+    console.error('getEmployees error:', err);
+    return [];
   }
-
-  let results = existingEmps;
-
-  if (organization_id) {
-    results = results.filter(
-      (e) =>
-        e.organization_id === organization_id ||
-        e.profile?.organization_id === organization_id ||
-        e.workplace?.organization_id === organization_id ||
-        e.department?.organization_id === organization_id
-    );
-  }
-
-  if (search) {
-    const s = search.toLowerCase();
-    results = results.filter(
-      (e) =>
-        e.profile?.full_name?.toLowerCase().includes(s) ||
-        e.designation?.toLowerCase().includes(s) ||
-        e.employee_code?.toLowerCase().includes(s) ||
-        e.profile?.email?.toLowerCase().includes(s)
-    );
-  }
-
-  return results;
 }
 
 export async function getDirectory(search?: string, departmentId?: string, organizationId?: string): Promise<Employee[]> {
@@ -215,8 +208,7 @@ export async function getDirectory(search?: string, departmentId?: string, organ
     organization_id: organizationId,
   });
 
-  // Include all non-terminated employees in directory
-  return emps.filter(e => e.employment_status !== 'terminated');
+  return emps.filter((e) => e.employment_status !== 'terminated');
 }
 
 export async function getAllEmployees(organizationId?: string): Promise<Employee[]> {
@@ -237,105 +229,63 @@ export async function createEmployee(params: {
   basic_salary?: number;
   workplace_id?: string;
   default_shift_id?: string;
-  tax_config?: {
-    pf_number?: string | null;
-    tax_regime?: 'old' | 'new' | 'custom' | string;
-    tds_percentage?: number | null;
-    epf_percentage?: number | null;
-    pt_amount?: number | null;
-    hra_percentage?: number | null;
-    custom_tax_percentage?: number | null;
-    esop_value?: number | null;
-    hra_type?: 'metro' | 'non-metro' | 'custom';
-    epf_exempt?: boolean;
-  } | null;
+  tax_config?: any;
 }): Promise<void> {
-  let orgId = params.organization_id;
-  if (!orgId) {
-    const { data: defaultOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-    orgId = defaultOrg?.id;
-  }
-
-  // 1. Check if user already exists in profiles or register in Supabase Auth
-  let uid: string = '';
   const cleanEmail = params.email.trim().toLowerCase();
+  let uid = generateUuid();
 
-  const { data: existingProf } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('email', cleanEmail)
-    .maybeSingle();
+  // Check if profile exists by email
+  const profQuery = query(collection(db, 'profiles'), where('email', '==', cleanEmail), limit(1));
+  const profSnap = await getDocs(profQuery);
 
-  if (existingProf?.id) {
-    uid = existingProf.id;
+  if (!profSnap.empty) {
+    uid = profSnap.docs[0].id;
   } else {
     try {
-      const defaultPassword = params.phone ? `Pass@${params.phone.slice(-4)}` : 'Welcome@123';
-      const { data: authData } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: defaultPassword,
-        options: {
-          data: {
-            full_name: params.full_name,
-            role: params.role || 'employee',
-            organization_id: orgId,
-          },
-        },
-      });
-
-      if (authData?.user?.id) {
-        uid = authData.user.id;
+      const defaultPassword = params.password?.trim() || 'Welcome@123';
+      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, defaultPassword);
+      if (cred.user?.uid) {
+        uid = cred.user.uid;
+        await fbUpdateProfile(cred.user, { displayName: params.full_name });
       }
-    } catch (authErr) {
-      console.warn('Supabase Auth employee pre-registration notice:', authErr);
-    }
-
-    if (!uid) {
-      uid = generateUuid();
+    } catch (authErr: any) {
+      console.warn('Firebase Auth employee pre-registration notice:', authErr?.message || authErr);
     }
   }
 
   const now = new Date().toISOString();
 
-  // 2. Create/update profile
-  const profPayload: Record<string, any> = {
+  // Create or update Profile (enforcing password change on first login)
+  const profPayload: Profile = {
     id: uid,
     full_name: params.full_name,
-    email: params.email,
-    role: params.role || 'employee',
-    organization_id: orgId,
+    email: cleanEmail,
+    role: (params.role as any) || 'employee',
+    organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
     phone: params.phone || null,
+    avatar_url: null,
     is_active: true,
     needs_password_change: true,
+    must_change_password: true,
     created_at: now,
     updated_at: now,
   };
 
-  let { error: profError } = await supabase.from('profiles').upsert(profPayload);
-  if (profError && profError.code === 'PGRST204') {
-    delete profPayload.needs_password_change;
-    const retry = await supabase.from('profiles').upsert(profPayload);
-    profError = retry.error;
-  }
+  await setDoc(doc(db, 'profiles', uid), profPayload);
 
-  if (profError) {
-    console.error('Failed to create profile row:', profError);
-    if (profError.message?.includes('profiles_id_fkey')) {
-      throw new Error("Database Foreign Key constraint 'profiles_id_fkey' is preventing profile creation. Please run 'ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;' in Supabase SQL editor.");
-    }
-    throw new Error(`Failed to create profile: ${profError.message}`);
-  }
-
-  // 3. Create employee
-  const empPayload: Record<string, any> = {
+  // Create Employee
+  const empId = `emp-${Date.now()}`;
+  const empPayload: Employee = {
+    id: empId,
     profile_id: uid,
-    organization_id: orgId,
+    organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
     employee_code: params.employee_code,
-    department_id: cleanUuid(params.department_id),
-    manager_id: cleanUuid(params.manager_id),
-    workplace_id: cleanUuid(params.workplace_id),
-    default_shift_id: cleanUuid(params.default_shift_id),
+    department_id: params.department_id || null,
+    manager_id: params.manager_id || null,
+    workplace_id: params.workplace_id || null,
+    default_shift_id: params.default_shift_id || null,
     employment_status: 'active',
+    joining_date: now.split('T')[0],
     designation: params.designation || null,
     basic_salary: params.basic_salary || 0,
     tax_config: params.tax_config || null,
@@ -344,51 +294,23 @@ export async function createEmployee(params: {
     updated_at: now,
   };
 
-  let empRecord: any = null;
-  let attempts = 0;
-  while (attempts < 6) {
-    attempts++;
-    const { data: insData, error: empError } = await supabase
-      .from('employees')
-      .insert(empPayload)
-      .select()
-      .maybeSingle();
-
-    if (!empError) {
-      empRecord = insData;
-      break;
-    }
-
-    if (empError.code === 'PGRST204' || empError.message?.includes('schema cache')) {
-      const missingColMatch = empError.message?.match(/Could not find the '([^']+)' column/);
-      if (missingColMatch && missingColMatch[1]) {
-        delete empPayload[missingColMatch[1]];
-        continue;
-      }
-    }
-
-    console.error('Failed to create employee row:', empError);
-    throw new Error(`Failed to create employee record: ${empError.message}`);
-  }
+  await setDoc(doc(db, 'employees', empId), empPayload);
 
   // Link initial shift to employee_shifts roster
-  if (params.default_shift_id && empRecord?.id) {
-    try {
-      const today = now.split('T')[0];
-      await supabase.from('employee_shifts').upsert({
-        id: `${empRecord.id}_${today}`,
-        employee_id: empRecord.id,
-        date: today,
-        shift_id: cleanUuid(params.default_shift_id),
-        organization_id: orgId,
-        created_at: now,
-      });
-    } catch (e) {
-      console.warn('Could not assign initial employee shift:', e);
-    }
+  if (params.default_shift_id) {
+    const today = now.split('T')[0];
+    const shiftDocId = `${empId}_${today}`;
+    await setDoc(doc(db, 'employee_shifts', shiftDocId), {
+      id: shiftDocId,
+      employee_id: empId,
+      date: today,
+      shift_id: params.default_shift_id,
+      organization_id: params.organization_id,
+      created_at: now,
+    });
   }
 
-  // Send Resend Welcome Notification
+  // Send Welcome Email
   try {
     const { sendWelcomeEmail } = await import('./resend');
     await sendWelcomeEmail(
@@ -402,37 +324,9 @@ export async function createEmployee(params: {
   }
 }
 
-export async function updateEmployee(
-  id: string,
-  updates: Record<string, any>
-): Promise<void> {
-  const payload: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
-  
-  if ('department_id' in payload) payload.department_id = cleanUuid(payload.department_id);
-  if ('workplace_id' in payload) payload.workplace_id = cleanUuid(payload.workplace_id);
-  if ('manager_id' in payload) payload.manager_id = cleanUuid(payload.manager_id);
-  if ('default_shift_id' in payload) payload.default_shift_id = cleanUuid(payload.default_shift_id);
-
-  let attempts = 0;
-  while (attempts < 6) {
-    attempts++;
-    const { error } = await supabase
-      .from('employees')
-      .update(payload)
-      .eq('id', id);
-
-    if (!error) return;
-
-    if (error.code === 'PGRST204' || error.message?.includes('schema cache')) {
-      const missingColMatch = error.message?.match(/Could not find the '([^']+)' column/);
-      if (missingColMatch && missingColMatch[1]) {
-        delete payload[missingColMatch[1]];
-        continue;
-      }
-    }
-
-    throw error;
-  }
+export async function updateEmployee(id: string, updates: Record<string, any>): Promise<void> {
+  const payload = { ...updates, updated_at: new Date().toISOString() };
+  await updateDoc(doc(db, 'employees', id), payload);
 }
 
 export async function completeOnboarding(
@@ -446,51 +340,33 @@ export async function completeOnboarding(
   avatarUrl?: string
 ) {
   const now = new Date().toISOString();
-
-  await supabase
-    .from('employees')
-    .update({
-      ...data,
-      onboarding_completed: true,
-      updated_at: now,
-    })
-    .eq('id', employeeId);
+  await updateDoc(doc(db, 'employees', employeeId), {
+    ...data,
+    onboarding_completed: true,
+    updated_at: now,
+  });
 
   if (avatarUrl) {
-    await supabase
-      .from('profiles')
-      .update({
-        avatar_url: avatarUrl,
-        updated_at: now,
-      })
-      .eq('id', profileId);
+    await updateDoc(doc(db, 'profiles', profileId), {
+      avatar_url: avatarUrl,
+      updated_at: now,
+    });
   }
 }
 
 export async function getDepartments(organizationId?: string): Promise<Department[]> {
   try {
-    let query = supabase
-      .from('departments')
-      .select('*')
-      .order('name', { ascending: true });
+    const snap = await getDocs(collection(db, 'departments'));
+    const depts: Department[] = [];
+    snap.forEach((d) => {
+      const dept = { id: d.id, ...d.data() } as Department;
+      if (!organizationId || dept.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && dept.organization_id === 'smh')) {
+        depts.push(dept);
+      }
+    });
 
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId);
-    }
-
-    const { data, error } = await query;
-
-    if (error || !data || data.length === 0) {
-      // Fallback: fetch all available departments to prevent UI lockout
-      const { data: fallbackData } = await supabase
-        .from('departments')
-        .select('*')
-        .order('name', { ascending: true });
-
-      return (fallbackData || []) as Department[];
-    }
-
-    return data as Department[];
+    depts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return depts;
   } catch (err) {
     console.error('getDepartments error:', err);
     return [];
@@ -499,22 +375,10 @@ export async function getDepartments(organizationId?: string): Promise<Departmen
 
 export async function getDepartmentsWithStats(organizationId?: string): Promise<Department[]> {
   try {
-    let deptQuery = supabase.from('departments').select('*').order('name', { ascending: true });
-    if (organizationId) {
-      deptQuery = deptQuery.eq('organization_id', organizationId);
-    }
-
-    const [deptRes, empRes] = await Promise.all([
-      deptQuery,
+    const [departments, employees] = await Promise.all([
+      getDepartments(organizationId),
       getEmployees(organizationId ? { organization_id: organizationId } : undefined),
     ]);
-
-    let departments = (deptRes.data || []) as Department[];
-    if (departments.length === 0 && organizationId) {
-      const { data: allDepts } = await supabase.from('departments').select('*').order('name', { ascending: true });
-      departments = (allDepts || []) as Department[];
-    }
-    const employees = (empRes || []) as Employee[];
 
     for (const dept of departments) {
       const deptEmps = employees.filter((e) => e.department_id === dept.id);
@@ -538,50 +402,37 @@ export async function createDepartment(params: {
   description?: string;
   manager_id?: string | null;
 }): Promise<Department> {
-  const { data, error } = await supabase
-    .from('departments')
-    .insert({
-      organization_id: params.organization_id,
-      name: params.name,
-      description: params.description || null,
-      manager_id: params.manager_id || null,
-      created_at: new Date().toISOString(),
-    })
-    .select('*')
-    .single();
+  const deptId = `dept-${Date.now()}`;
+  const now = new Date().toISOString();
+  const dept: Department = {
+    id: deptId,
+    organization_id: params.organization_id,
+    name: params.name,
+    description: params.description || null,
+    manager_id: params.manager_id || null,
+    created_at: now,
+  };
 
-  if (error) throw error;
-  return data as Department;
+  await setDoc(doc(db, 'departments', deptId), dept);
+  return dept;
 }
 
 export async function updateDepartment(
   id: string,
   updates: Partial<Pick<Department, 'name' | 'description' | 'manager_id'>>
 ): Promise<void> {
-  const { error } = await supabase
-    .from('departments')
-    .update(updates)
-    .eq('id', id);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'departments', id), updates);
 }
 
 export async function deleteDepartment(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('departments')
-    .delete()
-    .eq('id', id);
-
-  if (error) throw error;
+  await deleteDoc(doc(db, 'departments', id));
 }
 
 export async function updateReportingManager(employeeId: string, managerId: string | null): Promise<void> {
-  const { error } = await supabase
-    .from('employees')
-    .update({ manager_id: managerId, updated_at: new Date().toISOString() })
-    .eq('id', employeeId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'employees', employeeId), {
+    manager_id: managerId,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export async function getOrgHierarchy(organizationId?: string): Promise<Employee[]> {
@@ -608,27 +459,17 @@ export async function getOrgHierarchy(organizationId?: string): Promise<Employee
 
 export async function getWorkplaces(organizationId?: string): Promise<Workplace[]> {
   try {
-    let query = supabase
-      .from('workplaces')
-      .select('*')
-      .order('name', { ascending: true });
+    const snap = await getDocs(collection(db, 'workplaces'));
+    const wps: Workplace[] = [];
+    snap.forEach((d) => {
+      const wp = { id: d.id, ...d.data() } as Workplace;
+      if (!organizationId || wp.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && wp.organization_id === 'smh')) {
+        wps.push(wp);
+      }
+    });
 
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId);
-    }
-
-    const { data, error } = await query;
-
-    if (error || !data || data.length === 0) {
-      const { data: fallbackWps } = await supabase
-        .from('workplaces')
-        .select('*')
-        .order('name', { ascending: true });
-
-      return (fallbackWps || []) as Workplace[];
-    }
-
-    return data as Workplace[];
+    wps.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return wps;
   } catch (err) {
     console.error('getWorkplaces error:', err);
     return [];
@@ -643,55 +484,36 @@ export async function createWorkplace(params: {
   longitude: number;
   radius_meters: number;
 }): Promise<Workplace> {
-  const { data, error } = await supabase
-    .from('workplaces')
-    .insert({
-      ...params,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    })
-    .select('*')
-    .single();
+  const wpId = `wp-${Date.now()}`;
+  const now = new Date().toISOString();
+  const wp: Workplace = {
+    id: wpId,
+    organization_id: params.organization_id,
+    name: params.name,
+    address: params.address || '',
+    latitude: params.latitude,
+    longitude: params.longitude,
+    radius_meters: params.radius_meters,
+    is_active: true,
+    created_at: now,
+  };
 
-  if (error) throw error;
-  return data as Workplace;
+  await setDoc(doc(db, 'workplaces', wpId), wp);
+  return wp;
 }
 
 export async function updateWorkplace(id: string, updates: Partial<Workplace>): Promise<void> {
-  const { error } = await supabase
-    .from('workplaces')
-    .update(updates)
-    .eq('id', id);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'workplaces', id), updates);
 }
 
 export async function getEmployeeCount(organizationId?: string): Promise<number> {
   try {
-    let profQuery = supabase
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('is_active', true);
-
+    let q = query(collection(db, 'profiles'), where('is_active', '==', true));
     if (organizationId) {
-      profQuery = profQuery.eq('organization_id', organizationId);
+      q = query(collection(db, 'profiles'), where('organization_id', '==', organizationId), where('is_active', '==', true));
     }
-
-    const { count: profCount } = await profQuery;
-
-    let empQuery = supabase
-      .from('employees')
-      .select('id, profile:profiles(organization_id)', { count: 'exact' })
-      .eq('employment_status', 'active');
-
-    const { data: emps, count: empCount } = await empQuery;
-
-    if (organizationId && emps) {
-      const filtered = emps.filter((e: any) => e.profile?.organization_id === organizationId);
-      return Math.max(filtered.length, profCount || 0);
-    }
-
-    return Math.max(empCount || 0, profCount || 0);
+    const snap = await getDocs(q);
+    return snap.size;
   } catch (e) {
     const emps = await getEmployees(organizationId ? { organization_id: organizationId, employment_status: 'active' } : { employment_status: 'active' });
     return emps.length;

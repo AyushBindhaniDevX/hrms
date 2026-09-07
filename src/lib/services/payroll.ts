@@ -1,100 +1,147 @@
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
 import { getEmployees } from './employee';
 import { MONTHS } from '@/constants/config';
-import type { PayrollPeriod, Payroll, Payslip, Employee } from '@/types';
+import type { PayrollPeriod, Payroll, Payslip, Employee, Profile, Department } from '@/types';
+import { getHolidaysForDateRange } from './holidays';
 
 export async function getPayslips(employeeId: string): Promise<Payslip[]> {
-  const { data, error } = await supabase
-    .from('payslips')
-    .select(`
-      *,
-      payroll:payroll(
-        *,
-        employee:employees(*, profile:profiles(*))
-      )
-    `)
-    .eq('employee_id', employeeId)
-    .order('period_year', { ascending: false })
-    .order('period_month', { ascending: false });
+  try {
+    const [payslipSnap, payrollSnap] = await Promise.all([
+      getDocs(query(collection(db, 'payslips'), where('employee_id', '==', employeeId))),
+      getDocs(collection(db, 'payroll')),
+    ]);
 
-  if (error || !data) return [];
-  return data as Payslip[];
+    const payrollMap = new Map<string, Payroll>();
+    payrollSnap.forEach((d) => payrollMap.set(d.id, { id: d.id, ...d.data() } as Payroll));
+
+    const payslips: Payslip[] = [];
+    payslipSnap.forEach((d) => {
+      const ps = { id: d.id, ...d.data() } as Payslip;
+      ps.payroll = ps.payroll_id ? payrollMap.get(ps.payroll_id) : undefined;
+      payslips.push(ps);
+    });
+
+    payslips.sort((a, b) => {
+      if (a.period_year !== b.period_year) return b.period_year - a.period_year;
+      return b.period_month - a.period_month;
+    });
+
+    return payslips;
+  } catch (err) {
+    console.error('getPayslips error:', err);
+    return [];
+  }
 }
 
 export async function getPayslipDetail(payslipId: string): Promise<Payslip | null> {
-  const { data, error } = await supabase
-    .from('payslips')
-    .select(`
-      *,
-      payroll:payroll(
-        *,
-        employee:employees(*, profile:profiles(*))
-      )
-    `)
-    .eq('id', payslipId)
-    .maybeSingle();
+  try {
+    const snap = await getDoc(doc(db, 'payslips', payslipId));
+    if (!snap.exists()) return null;
+    const ps = { id: snap.id, ...snap.data() } as Payslip;
 
-  if (error || !data) return null;
-  return data as Payslip;
+    if (ps.payroll_id) {
+      const pSnap = await getDoc(doc(db, 'payroll', ps.payroll_id));
+      if (pSnap.exists()) {
+        const payrollData = { id: pSnap.id, ...pSnap.data() } as Payroll;
+        if (payrollData.employee_id) {
+          const empSnap = await getDoc(doc(db, 'employees', payrollData.employee_id));
+          if (empSnap.exists()) {
+            const empData = { id: empSnap.id, ...empSnap.data() } as Employee;
+            if (empData.profile_id) {
+              const profSnap = await getDoc(doc(db, 'profiles', empData.profile_id));
+              if (profSnap.exists()) {
+                empData.profile = { id: profSnap.id, ...profSnap.data() } as Profile;
+              }
+            }
+            payrollData.employee = empData;
+          }
+        }
+        ps.payroll = payrollData;
+      }
+    }
+
+    return ps;
+  } catch (err) {
+    console.error('getPayslipDetail error:', err);
+    return null;
+  }
 }
-
-import { getHolidaysForDateRange } from './holidays';
 
 export async function getPayrollPeriods(organizationId?: string): Promise<PayrollPeriod[]> {
-  let query = supabase
-    .from('payroll_periods')
-    .select('*')
-    .order('year', { ascending: false })
-    .order('month', { ascending: false });
+  try {
+    const snap = await getDocs(collection(db, 'payroll_periods'));
+    const periods: PayrollPeriod[] = [];
+    snap.forEach((d) => {
+      const p = { id: d.id, ...d.data() } as PayrollPeriod;
+      if (!organizationId || !p.organization_id || p.organization_id === organizationId) {
+        periods.push(p);
+      }
+    });
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId);
+    periods.sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
+
+    return periods;
+  } catch (err) {
+    console.error('getPayrollPeriods error:', err);
+    return [];
   }
-
-  const { data, error } = await query;
-
-  if (error || !data) return [];
-  return data as PayrollPeriod[];
 }
 
-/** Count absent + unpaid-leave days for an employee in a given month/year, EXCLUDING declared holidays */
 async function countLopDays(employeeId: string, month: number, year: number): Promise<number> {
   try {
-    // Build date range for the month
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endMonth = month === 12 ? 1 : month + 1;
     const endYear = month === 12 ? year + 1 : year;
     const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
 
-    // 1. Fetch holidays in this period to exclude from absent count
     const holidays = await getHolidaysForDateRange(startDate, endDate);
-    const holidayDates = new Set(holidays.filter(h => h.type !== 'optional').map(h => h.date));
+    const holidayDates = new Set(holidays.filter((h) => h.type !== 'optional').map((h) => h.date));
 
-    // 2. Count absent attendance days that are NOT declared holidays
-    const { data: absentRecords } = await supabase
-      .from('attendance')
-      .select('id, date')
-      .eq('employee_id', employeeId)
-      .eq('status', 'absent')
-      .gte('date', startDate)
-      .lt('date', endDate);
+    // Absent attendance days
+    const attQ = query(
+      collection(db, 'attendance'),
+      where('employee_id', '==', employeeId),
+      where('status', '==', 'absent')
+    );
+    const attSnap = await getDocs(attQ);
+    let absentDays = 0;
+    attSnap.forEach((d) => {
+      const data = d.data();
+      if (data.date >= startDate && data.date < endDate && !holidayDates.has(data.date)) {
+        absentDays++;
+      }
+    });
 
-    const validAbsences = (absentRecords || []).filter(r => !holidayDates.has(r.date));
-    const absentDays = validAbsences.length;
-
-    // 3. Count approved unpaid leave days in the period
-    const { data: unpaidLeaves } = await supabase
-      .from('leave_requests')
-      .select('days, leave_type:leave_types(is_paid)')
-      .eq('employee_id', employeeId)
-      .eq('status', 'approved')
-      .gte('start_date', startDate)
-      .lt('start_date', endDate);
-
-    const unpaidLeaveDays = (unpaidLeaves || []).reduce((acc, lr) => {
-      const isPaid = (lr.leave_type as any)?.is_paid ?? true;
-      return isPaid ? acc : acc + (lr.days || 0);
-    }, 0);
+    // Unpaid leaves
+    const leaveQ = query(
+      collection(db, 'leave_requests'),
+      where('employee_id', '==', employeeId),
+      where('status', '==', 'approved')
+    );
+    const leaveSnap = await getDocs(leaveQ);
+    let unpaidLeaveDays = 0;
+    leaveSnap.forEach((d) => {
+      const data = d.data();
+      if (data.start_date >= startDate && data.start_date < endDate) {
+        unpaidLeaveDays += data.days || 0;
+      }
+    });
 
     return absentDays + unpaidLeaveDays;
   } catch {
@@ -102,7 +149,6 @@ async function countLopDays(employeeId: string, month: number, year: number): Pr
   }
 }
 
-/** Calculate TDS based on annual taxable income and employee tax regime / custom TDS % */
 export function calculateTds(annualBasic: number, taxConfig?: Record<string, any>): number {
   if (taxConfig?.tds_percentage != null && !isNaN(Number(taxConfig.tds_percentage)) && taxConfig.tds_percentage !== '') {
     return Math.round((annualBasic * Number(taxConfig.tds_percentage)) / 100);
@@ -117,7 +163,6 @@ export function calculateTds(annualBasic: number, taxConfig?: Record<string, any
   }
 
   if (regime === 'old') {
-    // Old regime slabs (FY 2024-25 / 2026, simplified)
     let tax = 0;
     if (annualTaxable <= 250000) tax = 0;
     else if (annualTaxable <= 500000) tax = (annualTaxable - 250000) * 0.05;
@@ -125,7 +170,6 @@ export function calculateTds(annualBasic: number, taxConfig?: Record<string, any
     else tax = 112500 + (annualTaxable - 1000000) * 0.3;
     return Math.round(tax / 12);
   } else {
-    // New regime slabs
     let tax = 0;
     if (annualTaxable <= 300000) tax = 0;
     else if (annualTaxable <= 700000) tax = (annualTaxable - 300000) * 0.05;
@@ -138,9 +182,6 @@ export function calculateTds(annualBasic: number, taxConfig?: Record<string, any
   }
 }
 
-/**
- * Computes statutory salary breakdown strictly from an employee's profile and enrollment tax_config
- */
 export async function calculateStatutoryForEmployee(
   emp: Employee,
   month: number,
@@ -158,7 +199,6 @@ export async function calculateStatutoryForEmployee(
   const basic = emp.basic_salary || 0;
   const taxConfig = (emp as any).tax_config || {};
 
-  // 1. EPF (Employee 12% or custom percentage / exempt)
   let epfRate = 0.12;
   if (taxConfig.epf_exempt) {
     epfRate = 0;
@@ -167,20 +207,15 @@ export async function calculateStatutoryForEmployee(
   }
   const epf = Math.round(basic * epfRate);
 
-  // 2. Professional Tax (PT)
   let pt = basic > 15000 ? 200 : 0;
   if (taxConfig.pt_amount != null && !isNaN(Number(taxConfig.pt_amount))) {
     pt = Number(taxConfig.pt_amount);
   }
 
-  // 3. TDS / Income Tax
   const tds = calculateTds(basic, taxConfig);
-
-  // 4. LOP Days & Amount (excluding declared public holidays)
   const lopDays = customLopDays !== undefined ? customLopDays : await countLopDays(emp.id, month, year);
   const lopAmount = lopDays > 0 ? Math.round((basic / 26) * lopDays) : 0;
 
-  // 5. Allowances: HRA & Special Allowance
   let hraRate = taxConfig.hra_type === 'metro' ? 0.5 : 0.4;
   if (taxConfig.hra_percentage != null && !isNaN(Number(taxConfig.hra_percentage))) {
     hraRate = Number(taxConfig.hra_percentage) / 100;
@@ -203,17 +238,15 @@ export async function calculateStatutoryForEmployee(
     'TDS': tds,
   };
 
-  // 6. Custom Admin Enrolled Allowances, Bonuses, Deductions & Taxes
   const customItems: any[] = Array.isArray(taxConfig.custom_items) ? taxConfig.custom_items : [];
   customItems.forEach((item) => {
     if (!item.name || !item.value) return;
     const isPercentage = item.amount_type === 'percentage';
     const computedVal = isPercentage ? Math.round((basic * Number(item.value)) / 100) : Math.round(Number(item.value));
-    
+
     if (item.type === 'deduction') {
       deductions[item.name] = computedVal;
     } else {
-      // 'earning', 'bonus', 'reimbursement'
       allowances[item.name] = computedVal;
     }
   });
@@ -236,150 +269,129 @@ export async function calculateStatutoryForEmployee(
 
 export async function createPayrollPeriod(month: number, year: number, orgId: string): Promise<PayrollPeriod> {
   if (!orgId) {
-    throw new Error(
-      'No organization is linked to your account, so payroll cannot be generated. Please contact your administrator.'
-    );
+    throw new Error('No organization is linked to your account, so payroll cannot be generated.');
   }
   if (!month || month < 1 || month > 12) {
     throw new Error('Please choose a valid month before generating payroll.');
   }
 
+  const periodId = `pp_${orgId}_${year}_${month}`;
   const now = new Date().toISOString();
 
-  // 0. Prevent duplicate periods for the same month/year/org (avoids silent unique-constraint failures)
-  const { data: existingPeriod } = await supabase
-    .from('payroll_periods')
-    .select('id')
-    .eq('organization_id', orgId)
-    .eq('month', month)
-    .eq('year', year)
-    .maybeSingle();
-
-  if (existingPeriod) {
-    throw new Error(
-      `A payroll period for ${MONTHS[month - 1]} ${year} already exists. Open it from the list to continue.`
-    );
+  // Check for duplicate
+  const existingSnap = await getDoc(doc(db, 'payroll_periods', periodId));
+  if (existingSnap.exists()) {
+    throw new Error(`A payroll period for ${MONTHS[month - 1]} ${year} already exists.`);
   }
 
-  // 1. Create payroll period
-  const { data: period, error: periodErr } = await supabase
-    .from('payroll_periods')
-    .insert({
-      month,
-      year,
-      organization_id: orgId,
-      status: 'open',
-      created_at: now,
-      updated_at: now,
-    })
-    .select('*')
-    .single();
+  const period: PayrollPeriod = {
+    id: periodId,
+    month,
+    year,
+    organization_id: orgId,
+    status: 'open',
+    processed_at: null,
+    created_at: now,
+  };
 
-  if (periodErr || !period) {
-    throw new Error(`Could not create the payroll period: ${periodErr?.message || 'unknown error'}`);
-  }
+  await setDoc(doc(db, 'payroll_periods', periodId), period);
 
-  // 2. Fetch active employees for this organization
+  // Fetch active employees
   const employees = await getEmployees({ organization_id: orgId, employment_status: 'active' });
 
   if (!employees || employees.length === 0) {
-    // Roll back the empty period so the user can retry cleanly once employees exist.
-    await supabase.from('payroll_periods').delete().eq('id', period.id);
-    throw new Error(
-      'No active employees were found for this organization, so there is nothing to generate. Add employees first, then try again.'
-    );
+    await deleteDoc(doc(db, 'payroll_periods', periodId));
+    throw new Error('No active employees were found for this organization. Add employees first, then try again.');
   }
 
-  // 3. Generate draft payroll entries reflecting all enrolled PF, TDS, HRA & PT details
-  const entries = await Promise.all(
-    employees.map(async (emp) => {
-      const breakdown = await calculateStatutoryForEmployee(emp, month, year);
-      return {
-        payroll_period_id: period.id,
-        employee_id: emp.id,
+  // Generate entries
+  for (const emp of employees) {
+    const breakdown = await calculateStatutoryForEmployee(emp, month, year);
+    const entryId = `payroll_${emp.id}_${year}_${month}`;
+    const entryData: Payroll = {
+      id: entryId,
+      payroll_period_id: periodId,
+      employee_id: emp.id,
+      basic_salary: breakdown.basic_salary,
+      allowances: breakdown.allowances,
+      deductions: breakdown.deductions,
+      lop_days: breakdown.lop_days,
+      lop_amount: breakdown.lop_amount,
+      gross_salary: breakdown.gross_salary,
+      net_salary: breakdown.net_salary,
+      status: 'draft',
+      created_at: now,
+      updated_at: now,
+    };
+    await setDoc(doc(db, 'payroll', entryId), entryData);
+  }
+
+  return period;
+}
+
+export async function recalculatePeriodEntries(periodId: string): Promise<void> {
+  const periodSnap = await getDoc(doc(db, 'payroll_periods', periodId));
+  if (!periodSnap.exists()) throw new Error('Payroll period not found');
+  const period = periodSnap.data() as PayrollPeriod;
+
+  const entriesQ = query(collection(db, 'payroll'), where('payroll_period_id', '==', periodId));
+  const entriesSnap = await getDocs(entriesQ);
+
+  const now = new Date().toISOString();
+  for (const d of entriesSnap.docs) {
+    const entry = d.data() as Payroll;
+    const empSnap = await getDoc(doc(db, 'employees', entry.employee_id));
+    if (empSnap.exists()) {
+      const emp = { id: empSnap.id, ...empSnap.data() } as Employee;
+      const breakdown = await calculateStatutoryForEmployee(emp, period.month, period.year, entry.lop_days);
+      await updateDoc(doc(db, 'payroll', d.id), {
         basic_salary: breakdown.basic_salary,
         allowances: breakdown.allowances,
         deductions: breakdown.deductions,
-        lop_days: breakdown.lop_days,
         lop_amount: breakdown.lop_amount,
         gross_salary: breakdown.gross_salary,
         net_salary: breakdown.net_salary,
-        status: 'draft',
-        created_at: now,
         updated_at: now,
-      };
-    })
-  );
-
-  const { error: entriesErr } = await supabase.from('payroll').insert(entries);
-  if (entriesErr) {
-    // Roll back the period + any partial entries so the state stays consistent and retryable.
-    await supabase.from('payroll').delete().eq('payroll_period_id', period.id);
-    await supabase.from('payroll_periods').delete().eq('id', period.id);
-    throw new Error(`Payroll entries could not be generated: ${entriesErr.message}`);
-  }
-
-  return period as PayrollPeriod;
-}
-
-/**
- * Re-sync and recalculate all draft entries in a payroll period using the latest employee details
- */
-export async function recalculatePeriodEntries(periodId: string): Promise<void> {
-  const { data: period } = await supabase
-    .from('payroll_periods')
-    .select('*')
-    .eq('id', periodId)
-    .single();
-
-  if (!period) throw new Error('Payroll period not found');
-
-  const { data: existingEntries } = await supabase
-    .from('payroll')
-    .select('*, employee:employees(*, profile:profiles(*))')
-    .eq('payroll_period_id', periodId);
-
-  if (!existingEntries || existingEntries.length === 0) return;
-
-  const now = new Date().toISOString();
-
-  for (const entry of existingEntries) {
-    if (entry.employee) {
-      const breakdown = await calculateStatutoryForEmployee(
-        entry.employee as Employee,
-        period.month,
-        period.year,
-        entry.lop_days
-      );
-
-      await supabase
-        .from('payroll')
-        .update({
-          basic_salary: breakdown.basic_salary,
-          allowances: breakdown.allowances,
-          deductions: breakdown.deductions,
-          lop_amount: breakdown.lop_amount,
-          gross_salary: breakdown.gross_salary,
-          net_salary: breakdown.net_salary,
-          updated_at: now,
-        })
-        .eq('id', entry.id);
+      });
     }
   }
 }
 
 export async function getPayrollEntries(periodId: string): Promise<Payroll[]> {
-  const { data, error } = await supabase
-    .from('payroll')
-    .select(`
-      *,
-      employee:employees(*, profile:profiles(*), department:departments!employees_department_id_fkey(*))
-    `)
-    .eq('payroll_period_id', periodId)
-    .order('created_at', { ascending: true });
+  try {
+    const [entriesSnap, empsSnap, profsSnap, deptsSnap] = await Promise.all([
+      getDocs(query(collection(db, 'payroll'), where('payroll_period_id', '==', periodId))),
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'profiles')),
+      getDocs(collection(db, 'departments')),
+    ]);
 
-  if (error || !data) return [];
-  return data as Payroll[];
+    const profMap = new Map<string, Profile>();
+    profsSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
+
+    const deptMap = new Map<string, Department>();
+    deptsSnap.forEach((d) => deptMap.set(d.id, { id: d.id, ...d.data() } as Department));
+
+    const empMap = new Map<string, Employee>();
+    empsSnap.forEach((d) => {
+      const emp = { id: d.id, ...d.data() } as Employee;
+      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+      emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
+      empMap.set(d.id, emp);
+    });
+
+    const entries: Payroll[] = [];
+    entriesSnap.forEach((d) => {
+      const entry = { id: d.id, ...d.data() } as Payroll;
+      entry.employee = entry.employee_id ? empMap.get(entry.employee_id) : undefined;
+      entries.push(entry);
+    });
+
+    return entries;
+  } catch (err) {
+    console.error('getPayrollEntries error:', err);
+    return [];
+  }
 }
 
 export async function createPayrollEntry(entry: {
@@ -393,120 +405,98 @@ export async function createPayrollEntry(entry: {
   gross_salary: number;
   net_salary: number;
 }): Promise<Payroll> {
+  const entryId = `payroll_${entry.employee_id}_${Date.now()}`;
   const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('payroll')
-    .insert({
-      ...entry,
-      status: 'draft',
-      created_at: now,
-      updated_at: now,
-    })
-    .select('*')
-    .single();
+  const payrollObj: Payroll = {
+    id: entryId,
+    ...entry,
+    status: 'draft',
+    created_at: now,
+    updated_at: now,
+  };
 
-  if (error) throw error;
-  return data as Payroll;
+  await setDoc(doc(db, 'payroll', entryId), payrollObj);
+  return payrollObj;
 }
 
-export async function updatePayrollEntry(
-  id: string,
-  updates: Partial<Payroll>
-): Promise<void> {
-  const { error } = await supabase
-    .from('payroll')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id);
-
-  if (error) throw error;
+export async function updatePayrollEntry(id: string, updates: Partial<Payroll>): Promise<void> {
+  await updateDoc(doc(db, 'payroll', id), {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export async function processPayrollPeriod(periodId: string): Promise<void> {
   const now = new Date().toISOString();
-  await supabase
-    .from('payroll')
-    .update({ status: 'processed', updated_at: now })
-    .eq('payroll_period_id', periodId);
 
-  await supabase
-    .from('payroll_periods')
-    .update({ status: 'closed', processed_at: now, updated_at: now })
-    .eq('id', periodId);
+  const entriesQ = query(collection(db, 'payroll'), where('payroll_period_id', '==', periodId));
+  const entriesSnap = await getDocs(entriesQ);
+
+  for (const d of entriesSnap.docs) {
+    await updateDoc(doc(db, 'payroll', d.id), { status: 'processed', updated_at: now });
+  }
+
+  await updateDoc(doc(db, 'payroll_periods', periodId), {
+    status: 'closed',
+    processed_at: now,
+    updated_at: now,
+  });
 }
 
 export async function distributePayroll(periodId: string, month: number, year: number): Promise<void> {
   const now = new Date().toISOString();
 
-  // Mark all entries as paid
-  const { data: entries } = await supabase
-    .from('payroll')
-    .select('*')
-    .eq('payroll_period_id', periodId)
-    .eq('status', 'processed');
+  const entriesQ = query(collection(db, 'payroll'), where('payroll_period_id', '==', periodId));
+  const entriesSnap = await getDocs(entriesQ);
 
-  if (!entries || entries.length === 0) return;
+  for (const d of entriesSnap.docs) {
+    const entry = { id: d.id, ...d.data() } as Payroll;
+    await updateDoc(doc(db, 'payroll', d.id), { status: 'paid', updated_at: now });
 
-  await supabase
-    .from('payroll')
-    .update({ status: 'paid', updated_at: now })
-    .eq('payroll_period_id', periodId);
-
-  // Generate payslips for all employees in this period
-  const payslips = entries.map((entry) => ({
-    payroll_id: entry.id,
-    employee_id: entry.employee_id,
-    payslip_number: `PS-${year}${String(month).padStart(2, '0')}-${entry.id.substring(0, 5).toUpperCase()}`,
-    period_month: month,
-    period_year: year,
-    created_at: now,
-  }));
-
-  await supabase.from('payslips').insert(payslips);
+    const payslipId = `ps_${entry.employee_id}_${year}_${month}`;
+    const payslipData: Payslip = {
+      id: payslipId,
+      payroll_id: entry.id,
+      employee_id: entry.employee_id,
+      payslip_number: `PS-${year}${String(month).padStart(2, '0')}-${entry.id.substring(0, 5).toUpperCase()}`,
+      period_month: month,
+      period_year: year,
+      file_url: null,
+      created_at: now,
+      payroll: entry,
+    };
+    await setDoc(doc(db, 'payslips', payslipId), payslipData);
+  }
 }
 
-/** Generate a payslip for a single payroll entry (called by HR on demand) */
 export async function generatePayslipForEntry(
   payrollEntry: Payroll,
   month: number,
   year: number
 ): Promise<Payslip> {
   const now = new Date().toISOString();
+  const payslipId = `ps_${payrollEntry.employee_id}_${year}_${month}`;
 
-  // Check if payslip already exists for this payroll entry
-  const { data: existing } = await supabase
-    .from('payslips')
-    .select('*')
-    .eq('payroll_id', payrollEntry.id)
-    .maybeSingle();
-
-  if (existing) return existing as Payslip;
-
-  // Mark payroll entry as paid if it's processed
-  if (payrollEntry.status === 'processed' || payrollEntry.status === 'draft') {
-    await supabase
-      .from('payroll')
-      .update({ status: 'paid', updated_at: now })
-      .eq('id', payrollEntry.id);
+  const existingSnap = await getDoc(doc(db, 'payslips', payslipId));
+  if (existingSnap.exists()) {
+    return { id: existingSnap.id, ...existingSnap.data() } as Payslip;
   }
 
+  await updateDoc(doc(db, 'payroll', payrollEntry.id), { status: 'paid', updated_at: now });
+
   const payslipNumber = `PS-${year}${String(month).padStart(2, '0')}-${payrollEntry.id.substring(0, 5).toUpperCase()}`;
+  const payslip: Payslip = {
+    id: payslipId,
+    payroll_id: payrollEntry.id,
+    employee_id: payrollEntry.employee_id,
+    payslip_number: payslipNumber,
+    period_month: month,
+    period_year: year,
+    file_url: null,
+    created_at: now,
+    payroll: payrollEntry,
+  };
 
-  const { data, error } = await supabase
-    .from('payslips')
-    .insert({
-      payroll_id: payrollEntry.id,
-      employee_id: payrollEntry.employee_id,
-      payslip_number: payslipNumber,
-      period_month: month,
-      period_year: year,
-      created_at: now,
-    })
-    .select('*')
-    .single();
-
-  if (error) throw error;
-  return data as Payslip;
+  await setDoc(doc(db, 'payslips', payslipId), payslip);
+  return payslip;
 }

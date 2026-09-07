@@ -15,14 +15,14 @@ import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
-import { supabase } from '@/lib/supabase';
 import {
   updateEmployee,
   getDepartments,
   getWorkplaces,
   getEmployees,
+  getEmployeeById,
 } from '@/lib/services/employee';
-import { getShifts } from '@/lib/services/shifts';
+import { getShifts, assignEmployeeShift } from '@/lib/services/shifts';
 import { updateUserProfileData } from '@/lib/services/organization';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate, formatCurrency } from '@/utils/format';
@@ -93,13 +93,7 @@ export default function EmployeeDetailScreen() {
   const loadData = useCallback(async () => {
     if (!id) return;
     try {
-      const { data } = await supabase
-        .from('employees')
-        .select('*, profile:profiles(*), department:departments!employees_department_id_fkey(*), workplace:workplaces(*)')
-        .eq('id', id)
-        .maybeSingle();
-
-      const employeeData = (data || null) as Employee | null;
+      const employeeData = await getEmployeeById(id);
       setEmp(employeeData);
 
       const orgId = employeeData?.organization_id || employeeData?.profile?.organization_id || employeeData?.department?.organization_id || tenantOrg?.id || profile?.organization_id;
@@ -255,14 +249,7 @@ export default function EmployeeDetailScreen() {
       if (shiftId && emp.profile?.organization_id) {
         try {
           const today = new Date().toISOString().split('T')[0];
-          await supabase.from('employee_shifts').upsert({
-            id: `${emp.id}_${today}`,
-            employee_id: emp.id,
-            date: today,
-            shift_id: shiftId,
-            organization_id: emp.profile.organization_id,
-            created_at: new Date().toISOString(),
-          });
+          await assignEmployeeShift(emp.id, today, shiftId, emp.profile.organization_id);
         } catch (sErr) {
           console.warn('Could not update employee_shifts roster:', sErr);
         }

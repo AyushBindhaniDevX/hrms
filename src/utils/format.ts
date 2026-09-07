@@ -77,12 +77,34 @@ export function getGreeting(): string {
   return 'Good Evening';
 }
 
-export function getInitials(name: string): string {
-  if (!name) return '??';
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+const TITLE_PREFIXES = /^(dr|mr|mrs|ms|prof|professor|doctor|sister|sr|father|fr|er|nurse|doc|md|mbbs|shri|smt)\.?$/i;
+
+export function getCleanNameParts(name?: string | null): string[] {
+  if (!name || typeof name !== 'string') return [];
+  const rawParts = name.trim().split(/\s+/).filter(Boolean);
+  const cleanParts = rawParts.filter((p) => !TITLE_PREFIXES.test(p));
+  return cleanParts.length > 0 ? cleanParts : rawParts;
 }
+
+export function getFirstName(name?: string | null): string {
+  const parts = getCleanNameParts(name);
+  return parts[0] || 'User';
+}
+
+export function getFirstNameInitial(name?: string | null): string {
+  const parts = getCleanNameParts(name);
+  if (parts.length === 0 || !parts[0]) return '?';
+  return parts[0][0].toUpperCase();
+}
+
+export function getInitials(name?: string | null): string {
+  const parts = getCleanNameParts(name);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) {
+    return parts[0][0].toUpperCase();
+  }
+  const first = parts[0][0];
+  const last = parts[parts.length - 1][0];
+  return `${first}${last}`.toUpperCase();
+}
+

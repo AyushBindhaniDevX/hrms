@@ -26,6 +26,9 @@ interface FaceVerificationModalProps {
   employeeName?: string;
   officeName?: string;
   isClockingIn?: boolean;
+  isRemote?: boolean;
+  remoteReason?: string;
+  [key: string]: any;
 }
 
 export function FaceVerificationModal({
@@ -35,6 +38,8 @@ export function FaceVerificationModal({
   employeeName,
   officeName,
   isClockingIn = true,
+  isRemote = false,
+  remoteReason = 'Work From Home',
 }: FaceVerificationModalProps) {
   const colors = useTheme();
   const [isVerifying, setIsVerifying] = useState(false);
@@ -148,8 +153,16 @@ export function FaceVerificationModal({
           <View style={styles.subInfoRow}>
             <Text style={[styles.subText, { color: colors.textSecondary }]}>
               Securely verifying identity for{' '}
-              <Text style={{ fontWeight: '700', color: colors.text }}>{employeeName || 'Staff Member'}</Text>{' '}
-              at <Text style={{ fontWeight: '700', color: colors.primary }}>{officeName || 'Assigned Workplace'}</Text>.
+              <Text style={{ fontWeight: '700', color: colors.text }}>{employeeName || 'Staff Member'}</Text>
+              {isRemote ? (
+                <>
+                  {' '}for <Text style={{ fontWeight: '700', color: '#0284C7' }}>Remote Work ({remoteReason})</Text>.
+                </>
+              ) : (
+                <>
+                  {' '}at <Text style={{ fontWeight: '700', color: colors.primary }}>{officeName || 'Assigned Workplace'}</Text>.
+                </>
+              )}
             </Text>
           </View>
 

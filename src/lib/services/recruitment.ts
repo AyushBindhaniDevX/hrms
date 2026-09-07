@@ -17,7 +17,6 @@ import {
 } from '@/types/database';
 import { createEmployee } from './employee';
 import { sendApplicationReceivedEmail, sendBulkCandidateUpdateEmail, sendRejectionEmail, sendResendEmail } from './resend';
-import { supabase } from '@/lib/supabase';
 
 // ----------------------------------------------------
 // SEED JOBS REQUISITIONS

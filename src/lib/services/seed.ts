@@ -1,22 +1,19 @@
 /**
- * Master Database Seeder (Supabase)
+ * Master Database Seeder (Cloud Firestore)
  * Oasis HRMS Multi-Tenant Platform
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
 
 export async function seedDatabaseIfEmpty(): Promise<{ seeded: boolean; message: string }> {
   try {
-    const { data: existingOrg } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('id', DEFAULT_ORG_ID)
-      .maybeSingle();
+    const orgSnap = await getDoc(doc(db, 'organizations', DEFAULT_ORG_ID));
 
-    if (!existingOrg) {
-      await supabase.from('organizations').insert({
+    if (!orgSnap.exists()) {
+      await setDoc(doc(db, 'organizations', DEFAULT_ORG_ID), {
         id: DEFAULT_ORG_ID,
         name: 'Oasis Enterprise',
         logo_url: null,
@@ -26,10 +23,11 @@ export async function seedDatabaseIfEmpty(): Promise<{ seeded: boolean; message:
           geofence_radius_default: 150,
         },
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       });
     }
 
-    return { seeded: true, message: 'Supabase organization verified.' };
+    return { seeded: true, message: 'Firebase organization verified.' };
   } catch (error) {
     console.error('Seed verification error:', error);
     return { seeded: false, message: 'Seed verification failed.' };

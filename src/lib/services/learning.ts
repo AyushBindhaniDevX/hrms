@@ -1,9 +1,21 @@
 /**
- * Learning & Development (L&D) Service (Supabase)
+ * Learning & Development (L&D) Service (Cloud Firestore)
  * Oasis HRMS Multi-Tenant Platform
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from 'firebase/firestore';
 import {
   TrainingCourse,
   CourseEnrollment,
@@ -57,48 +69,54 @@ const DEFAULT_COURSES: TrainingCourse[] = [
 ];
 
 export async function getCourses(organizationId?: string): Promise<TrainingCourse[]> {
-  let query = supabase
-    .from('courses')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const snap = await getDocs(collection(db, 'courses'));
+    const courses: TrainingCourse[] = [];
+    snap.forEach((d) => {
+      const c = { id: d.id, ...d.data() } as TrainingCourse;
+      if (!organizationId || !c.organization_id || c.organization_id === organizationId) {
+        courses.push(c);
+      }
+    });
 
-  if (organizationId) {
-    query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
-  }
-
-  const { data, error } = await query;
-
-  if (!error && data && data.length > 0) {
-    return data as TrainingCourse[];
+    if (courses.length > 0) {
+      return courses;
+    }
+  } catch (err) {
+    console.warn('Error fetching courses from Firestore:', err);
   }
 
   return DEFAULT_COURSES;
 }
 
 export async function getCourseById(courseId: string): Promise<TrainingCourse | null> {
-  const { data, error } = await supabase
-    .from('courses')
-    .select('*')
-    .eq('id', courseId)
-    .maybeSingle();
+  try {
+    const snap = await getDoc(doc(db, 'courses', courseId));
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as TrainingCourse;
+    }
+  } catch {}
 
-  if (error || !data) {
-    const fallback = DEFAULT_COURSES.find((c) => c.id === courseId);
-    return fallback || null;
-  }
-
-  return data as TrainingCourse;
+  const fallback = DEFAULT_COURSES.find((c) => c.id === courseId);
+  return fallback || null;
 }
 
 export async function getEnrollments(employeeId?: string): Promise<CourseEnrollment[]> {
-  let query = supabase.from('course_enrollments').select('*');
-  if (employeeId) {
-    query = query.eq('employee_id', employeeId);
-  }
+  try {
+    const snap = await getDocs(collection(db, 'course_enrollments'));
+    const enrollments: CourseEnrollment[] = [];
+    snap.forEach((d) => {
+      const e = { id: d.id, ...d.data() } as CourseEnrollment;
+      if (!employeeId || e.employee_id === employeeId) {
+        enrollments.push(e);
+      }
+    });
 
-  const { data, error } = await query;
-  if (!error && data && data.length > 0) {
-    return data as CourseEnrollment[];
+    if (enrollments.length > 0) {
+      return enrollments;
+    }
+  } catch (err) {
+    console.warn('Error fetching enrollments from Firestore:', err);
   }
 
   return [
@@ -114,22 +132,16 @@ export async function getEnrollments(employeeId?: string): Promise<CourseEnrollm
 }
 
 export async function createCourse(course: Omit<TrainingCourse, 'id' | 'created_at'>): Promise<TrainingCourse> {
+  const courseId = `course_${Date.now()}`;
   const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('courses')
-    .insert({
-      ...course,
-      created_at: now,
-    })
-    .select('*')
-    .single();
+  const newCourse: TrainingCourse = {
+    ...course,
+    id: courseId,
+    created_at: now,
+  };
 
-  if (error) {
-    console.error('Error creating course in Supabase:', error);
-    throw error;
-  }
-
-  return data as TrainingCourse;
+  await setDoc(doc(db, 'courses', courseId), newCourse);
+  return newCourse;
 }
 
 export async function addLessonToCourse(
@@ -162,14 +174,11 @@ export async function addLessonToCourse(
     });
   }
 
-  await supabase
-    .from('courses')
-    .update({
-      curriculum,
-      modules_count: curriculum.length,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', courseId);
+  await updateDoc(doc(db, 'courses', courseId), {
+    curriculum,
+    modules_count: curriculum.length,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export async function completeLesson(
@@ -177,11 +186,8 @@ export async function completeLesson(
   lessonId: string,
   totalLessonsInCourse: number
 ): Promise<{ newProgress: number; isCompleted: boolean }> {
-  const { data: enrData } = await supabase
-    .from('course_enrollments')
-    .select('*')
-    .eq('id', enrollmentId)
-    .maybeSingle();
+  const enrSnap = await getDoc(doc(db, 'course_enrollments', enrollmentId));
+  const enrData = enrSnap.exists() ? (enrSnap.data() as CourseEnrollment) : null;
 
   let completedIds: string[] = enrData?.completed_lesson_ids || [];
   if (!completedIds.includes(lessonId)) {
@@ -192,15 +198,16 @@ export async function completeLesson(
   const isCompleted = calculatedProgress >= 100;
   const certId = isCompleted ? `CERT-${Math.random().toString(36).substring(2, 8).toUpperCase()}` : null;
 
-  await supabase
-    .from('course_enrollments')
-    .update({
+  await setDoc(
+    doc(db, 'course_enrollments', enrollmentId),
+    {
       completed_lesson_ids: completedIds,
       progress_percent: calculatedProgress,
       is_completed: isCompleted,
       ...(isCompleted ? { completed_at: new Date().toISOString(), certificate_url: certId } : {}),
-    })
-    .eq('id', enrollmentId);
+    },
+    { merge: true }
+  );
 
   return { newProgress: calculatedProgress, isCompleted };
 }
@@ -209,12 +216,9 @@ export async function updateProgress(enrollmentId: string, progress: number): Pr
   const isCompleted = progress >= 100;
   const certId = isCompleted ? `CERT-${Math.random().toString(36).substring(2, 8).toUpperCase()}` : null;
 
-  await supabase
-    .from('course_enrollments')
-    .update({
-      progress_percent: progress,
-      is_completed: isCompleted,
-      ...(isCompleted ? { completed_at: new Date().toISOString(), certificate_url: certId } : {}),
-    })
-    .eq('id', enrollmentId);
+  await updateDoc(doc(db, 'course_enrollments', enrollmentId), {
+    progress_percent: progress,
+    is_completed: isCompleted,
+    ...(isCompleted ? { completed_at: new Date().toISOString(), certificate_url: certId } : {}),
+  });
 }

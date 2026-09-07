@@ -6,7 +6,8 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/States';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { formatDate, formatTime, formatMinutes } from '@/utils/format';
 import type { Attendance } from '@/types';
 
@@ -20,14 +21,25 @@ export default function AttendanceDetail() {
   useEffect(() => {
     (async () => {
       if (!id) return;
-      const { data } = await supabase
-        .from('attendance')
-        .select('*, workplace:workplaces(*)')
-        .eq('id', id)
-        .maybeSingle();
-
-      setRecord((data || null) as Attendance | null);
-      setLoading(false);
+      try {
+        const snap = await getDoc(doc(db, 'attendance', id));
+        if (snap.exists()) {
+          const data = { id: snap.id, ...snap.data() } as Attendance;
+          if (data.workplace_id) {
+            const wpSnap = await getDoc(doc(db, 'workplaces', data.workplace_id));
+            if (wpSnap.exists()) {
+              (data as any).workplace = { id: wpSnap.id, ...wpSnap.data() };
+            }
+          }
+          setRecord(data);
+        } else {
+          setRecord(null);
+        }
+      } catch (err) {
+        console.error('Failed to load attendance detail:', err);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [id]);
 

@@ -12,7 +12,7 @@ import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getDepartments, createEmployee, getEmployees, getWorkplaces } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import type { Department, Employee, WorkShift, Workplace } from '@/types';
-import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders } from 'lucide-react-native';
+import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders, Eye, EyeOff, KeyRound } from 'lucide-react-native';
 
 export default function CreateEmployeeScreen() {
   const colors = useTheme();
@@ -32,6 +32,8 @@ export default function CreateEmployeeScreen() {
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [empCode, setEmpCode] = useState('');
+  const [password, setPassword] = useState('Welcome@123');
+  const [showPassword, setShowPassword] = useState(false);
   const [deptId, setDeptId] = useState<string | null>(null);
   const [workplaceId, setWorkplaceId] = useState<string | null>(null);
   const [managerId, setManagerId] = useState<string | null>(null);
@@ -160,7 +162,7 @@ export default function CreateEmployeeScreen() {
       await createEmployee({
         full_name: fullName.trim(),
         email: fullEmail,
-        password: phone.trim(),
+        password: password.trim() || 'Welcome@123',
         phone: phone.trim(),
         organization_id: orgId,
         employee_code: empCode.trim(),
@@ -256,7 +258,38 @@ export default function CreateEmployeeScreen() {
             }
           />
 
-          <Input label="Phone Number (used as default password) *" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <Input label="Phone Number *" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+91 98765 43210" />
+
+          {/* ─── Login & Security Credentials ───────────────────────────── */}
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 8 }]}>LOGIN & SECURITY CREDENTIALS</Text>
+
+          <View style={[styles.credentialsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Input
+              label="Initial Temporary Password *"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              rightElement={
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeBtn}
+                  activeOpacity={0.7}
+                >
+                  {showPassword ? <EyeOff size={16} color="#64748B" /> : <Eye size={16} color="#64748B" />}
+                </TouchableOpacity>
+              }
+            />
+
+            <View style={[styles.policyNotice, { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }]}>
+              <ShieldCheck size={18} color="#006a61" style={{ marginTop: 2 }} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={styles.policyNoticeTitle}>Force Password Change Enforced</Text>
+                <Text style={styles.policyNoticeText}>
+                  Default temporary password: <Text style={{ fontWeight: '700' }}>{password || 'Welcome@123'}</Text>. The employee will be required to set their own secure password immediately upon logging in for the first time.
+                </Text>
+              </View>
+            </View>
+          </View>
           <Input label="Designation / Position" placeholder="e.g. Chief Medical Officer" value={designation} onChangeText={setDesignation} />
           <Input label="Monthly Base Salary (INR) *" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" placeholder="50000" />
 
@@ -524,6 +557,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   randomBtnText: { fontSize: 12, fontWeight: '700', color: '#0D7377' },
+
+  credentialsCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+    marginTop: 4,
+  },
+  eyeBtn: {
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderLeftWidth: 1,
+    borderLeftColor: '#CBD5E1',
+    alignSelf: 'stretch',
+  },
+  policyNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  policyNoticeTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#006a61',
+  },
+  policyNoticeText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#006a61',
+  },
 
   taxToggle: {
     flexDirection: 'row',

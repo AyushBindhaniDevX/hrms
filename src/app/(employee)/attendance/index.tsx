@@ -11,9 +11,11 @@ import {
   Platform,
   Image,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Badge } from '@/components/ui/Badge';
 import { LoadingState } from '@/components/ui/States';
@@ -49,6 +51,10 @@ import {
   Sparkles,
   ShieldCheck,
   MapPin,
+  CalendarClock,
+  Globe,
+  Building2,
+  Lock,
 } from 'lucide-react-native';
 import { MONTHS } from '@/constants/config';
 import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
@@ -59,6 +65,9 @@ import { DEFAULT_SUBEDGE_LOGO as SUBEDGE_LOGO } from '@/components/ui/SubedgeBra
 export default function AttendanceScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { isFeatureEnabled, organization, employee: tenantEmp, workplace: tenantWp } = useTenant();
+  const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id;
+  const isWfhEnabled = isFeatureEnabled('wfh');
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -73,6 +82,12 @@ export default function AttendanceScreen() {
   const [search, setSearch] = useState('');
   const [clockLoading, setClockLoading] = useState(false);
   const [clockError, setClockError] = useState('');
+
+  // Location & Geofencing
+  const [currentLoc, setCurrentLoc] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [isRemoteMode, setIsRemoteMode] = useState(false);
+  const [remoteReason, setRemoteReason] = useState('Work From Home');
 
   // Elapsed working seconds
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -90,7 +105,10 @@ export default function AttendanceScreen() {
   const loadData = useCallback(async () => {
     if (!profile) return;
     try {
-      const emp = await getEmployeeByProfileId(profile.id);
+      const emp = tenantEmp || (await getEmployeeByProfileId(profile.id, activeOrgId));
+      if (emp && !emp.workplace && tenantWp) {
+        emp.workplace = tenantWp;
+      }
       setEmployee(emp);
       if (emp) {
         const [history, today] = await Promise.all([
@@ -106,11 +124,37 @@ export default function AttendanceScreen() {
     } finally {
       setLoading(false);
     }
-  }, [profile]);
+  }, [profile, activeOrgId, tenantEmp, tenantWp]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Periodic and on-load GPS location fetch
+  useEffect(() => {
+    const fetchLoc = () => {
+      getCurrentLocation()
+        .then((loc) => {
+          setCurrentLoc(loc);
+          if (employee?.workplace?.latitude && employee?.workplace?.longitude) {
+            const dist = calculateDistance(
+              loc.latitude,
+              loc.longitude,
+              employee.workplace.latitude,
+              employee.workplace.longitude
+            );
+            setDistance(Math.round(dist));
+          }
+        })
+        .catch((e) => {
+          console.warn('Attendance location warning:', e);
+        });
+    };
+
+    fetchLoc();
+    const interval = setInterval(fetchLoc, 45000);
+    return () => clearInterval(interval);
+  }, [employee]);
 
   // Live timer for active shift
   useEffect(() => {
@@ -137,18 +181,61 @@ export default function AttendanceScreen() {
     setRefreshing(false);
   };
 
-  const handleInitiateClock = async (type: 'in' | 'out') => {
+  const geofenceRadius = employee?.workplace?.radius_meters || 200;
+  const isOutsideGeofence = Boolean(
+    distance !== null &&
+    employee?.workplace?.latitude &&
+    employee?.workplace?.longitude &&
+    distance > geofenceRadius
+  );
+
+  const handleInitiateClock = async (type: 'in' | 'out', remote: boolean = false) => {
     setClockError('');
+    if (remote && !isWfhEnabled) {
+      setClockError('Work From Home (WFH) remote clock-in is locked for your organization. You must clock in on-site.');
+      return;
+    }
     setClockLoading(true);
+    setIsRemoteMode(remote);
     try {
-      let loc = { latitude: 0, longitude: 0 };
+      let loc = currentLoc;
       try {
         loc = await getCurrentLocation();
+        setCurrentLoc(loc);
       } catch (locErr) {
-        console.warn('Location retrieval fallback:', locErr);
-        loc = { latitude: 20.2961, longitude: 85.8245 };
+        if (!remote && type === 'in') {
+          throw new Error('GPS location required. Please enable device location or use Remote Clock-In.');
+        }
       }
-      setPendingLoc(loc);
+
+      const activeLoc = loc || { latitude: 0, longitude: 0 };
+      setPendingLoc(activeLoc);
+
+      if (employee?.workplace?.latitude && employee?.workplace?.longitude && activeLoc.latitude && activeLoc.longitude) {
+        const dist = Math.round(
+          calculateDistance(
+            activeLoc.latitude,
+            activeLoc.longitude,
+            employee.workplace.latitude,
+            employee.workplace.longitude
+          )
+        );
+        setDistance(dist);
+
+        // If trying normal in-office clock-in while outside geofence, reject with clear error!
+        if (type === 'in' && !remote && dist > geofenceRadius) {
+          setClockError(
+            `You are outside your assigned workplace (${dist}m away from ${employee.workplace.name}). Office clock-in requires being within ${geofenceRadius}m. Please move closer or use "Remote Clock In".`
+          );
+          setClockLoading(false);
+          return;
+        }
+      } else if (type === 'in' && !remote && employee?.workplace?.latitude) {
+        setClockError('Unable to verify your office GPS location. Please turn on location services or use Remote Clock-In.');
+        setClockLoading(false);
+        return;
+      }
+
       setFaceModalType(type);
       setShowFaceModal(true);
     } catch (err: unknown) {
@@ -163,10 +250,14 @@ export default function AttendanceScreen() {
     setClockLoading(true);
     try {
       if (faceModalType === 'in') {
-        await clockIn(pendingLoc.latitude, pendingLoc.longitude, faceSnapshot, profile.id);
+        await clockIn(pendingLoc.latitude, pendingLoc.longitude, faceSnapshot, profile.id, {
+          isRemote: isRemoteMode,
+          remoteReason: isRemoteMode ? remoteReason : undefined,
+        });
       } else {
         await clockOut(pendingLoc.latitude, pendingLoc.longitude, faceSnapshot, profile.id);
       }
+      setShowFaceModal(false);
       await loadData();
     } catch (err: unknown) {
       setClockError(err instanceof Error ? err.message : 'Clocking request failed.');
@@ -273,11 +364,20 @@ export default function AttendanceScreen() {
             <View style={[mAttStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
               <View style={mAttStyles.heroTop}>
                 <View style={{ flex: 1 }}>
-                  <Text style={mAttStyles.heroTag}>TODAY'S SHIFT</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <Text style={mAttStyles.heroTag}>TODAY'S SHIFT</Text>
+                    {todayAttendance?.is_remote && (
+                      <View style={{ backgroundColor: 'rgba(2, 132, 199, 0.35)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ color: '#7DD3FC', fontSize: 10, fontWeight: '800' }}>REMOTE / WFH</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={mAttStyles.heroTitle}>
                     {isClockedIn
                       ? activeBreak
                         ? 'On Break'
+                        : todayAttendance?.is_remote
+                        ? 'Remote Shift Active'
                         : 'Shift Active'
                       : isClockedOut
                       ? 'Shift Completed'
@@ -319,17 +419,85 @@ export default function AttendanceScreen() {
               {/* Action Button Row */}
               <View style={mAttStyles.heroBtnRow}>
                 {!isClockedIn && !isClockedOut && (
-                  <TouchableOpacity
-                    style={[mAttStyles.punchBtn, { backgroundColor: '#FFFFFF' }]}
-                    onPress={() => handleInitiateClock('in')}
-                    disabled={clockLoading}
-                    activeOpacity={0.85}
-                  >
-                    <ScanFace size={18} color="#006a61" />
-                    <Text style={[mAttStyles.punchBtnText, { color: '#006a61' }]}>
-                      {clockLoading ? 'Verifying...' : 'Face ID Clock In'}
-                    </Text>
-                  </TouchableOpacity>
+                  <View style={{ width: '100%', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <TouchableOpacity
+                        style={[
+                          mAttStyles.punchBtn,
+                          {
+                            backgroundColor: isOutsideGeofence ? 'rgba(255,255,255,0.75)' : '#FFFFFF',
+                            flex: 1,
+                          },
+                        ]}
+                        onPress={() => handleInitiateClock('in', false)}
+                        disabled={clockLoading}
+                        activeOpacity={0.85}
+                      >
+                        <ScanFace size={16} color="#006a61" />
+                        <Text style={[mAttStyles.punchBtnText, { color: '#006a61', fontSize: 13 }]}>
+                          Office Clock In
+                        </Text>
+                      </TouchableOpacity>
+
+                      {isWfhEnabled ? (
+                        <TouchableOpacity
+                          style={[mAttStyles.punchBtn, { backgroundColor: 'rgba(255,255,255,0.18)', flex: 1 }]}
+                          onPress={() => handleInitiateClock('in', true)}
+                          disabled={clockLoading}
+                          activeOpacity={0.85}
+                        >
+                          <Globe size={16} color="#FFFFFF" />
+                          <Text style={[mAttStyles.punchBtnText, { color: '#FFFFFF', fontSize: 13 }]}>
+                            Remote Clock In
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[mAttStyles.punchBtn, { backgroundColor: 'rgba(255,255,255,0.08)', flex: 1 }]}
+                          onPress={() =>
+                            Alert.alert(
+                              'WFH Feature Locked',
+                              'Work From Home (WFH) remote clock-in is locked for your organization. Please clock in on-site.'
+                            )
+                          }
+                          activeOpacity={0.85}
+                        >
+                          <Lock size={14} color="#CBD5E1" />
+                          <Text style={[mAttStyles.punchBtnText, { color: '#CBD5E1', fontSize: 12 }]}>
+                            WFH Locked
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {/* Workplace Geofence Status notice */}
+                    {distance !== null && employee?.workplace?.latitude ? (
+                      <View style={mAttStyles.geofenceNotice}>
+                        {isOutsideGeofence ? (
+                          <>
+                            <AlertTriangle size={13} color="#FDE68A" />
+                            <Text style={mAttStyles.geofenceNoticeText}>
+                              Outside Office ({distance}m away • Limit {geofenceRadius}m). Clock in remotely if working from home.
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={13} color="#6EE7B7" />
+                            <Text style={[mAttStyles.geofenceNoticeText, { color: '#D1FAE5' }]}>
+                              Inside Office Geofence ({distance}m from {employee.workplace.name || 'Office'})
+                            </Text>
+                          </>
+                        )}
+                      </View>
+                    ) : null}
+
+                    {clockError ? (
+                      <View style={[mAttStyles.geofenceNotice, { backgroundColor: 'rgba(220, 38, 38, 0.45)' }]}>
+                        <AlertTriangle size={14} color="#FCA5A5" />
+                        <Text style={[mAttStyles.geofenceNoticeText, { color: '#FEE2E2' }]}>{clockError}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 )}
 
                 {isClockedIn && (
@@ -470,7 +638,7 @@ export default function AttendanceScreen() {
 
                     <View style={mAttStyles.cardRight}>
                       <Badge
-                        label={item.status.toUpperCase()}
+                        label={String(item.status || 'present').toUpperCase()}
                         variant={
                           item.status === 'present'
                             ? 'successLight'
@@ -479,12 +647,31 @@ export default function AttendanceScreen() {
                             : 'dangerLight'
                         }
                       />
-                      {item.face_verified && (
-                        <View style={mAttStyles.faceTag}>
-                          <ShieldCheck size={11} color="#006a61" />
-                          <Text style={mAttStyles.faceTagText}>Face ID</Text>
-                        </View>
-                      )}
+                      <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                        {item.is_remote && (
+                          <View style={mAttStyles.remoteTag}>
+                            <Globe size={10} color="#0284C7" />
+                            <Text style={mAttStyles.remoteTagText}>Remote</Text>
+                          </View>
+                        )}
+                        {item.face_verified && (
+                          <View style={mAttStyles.faceTag}>
+                            <ShieldCheck size={11} color="#006a61" />
+                            <Text style={mAttStyles.faceTagText}>Face ID</Text>
+                          </View>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setRegularizeDate(item.date);
+                          setShowRegularize(true);
+                        }}
+                        style={mAttStyles.itemRegularizeBtn}
+                        activeOpacity={0.7}
+                      >
+                        <CalendarClock size={11} color="#006a61" />
+                        <Text style={mAttStyles.itemRegularizeText}>Regularize</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </Animated.View>
@@ -500,8 +687,21 @@ export default function AttendanceScreen() {
           employeeName={profile?.full_name || 'Staff Member'}
           officeName={employee?.workplace?.name || 'Office Workplace'}
           isClockingIn={faceModalType === 'in'}
+          isRemote={isRemoteMode}
+          remoteReason={remoteReason}
           enrolledFaceUrl={employee?.profile?.avatar_url || null}
           profileId={profile?.id}
+        />
+
+        <RegularizationModal
+          visible={showRegularize}
+          onClose={() => {
+            setShowRegularize(false);
+            setRegularizeDate(null);
+          }}
+          employeeId={employee?.id || ''}
+          defaultDate={regularizeDate}
+          onSubmitted={loadData}
         />
         </View>
       </View>
@@ -528,30 +728,69 @@ export default function AttendanceScreen() {
               <Text style={styles.usernameText}>Biometric Logs & Shifts</Text>
             </View>
           </View>
-          {!isClockedIn && !isClockedOut ? (
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <TouchableOpacity
-              style={styles.headerActionBtn}
-              onPress={() => handleInitiateClock('in')}
-              disabled={clockLoading}
+              style={[styles.headerActionBtn, { backgroundColor: '#F1F5F9' }]}
+              onPress={() => {
+                setRegularizeDate(null);
+                setShowRegularize(true);
+              }}
             >
-              <ScanFace size={16} color="#FFF" />
-              <Text style={styles.headerActionBtnText}>Clock In</Text>
+              <CalendarClock size={15} color="#0F172A" />
+              <Text style={[styles.headerActionBtnText, { color: '#0F172A' }]}>Regularize</Text>
             </TouchableOpacity>
-          ) : isClockedIn ? (
-            <TouchableOpacity
-              style={[styles.headerActionBtn, { backgroundColor: '#DC2626' }]}
-              onPress={() => handleInitiateClock('out')}
-              disabled={clockLoading}
-            >
-              <LogOutIcon size={16} color="#FFF" />
-              <Text style={styles.headerActionBtnText}>Clock Out</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.headerDonePill}>
-              <CheckCircle2 size={15} color="#006a61" />
-              <Text style={styles.headerDoneText}>Shift Done</Text>
-            </View>
-          )}
+
+            {!isClockedIn && !isClockedOut ? (
+              <>
+                <TouchableOpacity
+                  style={[styles.headerActionBtn, { backgroundColor: isOutsideGeofence ? '#64748B' : '#006a61' }]}
+                  onPress={() => handleInitiateClock('in', false)}
+                  disabled={clockLoading}
+                >
+                  <ScanFace size={16} color="#FFF" />
+                  <Text style={styles.headerActionBtnText}>Office Clock In</Text>
+                </TouchableOpacity>
+
+                {isWfhEnabled ? (
+                  <TouchableOpacity
+                    style={[styles.headerActionBtn, { backgroundColor: '#0284C7' }]}
+                    onPress={() => handleInitiateClock('in', true)}
+                    disabled={clockLoading}
+                  >
+                    <Globe size={16} color="#FFF" />
+                    <Text style={styles.headerActionBtnText}>Remote Clock In</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.headerActionBtn, { backgroundColor: '#E2E8F0' }]}
+                    onPress={() =>
+                      Alert.alert(
+                        'WFH Feature Locked',
+                        'Work From Home (WFH) remote clock-in is locked for your organization.'
+                      )
+                    }
+                  >
+                    <Lock size={14} color="#64748B" />
+                    <Text style={[styles.headerActionBtnText, { color: '#64748B' }]}>WFH Locked</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : isClockedIn ? (
+              <TouchableOpacity
+                style={[styles.headerActionBtn, { backgroundColor: '#DC2626' }]}
+                onPress={() => handleInitiateClock('out')}
+                disabled={clockLoading}
+              >
+                <LogOutIcon size={16} color="#FFF" />
+                <Text style={styles.headerActionBtnText}>Clock Out</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.headerDonePill}>
+                <CheckCircle2 size={15} color="#006a61" />
+                <Text style={styles.headerDoneText}>Shift Done</Text>
+              </View>
+            )}
+          </View>
         </View>
       </Animated.View>
 
@@ -617,16 +856,49 @@ export default function AttendanceScreen() {
           {/* Action Buttons */}
           <View style={styles.heroActionsRow}>
             {!isClockedIn && !isClockedOut && (
-              <TouchableOpacity
-                style={[styles.clockActionBtn, { backgroundColor: '#006a61' }]}
-                onPress={() => handleInitiateClock('in')}
-                disabled={clockLoading}
-              >
-                <ScanFace size={18} color="#FFF" />
-                <Text style={styles.clockActionBtnText}>
-                  {clockLoading ? 'Preparing...' : 'Face ID / Biometric Clock In'}
-                </Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 12, flex: 1 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.clockActionBtn,
+                    { backgroundColor: isOutsideGeofence ? '#475569' : '#006a61', flex: 1 },
+                  ]}
+                  onPress={() => handleInitiateClock('in', false)}
+                  disabled={clockLoading}
+                >
+                  <ScanFace size={18} color="#FFF" />
+                  <Text style={styles.clockActionBtnText}>
+                    {clockLoading ? 'Preparing...' : 'Face ID Office Clock In'}
+                  </Text>
+                </TouchableOpacity>
+
+                {isWfhEnabled ? (
+                  <TouchableOpacity
+                    style={[styles.clockActionBtn, { backgroundColor: '#0284C7', flex: 1 }]}
+                    onPress={() => handleInitiateClock('in', true)}
+                    disabled={clockLoading}
+                  >
+                    <Globe size={18} color="#FFF" />
+                    <Text style={styles.clockActionBtnText}>
+                      Remote Clock In (WFH)
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.clockActionBtn, { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1', flex: 1 }]}
+                    onPress={() =>
+                      Alert.alert(
+                        'WFH Feature Locked',
+                        'Work From Home (WFH) remote clock-in is locked for your organization.'
+                      )
+                    }
+                  >
+                    <Lock size={16} color="#94A3B8" />
+                    <Text style={[styles.clockActionBtnText, { color: '#94A3B8' }]}>
+                      Remote (WFH Locked)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
 
             {isClockedIn && (
@@ -730,7 +1002,7 @@ export default function AttendanceScreen() {
 
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
                   <Badge
-                    label={item.status.toUpperCase()}
+                    label={String(item.status || 'present').toUpperCase()}
                     variant={
                       item.status === 'present'
                         ? 'successLight'
@@ -739,12 +1011,38 @@ export default function AttendanceScreen() {
                         : 'dangerLight'
                     }
                   />
-                  {item.face_verified && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <ShieldCheck size={11} color="#006a61" />
-                      <Text style={{ fontSize: 10, color: '#006a61', fontWeight: '700' }}>Face Verified</Text>
-                    </View>
-                  )}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {item.is_remote && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#E0F2FE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                        <Globe size={11} color="#0284C7" />
+                        <Text style={{ fontSize: 10, color: '#0284C7', fontWeight: '700' }}>Remote</Text>
+                      </View>
+                    )}
+                    {item.face_verified && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#EDF8F6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                        <ShieldCheck size={11} color="#006a61" />
+                        <Text style={{ fontSize: 10, color: '#006a61', fontWeight: '700' }}>Face Verified</Text>
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setRegularizeDate(item.date);
+                      setShowRegularize(true);
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      backgroundColor: '#F1F5F9',
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <CalendarClock size={11} color="#475569" />
+                    <Text style={{ fontSize: 10, color: '#475569', fontWeight: '700' }}>Regularize</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             ))}
@@ -760,8 +1058,22 @@ export default function AttendanceScreen() {
         employeeName={profile?.full_name || 'Staff Member'}
         officeName={employee?.workplace?.name || 'Office Workplace'}
         isClockingIn={faceModalType === 'in'}
+        isRemote={isRemoteMode}
+        remoteReason={remoteReason}
         enrolledFaceUrl={employee?.profile?.avatar_url || null}
         profileId={profile?.id}
+      />
+
+      {/* ── Attendance Regularization Modal ─────────────────────────────── */}
+      <RegularizationModal
+        visible={showRegularize}
+        onClose={() => {
+          setShowRegularize(false);
+          setRegularizeDate(null);
+        }}
+        employeeId={employee?.id || ''}
+        defaultDate={regularizeDate}
+        onSubmitted={loadData}
       />
     </ScrollView>
   );
@@ -1158,6 +1470,22 @@ const mAttStyles = StyleSheet.create({
   filterPillTextActive: {
     color: '#FFFFFF',
   },
+  regularizeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#EDF8F6',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#CCECE7',
+  },
+  regularizeBtnText: {
+    color: '#006a61',
+    fontWeight: '700',
+    fontSize: 13,
+  },
 
   // History Cards
   historyCard: {
@@ -1208,6 +1536,51 @@ const mAttStyles = StyleSheet.create({
   cardRight: {
     alignItems: 'flex-end',
     gap: 6,
+  },
+  itemRegularizeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EDF8F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  itemRegularizeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#006a61',
+  },
+  remoteTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  remoteTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  geofenceNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  geofenceNoticeText: {
+    color: '#FEF3C7',
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
   },
   faceTag: {
     flexDirection: 'row',

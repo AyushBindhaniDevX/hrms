@@ -1,4 +1,16 @@
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
 import { calculateDistance } from './location';
 import type { Attendance, GeofenceResponse, Employee, Workplace, Profile } from '@/types';
 
@@ -10,67 +22,76 @@ async function getEmployeeData(profileId?: string): Promise<{ emp: Employee; wp:
   let targetProfileId = profileId;
 
   if (!targetProfileId) {
-    const { data: anyProf } = await supabase
-      .from('profiles')
-      .select('id')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    targetProfileId = anyProf?.id;
+    const profQ = query(collection(db, 'profiles'), limit(1));
+    const profSnap = await getDocs(profQ);
+    if (!profSnap.empty) {
+      targetProfileId = profSnap.docs[0].id;
+    }
   }
 
   if (!targetProfileId) return null;
 
   // 1. Get employee record
-  let { data: emp } = await supabase
-    .from('employees')
-    .select('*, workplace:workplaces(*)')
-    .eq('profile_id', targetProfileId)
-    .maybeSingle();
+  const empQ = query(collection(db, 'employees'), where('profile_id', '==', targetProfileId), limit(1));
+  const empSnap = await getDocs(empQ);
+
+  let emp: Employee | null = null;
+  if (!empSnap.empty) {
+    const docSnap = empSnap.docs[0];
+    emp = { id: docSnap.id, ...docSnap.data() } as Employee;
+  }
 
   // If employee record is missing for this profile, auto-create one
   if (!emp) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', targetProfileId)
-      .maybeSingle();
-
-    if (profile) {
-      const newEmpPayload: Record<string, any> = {
+    const profSnap = await getDoc(doc(db, 'profiles', targetProfileId));
+    if (profSnap.exists()) {
+      const profile = profSnap.data() as Profile;
+      const empId = `emp-${Date.now()}`;
+      const newEmpPayload: Employee = {
+        id: empId,
         profile_id: targetProfileId,
-        organization_id: profile.organization_id,
+        organization_id: profile.organization_id || '00000000-0000-0000-0000-000000000001',
         employee_code: `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
         designation: profile.role === 'admin' ? 'Administrator' : profile.role === 'hr' ? 'HR Manager' : 'Staff',
+        department_id: null,
+        workplace_id: null,
+        joining_date: new Date().toISOString().split('T')[0],
+        basic_salary: 35000,
         employment_status: 'active',
         onboarding_completed: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
-      const { data: createdEmp } = await supabase
-        .from('employees')
-        .insert(newEmpPayload)
-        .select('*, workplace:workplaces(*)')
-        .maybeSingle();
-
-      if (createdEmp) {
-        emp = createdEmp;
-      }
+      await setDoc(doc(db, 'employees', empId), newEmpPayload);
+      emp = newEmpPayload;
     }
   }
 
   if (!emp) return null;
 
-  const wp = emp.workplace ? (emp.workplace as Workplace) : null;
-  return { emp: emp as Employee, wp };
+  let wp: Workplace | null = null;
+  if (emp.workplace_id) {
+    const wpSnap = await getDoc(doc(db, 'workplaces', emp.workplace_id));
+    if (wpSnap.exists()) {
+      wp = { id: wpSnap.id, ...wpSnap.data() } as Workplace;
+    }
+  }
+
+  return { emp, wp };
+}
+
+export interface ClockInOptions {
+  isRemote?: boolean;
+  remoteReason?: string;
 }
 
 export async function clockIn(
   latitude: number,
   longitude: number,
   faceSnapshot?: string,
-  profileId?: string
+  profileId?: string,
+  options?: ClockInOptions
 ): Promise<GeofenceResponse> {
   const data = await getEmployeeData(profileId);
   if (!data) {
@@ -78,12 +99,31 @@ export async function clockIn(
   }
 
   const { emp, wp } = data;
+  const isRemote = Boolean(options?.isRemote);
+  const remoteReason = options?.remoteReason || (isRemote ? 'Work From Home' : null);
+
   let distance: number | undefined = undefined;
   let isWithinGeofence = true;
 
-  if (wp && wp.latitude && wp.longitude && latitude && longitude) {
-    distance = calculateDistance(latitude, longitude, wp.latitude, wp.longitude);
-    isWithinGeofence = distance <= (wp.radius_meters || 200);
+  if (wp && wp.latitude && wp.longitude) {
+    if (latitude && longitude && (latitude !== 0 || longitude !== 0)) {
+      distance = calculateDistance(latitude, longitude, wp.latitude, wp.longitude);
+      const allowedRadius = wp.radius_meters || 200;
+      isWithinGeofence = distance <= allowedRadius;
+    } else {
+      isWithinGeofence = false;
+    }
+
+    if (!isRemote) {
+      if (!latitude || !longitude || (latitude === 0 && longitude === 0)) {
+        throw new Error('Valid GPS location is required to clock in for your workplace. Please enable location permissions or use Remote Clock-In.');
+      }
+      if (!isWithinGeofence) {
+        const dStr = distance !== undefined ? `${Math.round(distance)}m` : 'unknown distance';
+        const radStr = `${wp.radius_meters || 200}m`;
+        throw new Error(`Outside workplace geofence (${dStr} away from ${wp.name || 'office'}). You must be within ${radStr} to clock in, or switch to Remote Clock-In.`);
+      }
+    }
   }
 
   const today = getLocalYMD();
@@ -91,46 +131,43 @@ export async function clockIn(
   const attendanceId = `${emp.id}_${today}`;
 
   // Check existing attendance for today
-  const { data: existing } = await supabase
-    .from('attendance')
-    .select('*')
-    .eq('id', attendanceId)
-    .maybeSingle();
-
-  if (existing && existing.clock_in && !existing.clock_out) {
-    return {
-      success: true,
-      message: 'Already clocked in today',
-      distance_meters: distance,
-      face_verified: true,
-    };
+  const existingSnap = await getDoc(doc(db, 'attendance', attendanceId));
+  if (existingSnap.exists()) {
+    const existing = existingSnap.data() as Attendance;
+    if (existing.clock_in && !existing.clock_out) {
+      return {
+        success: true,
+        message: 'Already clocked in today',
+        distance_meters: distance,
+        face_verified: true,
+      };
+    }
   }
 
-  const payload = {
+  const payload: Attendance = {
     id: attendanceId,
     employee_id: emp.id,
     workplace_id: wp?.id || null,
     date: today,
     clock_in: now,
-    clock_in_latitude: latitude,
-    clock_in_longitude: longitude,
+    clock_in_latitude: latitude || null,
+    clock_in_longitude: longitude || null,
     clock_in_verified: true,
+    clock_out: null,
+    clock_out_latitude: null,
+    clock_out_longitude: null,
+    clock_out_verified: false,
     face_verified: true,
     face_snapshot_url: faceSnapshot || 'captured_biometric_face',
     working_minutes: 0,
     status: 'present',
+    is_remote: isRemote,
+    remote_reason: remoteReason,
     created_at: now,
     updated_at: now,
   };
 
-  const { error: upsertErr } = await supabase
-    .from('attendance')
-    .upsert(payload);
-
-  if (upsertErr) {
-    console.error('Attendance clock in error:', upsertErr);
-    throw new Error(upsertErr.message);
-  }
+  await setDoc(doc(db, 'attendance', attendanceId), payload);
 
   // Audit log biometric attendance clock-in
   try {
@@ -141,10 +178,12 @@ export async function clockIn(
       action: 'ATTENDANCE_CLOCK_IN',
       entityType: 'attendance',
       entityId: attendanceId,
-      description: `Employee clocked in with biometric verification (${isWithinGeofence ? 'On-site' : 'Remote'})`,
+      description: `Employee clocked in with biometric verification (${isRemote ? 'Remote / WFH' : isWithinGeofence ? 'On-site' : 'Out-of-fence'})`,
       metadata: {
         distance_meters: distance,
         isWithinGeofence,
+        isRemote,
+        remoteReason,
         face_verified: true,
       },
     });
@@ -152,10 +191,12 @@ export async function clockIn(
 
   return {
     success: true,
-    message: wp
+    message: isRemote
+      ? 'Clocked in successfully (Remote Shift)'
+      : wp
       ? isWithinGeofence
         ? `Clocked in at ${wp.name}`
-        : `Clocked in (Remote Verification: ${Math.round(distance || 0)}m from ${wp.name})`
+        : `Clocked in (${Math.round(distance || 0)}m from ${wp.name})`
       : 'Clocked in successfully',
     distance_meters: distance,
     face_verified: true,
@@ -176,13 +217,13 @@ export async function clockOut(
   const now = new Date().toISOString();
   const attendanceId = `${emp.id}_${today}`;
 
-  const { data: attDoc, error: fetchErr } = await supabase
-    .from('attendance')
-    .select('*')
-    .eq('id', attendanceId)
-    .maybeSingle();
+  const attSnap = await getDoc(doc(db, 'attendance', attendanceId));
+  if (!attSnap.exists()) {
+    return { success: false, message: 'No clock-in found for today. Please clock in first.' };
+  }
 
-  if (!attDoc || !attDoc.clock_in) {
+  const attDoc = attSnap.data() as Attendance;
+  if (!attDoc.clock_in) {
     return { success: false, message: 'No clock-in found for today. Please clock in first.' };
   }
   if (attDoc.clock_out) {
@@ -190,11 +231,8 @@ export async function clockOut(
   }
 
   let distance_meters: number | undefined;
-  let isWithinGeofence = true;
   if (wp && wp.latitude && wp.longitude && latitude && longitude) {
-    const dist = calculateDistance(latitude, longitude, wp.latitude, wp.longitude);
-    distance_meters = dist;
-    isWithinGeofence = dist <= (wp.radius_meters || 200);
+    distance_meters = calculateDistance(latitude, longitude, wp.latitude, wp.longitude);
   }
 
   const clockInTime = new Date(attDoc.clock_in);
@@ -204,7 +242,6 @@ export async function clockOut(
   const breaks: { start: string; end: string | null; reason: string }[] = attDoc.breaks || [];
   let breakMinutes = 0;
 
-  // Auto-close open break
   const updatedBreaks = [...breaks];
   if (updatedBreaks.length > 0 && !updatedBreaks[updatedBreaks.length - 1].end) {
     updatedBreaks[updatedBreaks.length - 1].end = now;
@@ -218,24 +255,16 @@ export async function clockOut(
 
   const workingMinutes = Math.max(0, totalMinutes - breakMinutes);
 
-  const { error: updateErr } = await supabase
-    .from('attendance')
-    .update({
-      clock_out: now,
-      clock_out_latitude: latitude,
-      clock_out_longitude: longitude,
-      clock_out_verified: true,
-      face_verified: true,
-      working_minutes: workingMinutes,
-      breaks: updatedBreaks,
-      updated_at: now,
-    })
-    .eq('id', attendanceId);
-
-  if (updateErr) {
-    console.error('Attendance clock out error:', updateErr);
-    throw new Error(updateErr.message);
-  }
+  await updateDoc(doc(db, 'attendance', attendanceId), {
+    clock_out: now,
+    clock_out_latitude: latitude,
+    clock_out_longitude: longitude,
+    clock_out_verified: true,
+    face_verified: true,
+    working_minutes: workingMinutes,
+    breaks: updatedBreaks,
+    updated_at: now,
+  });
 
   return {
     success: true,
@@ -247,47 +276,39 @@ export async function clockOut(
 }
 
 export async function startBreak(attendanceId: string, reason: string): Promise<boolean> {
-  const { data: attDoc } = await supabase
-    .from('attendance')
-    .select('*')
-    .eq('id', attendanceId)
-    .maybeSingle();
+  const attSnap = await getDoc(doc(db, 'attendance', attendanceId));
+  if (!attSnap.exists()) return false;
 
-  if (!attDoc) return false;
-
+  const attDoc = attSnap.data() as Attendance;
   const breaks = attDoc.breaks || [];
   if (breaks.length > 0 && !breaks[breaks.length - 1].end) {
-    return false; // Already on break
+    return false;
   }
 
   breaks.push({ start: new Date().toISOString(), end: null, reason });
-  await supabase
-    .from('attendance')
-    .update({ breaks, updated_at: new Date().toISOString() })
-    .eq('id', attendanceId);
+  await updateDoc(doc(db, 'attendance', attendanceId), {
+    breaks,
+    updated_at: new Date().toISOString(),
+  });
 
   return true;
 }
 
 export async function endBreak(attendanceId: string): Promise<boolean> {
-  const { data: attDoc } = await supabase
-    .from('attendance')
-    .select('*')
-    .eq('id', attendanceId)
-    .maybeSingle();
+  const attSnap = await getDoc(doc(db, 'attendance', attendanceId));
+  if (!attSnap.exists()) return false;
 
-  if (!attDoc) return false;
-
+  const attDoc = attSnap.data() as Attendance;
   const breaks = attDoc.breaks || [];
   if (breaks.length === 0 || breaks[breaks.length - 1].end) {
-    return false; // Not on break
+    return false;
   }
 
   breaks[breaks.length - 1].end = new Date().toISOString();
-  await supabase
-    .from('attendance')
-    .update({ breaks, updated_at: new Date().toISOString() })
-    .eq('id', attendanceId);
+  await updateDoc(doc(db, 'attendance', attendanceId), {
+    breaks,
+    updated_at: new Date().toISOString(),
+  });
 
   return true;
 }
@@ -296,53 +317,53 @@ export async function getTodayAttendance(employeeId: string): Promise<Attendance
   const today = getLocalYMD();
   const attendanceId = `${employeeId}_${today}`;
 
-  const { data, error } = await supabase
-    .from('attendance')
-    .select('*, workplace:workplaces(*)')
-    .eq('id', attendanceId)
-    .maybeSingle();
+  const attSnap = await getDoc(doc(db, 'attendance', attendanceId));
+  if (!attSnap.exists()) return null;
 
-  if (error || !data) return null;
-  return data as Attendance;
+  const att = { id: attSnap.id, ...attSnap.data() } as Attendance;
+  if (att.workplace_id) {
+    const wpSnap = await getDoc(doc(db, 'workplaces', att.workplace_id));
+    if (wpSnap.exists()) {
+      att.workplace = { id: wpSnap.id, ...wpSnap.data() } as Workplace;
+    }
+  }
+
+  return att;
 }
 
 export async function getAttendanceHistory(
   employeeId: string,
   limitDays = 30,
-  offset = 0
+  _offset = 0
 ): Promise<Attendance[]> {
   let calculatedLimit = limitDays;
 
   try {
-    const { data: empData } = await supabase
-      .from('employees')
-      .select('joining_date')
-      .eq('id', employeeId)
-      .maybeSingle();
-
-    if (empData?.joining_date) {
-      const joinDate = new Date(empData.joining_date);
-      const today = new Date();
-      if (joinDate > today) {
-        calculatedLimit = 0;
-      } else {
-        const diffTime = today.getTime() - joinDate.getTime();
-        calculatedLimit = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    const empSnap = await getDoc(doc(db, 'employees', employeeId));
+    if (empSnap.exists()) {
+      const empData = empSnap.data() as Employee;
+      if (empData.joining_date) {
+        const joinDate = new Date(empData.joining_date);
+        const today = new Date();
+        if (joinDate > today) {
+          calculatedLimit = 0;
+        } else {
+          const diffTime = today.getTime() - joinDate.getTime();
+          calculatedLimit = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        }
       }
     }
   } catch (e) {
     console.error('Error fetching employee joining date', e);
   }
 
-  const { data, error } = await supabase
-    .from('attendance')
-    .select('*, workplace:workplaces(*)')
-    .eq('employee_id', employeeId)
-    .order('date', { ascending: false })
-    .limit(calculatedLimit > 0 ? calculatedLimit : 1);
-
-  if (error || !data) return [];
-  const rawRecords = data as Attendance[];
+  const q = query(
+    collection(db, 'attendance'),
+    where('employee_id', '==', employeeId)
+  );
+  const snap = await getDocs(q);
+  const rawRecords: Attendance[] = [];
+  snap.forEach((d) => rawRecords.push({ id: d.id, ...d.data() } as Attendance));
 
   const results: Attendance[] = [];
   const shiftStartTime = '09:30';
@@ -396,34 +417,49 @@ export async function getAttendanceHistory(
 }
 
 export async function getOrgAttendance(date: string, organizationId?: string): Promise<Attendance[]> {
-  let query = supabase
-    .from('attendance')
-    .select('*, employee:employees!inner(*, profile:profiles!inner(*)), workplace:workplaces(*)')
-    .eq('date', date);
+  try {
+    const [attSnap, empsSnap, profSnap, wpSnap] = await Promise.all([
+      getDocs(query(collection(db, 'attendance'), where('date', '==', date))),
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'profiles')),
+      getDocs(collection(db, 'workplaces')),
+    ]);
 
-  if (organizationId) {
-    query = query.eq('employee.profile.organization_id', organizationId);
+    const profMap = new Map<string, Profile>();
+    profSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
+
+    const wpMap = new Map<string, Workplace>();
+    wpSnap.forEach((d) => wpMap.set(d.id, { id: d.id, ...d.data() } as Workplace));
+
+    const empMap = new Map<string, Employee>();
+    empsSnap.forEach((d) => {
+      const emp = { id: d.id, ...d.data() } as Employee;
+      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+      empMap.set(d.id, emp);
+    });
+
+    const records: Attendance[] = [];
+    attSnap.forEach((d) => {
+      const att = { id: d.id, ...d.data() } as Attendance;
+      const emp = att.employee_id ? empMap.get(att.employee_id) : undefined;
+      if (organizationId && emp?.profile?.organization_id && emp.profile.organization_id !== organizationId) {
+        return;
+      }
+      att.employee = emp;
+      att.workplace = att.workplace_id ? wpMap.get(att.workplace_id) : undefined;
+      records.push(att);
+    });
+
+    records.sort((a, b) => (a.clock_in || '').localeCompare(b.clock_in || ''));
+    return records;
+  } catch (err) {
+    console.error('getOrgAttendance error:', err);
+    return [];
   }
-
-  const { data, error } = await query.order('clock_in', { ascending: true });
-
-  if (error || !data) return [];
-  return data as Attendance[];
 }
 
 export async function getAttendanceStats(date: string, organizationId?: string) {
-  let query = supabase
-    .from('attendance')
-    .select('status, employee:employees!inner(profile:profiles!inner(organization_id))')
-    .eq('date', date);
-
-  if (organizationId) {
-    query = query.eq('employee.profile.organization_id', organizationId);
-  }
-
-  const { data } = await query;
-
-  const records = data || [];
+  const records = await getOrgAttendance(date, organizationId);
   return {
     present: records.filter((r) => r.status === 'present').length,
     late: records.filter((r) => r.status === 'late').length,

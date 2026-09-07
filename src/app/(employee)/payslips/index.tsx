@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Badge } from '@/components/ui/Badge';
 import { LoadingState } from '@/components/ui/States';
@@ -26,12 +27,9 @@ import type { Payslip, Employee, Organization } from '@/types';
 import {
   Download,
   FileText,
-  Landmark,
   Printer,
   ChevronRight,
   TrendingUp,
-  CreditCard,
-  ShieldCheck,
   Banknote,
   ArrowUpRight,
   ArrowDownRight,
@@ -50,11 +48,14 @@ import Animated, {
 export default function PayslipsScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization: tenantOrg, employee: tenantEmp } = useTenant();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
+
+  const activeOrgId = tenantOrg?.id || tenantEmp?.organization_id || profile?.organization_id;
 
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -66,15 +67,15 @@ export default function PayslipsScreen() {
     (async () => {
       if (!profile) return;
       try {
-        const emp = await getEmployeeByProfileId(profile.id);
+        const emp = tenantEmp || (await getEmployeeByProfileId(profile.id, activeOrgId));
         setEmployee(emp);
         if (emp) {
           const [data, orgData] = await Promise.all([
             getPayslips(emp.id),
-            profile.organization_id ? getOrganization(profile.organization_id) : null,
+            activeOrgId ? getOrganization(activeOrgId) : null,
           ]);
           setPayslips(data);
-          setOrganization(orgData);
+          setOrganization(orgData || tenantOrg);
         }
       } catch (err) {
         console.error('Error loading payslips:', err);
@@ -82,7 +83,7 @@ export default function PayslipsScreen() {
         setLoading(false);
       }
     })();
-  }, [profile]);
+  }, [profile, activeOrgId, tenantEmp, tenantOrg]);
 
   const handleDownload = async (ps: Payslip) => {
     setDownloadingId(ps.id);
@@ -316,27 +317,6 @@ export default function PayslipsScreen() {
           )}
         </Animated.View>
 
-        {/* ── Bank Account Card ─────────────────────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(300).duration(350).springify()}>
-          <View style={[mStyles.card, { marginHorizontal: 16 }]}>
-            <View style={mStyles.cardHead}>
-              <View style={[mStyles.cardIconWrap, { backgroundColor: '#E6F4F4' }]}>
-                <Landmark size={16} color="#0D7377" />
-              </View>
-              <Text style={mStyles.cardTitle}>Disbursement Account</Text>
-              <Badge label="ACTIVE" variant="successLight" />
-            </View>
-            <View style={mStyles.bankRow}>
-              <CreditCard size={16} color="#0D7377" />
-              <Text style={mStyles.bankText}>Direct Bank Transfer  ···· ···· ···· 4567</Text>
-            </View>
-            <View style={mStyles.bankRow}>
-              <ShieldCheck size={14} color="#10B981" />
-              <Text style={[mStyles.bankText, { color: '#10B981' }]}>256-Bit Encrypted Payroll Channel</Text>
-            </View>
-          </View>
-        </Animated.View>
-
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -540,46 +520,6 @@ export default function PayslipsScreen() {
                   ))}
                 </View>
               )}
-            </View>
-          </Animated.View>
-        </View>
-
-        {/* Side Column */}
-        <View style={styles.sideCol}>
-          {/* Direct Deposit Card */}
-          <Animated.View entering={FadeInDown.delay(240).duration(350).springify()}>
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-              <View style={styles.cardHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={[styles.iconWrap, { backgroundColor: '#edf8f6' }]}>
-                    <Landmark size={18} color="#006a61" />
-                  </View>
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>Disbursement</Text>
-                </View>
-                <Badge label="ACTIVE" variant="successLight" />
-              </View>
-
-              <View style={[styles.bankBox, { backgroundColor: '#f8faff', borderColor: '#e2e8f0' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <CreditCard size={16} color="#006a61" />
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
-                    Direct Bank Transfer
-                  </Text>
-                </View>
-                <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                  Account: ************4567
-                </Text>
-                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                  IFSC / Routing: HDFC0001289
-                </Text>
-              </View>
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 }}>
-                <ShieldCheck size={14} color="#006a61" />
-                <Text style={{ fontSize: 12, color: '#006a61', fontWeight: '600' }}>
-                  256-Bit Encrypted Payroll Channel
-                </Text>
-              </View>
             </View>
           </Animated.View>
         </View>
@@ -813,8 +753,7 @@ const styles = StyleSheet.create({
   heroDownloadText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
 
   dashboardGrid: { flexDirection: 'row', gap: 28, alignItems: 'flex-start' },
-  mainCol: { flex: 3, gap: 24 },
-  sideCol: { flex: 2, gap: 20 },
+  mainCol: { flex: 1, gap: 24 },
 
   card: { borderRadius: 16, borderWidth: 1, padding: 20, gap: 16 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },

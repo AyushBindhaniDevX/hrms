@@ -1,8 +1,28 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
-import { supabase } from '@/lib/supabase';
+import { auth, db } from '@/lib/firebase';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  updateProfile as firebaseUpdateProfile,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  limit,
+} from 'firebase/firestore';
 import { logUserLogin, logUserLogout } from '@/lib/services/userActivity';
-import type { Profile, UserRole, Organization } from '@/types';
+import type { Profile, UserRole } from '@/types';
 
 export interface AppUser {
   id: string;
@@ -25,6 +45,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string, fallbackOrgId?: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signUp: (email: string, password: string, fullName: string, role?: string, orgId?: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -38,85 +59,120 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const loggedInUserIdRef = useRef<string | null>(null);
 
-  // Helper: Fetch or auto-create profile row from Supabase Auth User
-  const syncProfileForAuthUser = useCallback(async (authUser: any): Promise<Profile | null> => {
-    if (!authUser?.id) return null;
+  // Helper: Fetch or auto-create profile document from Firebase Auth User
+  const syncProfileForAuthUser = useCallback(async (authUser: FirebaseUser): Promise<Profile | null> => {
+    if (!authUser?.uid) return null;
 
     try {
-      // 1. Check profile by auth ID
-      const { data: profById, error: idErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle();
+      // 1. Check profile by auth UID in 'profiles' collection
+      const profRef = doc(db, 'profiles', authUser.uid);
+      const profSnap = await getDoc(profRef);
 
-      if (profById) {
-        return profById as Profile;
+      if (profSnap.exists()) {
+        const data = profSnap.data() as Profile;
+        const cleanEmail = authUser.email?.toLowerCase().trim() || '';
+        if (
+          (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail.includes('shantimemorialhospital.com')) &&
+          data.organization_id !== 'shanti-memorial-hospital'
+        ) {
+          const updated = {
+            ...data,
+            organization_id: 'shanti-memorial-hospital',
+            role: (cleanEmail === 'ayushbindhani001@gmail.com' ? 'admin' : data.role) as UserRole,
+            full_name: cleanEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : data.full_name,
+            updated_at: new Date().toISOString(),
+          };
+          await setDoc(profRef, updated, { merge: true });
+          return { ...updated, id: profSnap.id };
+        }
+        return { ...data, id: profSnap.id } as Profile;
       }
 
-      // 2. Check profile by email (if pre-created by admin)
+      // 2. Check profile by email (if pre-created during seeding or by admin)
       if (authUser.email) {
-        const { data: profByEmail } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', authUser.email.toLowerCase().trim())
-          .maybeSingle();
+        const cleanEmail = authUser.email.toLowerCase().trim();
+        const emailQuery = query(
+          collection(db, 'profiles'),
+          where('email', '==', cleanEmail),
+          limit(1)
+        );
+        const emailSnap = await getDocs(emailQuery);
 
-        if (profByEmail) {
-          // If profile existed under a different ID, update it to the auth user ID
-          if (profByEmail.id !== authUser.id) {
-            const oldId = profByEmail.id;
-            const updatedProf = { ...profByEmail, id: authUser.id, updated_at: new Date().toISOString() };
-            await supabase.from('profiles').upsert(updatedProf);
-            await supabase.from('employees').update({ profile_id: authUser.id }).eq('profile_id', oldId);
-            await supabase.from('departments').update({ manager_id: authUser.id }).eq('manager_id', oldId);
-            await supabase.from('notifications').update({ profile_id: authUser.id }).eq('profile_id', oldId);
-            await supabase.from('audit_logs').update({ user_id: authUser.id }).eq('user_id', oldId);
-            await supabase.from('profiles').delete().eq('id', oldId);
+        if (!emailSnap.empty) {
+          const existingDoc = emailSnap.docs[0];
+          let existingData = existingDoc.data() as Profile;
+
+          if (
+            (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail.includes('shantimemorialhospital.com')) &&
+            existingData.organization_id !== 'shanti-memorial-hospital'
+          ) {
+            existingData = {
+              ...existingData,
+              organization_id: 'shanti-memorial-hospital',
+              role: (cleanEmail === 'ayushbindhani001@gmail.com' ? 'admin' : existingData.role) as UserRole,
+              full_name: cleanEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : existingData.full_name,
+            };
+          }
+
+          if (existingDoc.id !== authUser.uid) {
+            const updatedProf = {
+              ...existingData,
+              id: authUser.uid,
+              updated_at: new Date().toISOString(),
+            };
+            // Set under new auth UID and delete the legacy placeholder ID
+            await setDoc(doc(db, 'profiles', authUser.uid), updatedProf);
+            try {
+              // Update references in employees collection
+              const empQ = query(collection(db, 'employees'), where('profile_id', '==', existingDoc.id));
+              const empSnap = await getDocs(empQ);
+              for (const empDoc of empSnap.docs) {
+                await updateDoc(doc(db, 'employees', empDoc.id), { profile_id: authUser.uid });
+              }
+              await deleteDoc(doc(db, 'profiles', existingDoc.id));
+            } catch (refErr) {
+              console.warn('Reference migration warning:', refErr);
+            }
             return updatedProf as Profile;
           }
-          return profByEmail as Profile;
+          return { ...existingData, id: existingDoc.id } as Profile;
         }
       }
 
-      // 3. Auto-provision profile from auth user metadata
-      const { data: defaultOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-      const orgId = authUser.user_metadata?.organization_id || defaultOrg?.id || '00000000-0000-0000-0000-000000000001';
-      const role = (authUser.user_metadata?.role as UserRole) || 'employee';
-      const fullName = authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'HRMS User';
+      // 3. Auto-provision profile from auth user
+      const userEmail = authUser.email || '';
+      const isSMHUser = userEmail.toLowerCase().includes('shantimemorialhospital.com') || userEmail === 'ayushbindhani001@gmail.com';
+      const defaultOrgId = isSMHUser ? 'shanti-memorial-hospital' : '00000000-0000-0000-0000-000000000001';
+      const isAdminEmail = userEmail.includes('admin') || userEmail === 'ayushbindhani001@gmail.com';
+      const isHrEmail = userEmail.includes('hr') || userEmail.includes('nurse');
+      const role: UserRole = isAdminEmail ? 'admin' : isHrEmail ? 'hr' : 'employee';
+      const fullName = authUser.displayName || (userEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : userEmail.split('@')[0]) || 'HRMS User';
       const now = new Date().toISOString();
 
-      const newProfPayload: Record<string, any> = {
-        id: authUser.id,
-        email: authUser.email,
+      const newProfPayload: Profile = {
+        id: authUser.uid,
+        email: userEmail,
         full_name: fullName,
+        phone: authUser.phoneNumber || null,
+        avatar_url: authUser.photoURL || null,
         role,
-        organization_id: orgId,
+        organization_id: defaultOrgId,
         is_active: true,
         created_at: now,
         updated_at: now,
       };
 
-      const { data: insertedProf, error: insErr } = await supabase
-        .from('profiles')
-        .upsert(newProfPayload)
-        .select('*')
-        .maybeSingle();
-
-      if (!insErr && insertedProf) {
-        return insertedProf as Profile;
-      }
+      await setDoc(doc(db, 'profiles', authUser.uid), newProfPayload);
+      return newProfPayload;
     } catch (err) {
-      console.error('Error syncing profile for auth user:', err);
+      console.error('syncProfileForAuthUser error:', err);
+      return null;
     }
-
-    return null;
   }, []);
 
   const refreshProfile = useCallback(async () => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const authUser = sessionData.session?.user;
+      const authUser = auth.currentUser;
       if (!authUser) {
         setUser(null);
         setProfile(null);
@@ -129,165 +185,219 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [syncProfileForAuthUser]);
 
-  // Listen to Supabase Auth state changes & initialize session
+  // Listen to Firebase Auth state changes & initialize session
   useEffect(() => {
     let isMounted = true;
 
-    async function initAuth() {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.warn('Get session error:', error.message);
-        }
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (!isMounted) return;
 
-        if (session?.user && isMounted) {
-          const authUser = session.user;
-          const appUser: AppUser = {
-            id: authUser.id,
-            email: authUser.email,
-            fullName: authUser.user_metadata?.full_name || authUser.email?.split('@')[0],
-            imageUrl: authUser.user_metadata?.avatar_url || null,
-            user_metadata: authUser.user_metadata,
-          };
+      if (fbUser) {
+        const prof = await syncProfileForAuthUser(fbUser);
+        const appUser: AppUser = {
+          id: fbUser.uid,
+          email: fbUser.email || undefined,
+          fullName: prof?.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+          imageUrl: prof?.avatar_url || fbUser.photoURL || null,
+          user_metadata: {
+            full_name: prof?.full_name || fbUser.displayName || undefined,
+            role: prof?.role || 'employee',
+            organization_id: prof?.organization_id,
+          },
+        };
 
-          const prof = await syncProfileForAuthUser(authUser);
-          if (isMounted) {
-            setProfile(prof);
-            setUser(appUser);
+        if (isMounted) {
+          setProfile(prof);
+          setUser(appUser);
 
-            if (prof && loggedInUserIdRef.current !== prof.id) {
-              loggedInUserIdRef.current = prof.id;
-              try {
-                let ipAddress: string | null = null;
-                if (Platform.OS === 'web') {
-                  const ipRes = await fetch('https://api.ipify.org?format=json');
-                  const ipData = await ipRes.json();
-                  ipAddress = ipData?.ip || null;
-                }
-                await logUserLogin(prof, ipAddress, session.access_token?.slice(-16));
-              } catch (ipErr) {}
-            }
+          if (prof && loggedInUserIdRef.current !== prof.id) {
+            loggedInUserIdRef.current = prof.id;
+            try {
+              let ipAddress: string | null = null;
+              if (Platform.OS === 'web') {
+                const ipRes = await fetch('https://api.ipify.org?format=json');
+                const ipData = await ipRes.json();
+                ipAddress = ipData?.ip || null;
+              }
+              await logUserLogin(prof, ipAddress, fbUser.uid.slice(-16));
+            } catch (ipErr) {}
           }
-        } else if (isMounted) {
+        }
+      } else {
+        if (isMounted) {
           setUser(null);
           setProfile(null);
           loggedInUserIdRef.current = null;
         }
-      } catch (err) {
-        console.error('Supabase Auth init error:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
       }
-    }
 
-    initAuth();
-
-    // Subscribe to auth state changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        if (session?.user) {
-          const authUser = session.user;
-          const appUser: AppUser = {
-            id: authUser.id,
-            email: authUser.email,
-            fullName: authUser.user_metadata?.full_name || authUser.email?.split('@')[0],
-            imageUrl: authUser.user_metadata?.avatar_url || null,
-            user_metadata: authUser.user_metadata,
-          };
-
-          const prof = await syncProfileForAuthUser(authUser);
-          if (isMounted) {
-            setProfile(prof);
-            setUser(appUser);
-          }
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setProfile(null);
-        loggedInUserIdRef.current = null;
+      if (isMounted) {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     return () => {
       isMounted = false;
-      authListener?.subscription?.unsubscribe();
+      unsubscribe();
     };
   }, [syncProfileForAuthUser]);
 
-  // Sign In via Supabase Auth
+  // Sign In via Firebase Auth
   const handleSignIn = useCallback(
     async (email: string, password: string, _fallbackOrgId?: string) => {
       const cleanEmail = email.trim().toLowerCase();
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: password,
-        });
+        const credential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+        const fbUser = credential.user;
 
-        if (error) {
-          throw new Error(error.message || 'Invalid email or password');
-        }
-
-        if (data?.user) {
+        if (fbUser) {
+          const prof = await syncProfileForAuthUser(fbUser);
           const appUser: AppUser = {
-            id: data.user.id,
-            email: data.user.email,
-            fullName: data.user.user_metadata?.full_name || data.user.email?.split('@')[0],
-            imageUrl: data.user.user_metadata?.avatar_url || null,
-            user_metadata: data.user.user_metadata,
+            id: fbUser.uid,
+            email: fbUser.email || undefined,
+            fullName: prof?.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+            imageUrl: prof?.avatar_url || fbUser.photoURL || null,
+            user_metadata: {
+              full_name: prof?.full_name,
+              role: prof?.role,
+              organization_id: prof?.organization_id,
+            },
           };
-          const prof = await syncProfileForAuthUser(data.user);
           setProfile(prof);
           setUser(appUser);
         }
       } catch (err: any) {
-        if (err.message === 'Network request failed' || err?.toString?.().includes('Network request failed')) {
-          throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+        let msg = err.message || 'Invalid email or password';
+        if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+          msg = 'Invalid email or password. Please verify your credentials.';
+        } else if (err.code === 'auth/too-many-requests') {
+          msg = 'Access to this account has been temporarily disabled due to many failed login attempts. You can reset your password or try again later.';
+        } else if (err.message === 'Network request failed' || err?.toString?.().includes('Network request failed')) {
+          msg = 'Unable to connect to Firebase. Please check your internet connection.';
         }
-        throw err;
+        throw new Error(msg);
       }
     },
     [syncProfileForAuthUser]
   );
 
-  // Sign Up via Supabase Auth
+  // Sign In with Google via Firebase Auth
+  const handleSignInWithGoogle = useCallback(async () => {
+    try {
+      if (Platform.OS === 'web') {
+        const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        const credential = await signInWithPopup(auth, provider);
+        const fbUser = credential.user;
+
+        if (fbUser) {
+          const prof = await syncProfileForAuthUser(fbUser);
+          const appUser: AppUser = {
+            id: fbUser.uid,
+            email: fbUser.email || undefined,
+            fullName: prof?.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+            imageUrl: prof?.avatar_url || fbUser.photoURL || null,
+            user_metadata: {
+              full_name: prof?.full_name || fbUser.displayName || undefined,
+              role: prof?.role || 'employee',
+              organization_id: prof?.organization_id,
+            },
+          };
+          setProfile(prof);
+          setUser(appUser);
+        }
+      } else {
+        // Mobile / Expo: Use WebBrowser session or prompt
+        try {
+          const WebBrowser = await import('expo-web-browser');
+          WebBrowser.maybeCompleteAuthSession();
+        } catch {}
+
+        throw new Error('Google Sign-In on mobile requires native Google OAuth setup. Please sign in with your email & password or sign in on the web.');
+      }
+    } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user') {
+        throw new Error('Sign-in cancelled. You closed the Google sign-in window.');
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        return;
+      } else if (err.code === 'auth/popup-blocked') {
+        throw new Error('Google Sign-In popup was blocked by your browser. Please allow popups for this site.');
+      } else if (
+        err.code === 'auth/operation-not-allowed' ||
+        err.code === 'auth/configuration-not-found' ||
+        err?.message?.includes?.('CONFIGURATION_NOT_FOUND')
+      ) {
+        throw new Error('Google provider is not enabled yet in Firebase Console. Go to Firebase Console > Authentication > Sign-in method > Google and toggle Enable.');
+      } else if (err.code === 'auth/unauthorized-domain' || err?.message?.includes?.('unauthorized domain')) {
+        throw new Error('This domain is not authorized in Firebase Console. Add your localhost / IP to Authentication > Settings > Authorized domains.');
+      }
+      throw new Error(err.message || 'Failed to sign in with Google.');
+    }
+  }, [syncProfileForAuthUser]);
+
+  // Sign Up via Firebase Auth
   const handleSignUp = useCallback(
     async (email: string, password: string, fullName: string, role: string = 'employee', orgId?: string) => {
       const cleanEmail = email.trim().toLowerCase();
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: password,
-        options: {
-          data: {
+      try {
+        const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        const fbUser = credential.user;
+
+        if (fbUser) {
+          await firebaseUpdateProfile(fbUser, { displayName: fullName });
+          const defaultOrgId = orgId || '00000000-0000-0000-0000-000000000001';
+          const now = new Date().toISOString();
+
+          const newProfPayload: Profile = {
+            id: fbUser.uid,
+            email: cleanEmail,
             full_name: fullName,
-            role: role,
-            organization_id: orgId,
-          },
-        },
-      });
+            phone: null,
+            avatar_url: null,
+            role: role as UserRole,
+            organization_id: defaultOrgId,
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+          };
 
-      if (error) {
-        throw new Error(error.message || 'Failed to create account');
-      }
+          await setDoc(doc(db, 'profiles', fbUser.uid), newProfPayload);
+          setProfile(newProfPayload);
 
-      if (data?.user) {
-        const prof = await syncProfileForAuthUser(data.user);
-        setProfile(prof);
+          const appUser: AppUser = {
+            id: fbUser.uid,
+            email: cleanEmail,
+            fullName: fullName,
+            imageUrl: null,
+            user_metadata: {
+              full_name: fullName,
+              role: role,
+              organization_id: defaultOrgId,
+            },
+          };
+          setUser(appUser);
+        }
+      } catch (err: any) {
+        let msg = err.message || 'Failed to create account';
+        if (err.code === 'auth/email-already-in-use') {
+          msg = 'An account with this email address already exists.';
+        } else if (err.code === 'auth/weak-password') {
+          msg = 'Password is too weak. Please use at least 6 characters.';
+        }
+        throw new Error(msg);
       }
     },
-    [syncProfileForAuthUser]
+    []
   );
 
-  // Sign Out via Supabase Auth
+  // Sign Out via Firebase Auth
   const handleSignOut = useCallback(async () => {
     try {
       if (profile) {
         await logUserLogout(profile);
       }
-      await supabase.auth.signOut();
+      await firebaseSignOut(auth);
       setUser(null);
       setProfile(null);
       loggedInUserIdRef.current = null;
@@ -307,6 +417,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         signIn: handleSignIn,
+        signInWithGoogle: handleSignInWithGoogle,
         signUp: handleSignUp,
         signOut: handleSignOut,
         refreshProfile,

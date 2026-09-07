@@ -1,4 +1,4 @@
-import { HR_NAV, ADMIN_NAV } from '@/constants/navigation';
+import { HR_NAV, ADMIN_NAV, EMPLOYEE_NAV, getNavForRole } from '@/constants/navigation';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -53,7 +53,11 @@ import {
 } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
-export default function HolidaysCalendarScreen() {
+interface HolidaysCalendarScreenProps {
+  wrapInSidebar?: boolean;
+}
+
+export default function HolidaysCalendarScreen({ wrapInSidebar = true }: HolidaysCalendarScreenProps = {}) {
   const colors = useTheme();
   const { profile } = useAuth();
   const { organization: tenantOrg } = useTenant();
@@ -248,16 +252,15 @@ export default function HolidaysCalendarScreen() {
 
   if (loading) return <LoadingState />;
 
-  const navItems = profile?.role === 'admin' ? ADMIN_NAV : HR_NAV;
+  const navItems = getNavForRole(profile?.role);
 
-  return (
-    <SidebarLayout items={navItems}>
-      <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        showsVerticalScrollIndicator={false}
-      >
+  const scrollContent = (
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      showsVerticalScrollIndicator={false}
+    >
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(300).springify()} style={styles.headerRow}>
           <View>
@@ -614,6 +617,15 @@ export default function HolidaysCalendarScreen() {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+  );
+
+  if (!wrapInSidebar) {
+    return scrollContent;
+  }
+
+  return (
+    <SidebarLayout items={navItems}>
+      {scrollContent}
     </SidebarLayout>
   );
 }

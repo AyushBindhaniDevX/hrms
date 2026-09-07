@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
-import { supabase } from '@/lib/supabase';
 import type { Organization } from '@/types';
 
 export function useTenantBranding() {

@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { Select } from '@/components/ui/Select';
 import { DatePicker } from '@/components/ui/DatePicker';
@@ -52,9 +53,9 @@ function getLeaveIcon(name: string) {
     return <Coffee size={ICON_SIZE} color={ICON_COLOR} />;
   if (n.includes('maternity') || n.includes('paternity') || n.includes('parental'))
     return <Heart size={ICON_SIZE} color={ICON_COLOR} />;
-  if (n.includes('compensat') || n.includes('comp off'))
+  if (n.includes('compensat') || n.includes('comp off') || n.includes('on-call'))
     return <Clock size={ICON_SIZE} color={ICON_COLOR} />;
-  if (n.includes('emergency'))
+  if (n.includes('emergency') || n.includes('cme') || n.includes('academic'))
     return <Umbrella size={ICON_SIZE} color={ICON_COLOR} />;
   if (n.includes('unpaid') || n.includes('lwp'))
     return <Sunset size={ICON_SIZE} color={ICON_COLOR} />;
@@ -67,9 +68,12 @@ const stripEmoji = (str: string) =>
 export default function ApplyLeaveScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
+  const { organization, employee: tenantEmp } = useTenant();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+
+  const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id;
 
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [employeeId, setEmployeeId] = useState('');
@@ -93,19 +97,20 @@ export default function ApplyLeaveScreen() {
   useEffect(() => {
     (async () => {
       if (!profile) return;
-      const orgId = profile.organization_id;
+      const orgId = activeOrgId;
       const [types, emp] = await Promise.all([
         getLeaveTypes(orgId),
-        getEmployeeByProfileId(profile.id),
+        getEmployeeByProfileId(profile.id, orgId),
       ]);
       setLeaveTypes(types);
-      if (types.length > 0 && !leaveTypeId) {
-        setLeaveTypeId(types[0].id);
+      if (types.length > 0) {
+        setLeaveTypeId((prev) => (prev && types.some((t) => t.id === prev) ? prev : types[0].id));
       }
-      if (emp) setEmployeeId(emp.id);
+      const effectiveEmp = tenantEmp || emp;
+      if (effectiveEmp) setEmployeeId(effectiveEmp.id);
       setLoading(false);
     })();
-  }, [profile]);
+  }, [profile, activeOrgId, tenantEmp]);
 
   useEffect(() => {
     if (startDate && endDate && startDate <= endDate) {
@@ -150,7 +155,7 @@ export default function ApplyLeaveScreen() {
     try {
       let resolvedEmpId = employeeId;
       if (!resolvedEmpId && profile?.id) {
-        const emp = await getEmployeeByProfileId(profile.id);
+        const emp = await getEmployeeByProfileId(profile.id, activeOrgId);
         if (emp?.id) {
           resolvedEmpId = emp.id;
           setEmployeeId(emp.id);
@@ -165,6 +170,7 @@ export default function ApplyLeaveScreen() {
         days,
         is_half_day: isHalfDay,
         reason: reason.trim(),
+        organization_id: activeOrgId,
       });
       setSubmitted(true);
       setTimeout(() => {

@@ -118,7 +118,7 @@ export default function HRExpensesScreen() {
                   style={[styles.filterChip, active && styles.filterChipActive]}
                 >
                   <Text style={[styles.filterText, active && styles.filterTextActive]}>
-                    {status.toUpperCase()}
+                    {String(status || '').toUpperCase()}
                   </Text>
                 </TouchableOpacity>
               );
@@ -144,7 +144,7 @@ export default function HRExpensesScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text style={styles.claimTitle}>{item.title}</Text>
                       <View style={styles.catBadge}>
-                        <Text style={styles.catBadgeText}>{item.category.toUpperCase()}</Text>
+                        <Text style={styles.catBadgeText}>{String(item.category || '').toUpperCase()}</Text>
                       </View>
                     </View>
                     <Text style={styles.claimDesc}>{item.description}</Text>
@@ -187,7 +187,7 @@ export default function HRExpensesScreen() {
                             item.status === 'approved' ? { color: '#059669' } : { color: '#DC2626' },
                           ]}
                         >
-                          {item.status.toUpperCase()}
+                          {String(item.status || '').toUpperCase()}
                         </Text>
                       </View>
                     )}

@@ -1,5 +1,4 @@
 import { Platform } from 'react-native';
-import { supabase } from '@/lib/supabase';
 import { trackUserActivity } from '@/lib/services/userActivity';
 
 export interface FaceDescriptor {

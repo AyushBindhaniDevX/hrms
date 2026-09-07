@@ -72,6 +72,7 @@ export default function HRLeaveWorkflowScreen() {
 
   // View Mode: 'board' (Kanban / Workflow) | 'list' | 'types' (Leave Policies)
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'types'>('board');
+  const [mobileStatusTab, setMobileStatusTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [search, setSearch] = useState('');
 
   // Drag and Drop state (Web)
@@ -301,21 +302,28 @@ export default function HRLeaveWorkflowScreen() {
       >
         {/* Header Bar */}
         <Animated.View entering={FadeInDown.duration(350).springify()}>
-          <View style={[styles.heroBar, { backgroundColor: '#0b1c30' }]}>
-            <View style={{ flex: 1 }}>
+          <View
+            style={[
+              styles.heroBar,
+              { backgroundColor: '#0b1c30' },
+              !isDesktop && styles.heroBarMobile,
+            ]}
+          >
+            <View style={{ flex: isDesktop ? 1 : undefined, width: isDesktop ? undefined : '100%' }}>
               <Text style={styles.heroSubHeader}>DECISION PIPELINE & APPROVALS</Text>
-              <Text style={styles.heroTitle}>Leave Request Workflow</Text>
+              <Text style={[styles.heroTitle, !isDesktop && { fontSize: 20 }]}>Leave Request Workflow</Text>
               <Text style={styles.heroSub}>
                 {pendingList.length} application{pendingList.length !== 1 ? 's' : ''} awaiting review
               </Text>
             </View>
 
             {/* View Mode Toggle */}
-            <View style={styles.viewToggleWrap}>
+            <View style={[styles.viewToggleWrap, !isDesktop && styles.viewToggleWrapMobile]}>
               <TouchableOpacity
                 onPress={() => setViewMode('board')}
                 style={[
                   styles.toggleBtn,
+                  !isDesktop && styles.toggleBtnMobile,
                   viewMode === 'board' && { backgroundColor: '#006a61' },
                 ]}
               >
@@ -326,6 +334,7 @@ export default function HRLeaveWorkflowScreen() {
                 onPress={() => setViewMode('list')}
                 style={[
                   styles.toggleBtn,
+                  !isDesktop && styles.toggleBtnMobile,
                   viewMode === 'list' && { backgroundColor: '#006a61' },
                 ]}
               >
@@ -336,6 +345,7 @@ export default function HRLeaveWorkflowScreen() {
                 onPress={() => setViewMode('types')}
                 style={[
                   styles.toggleBtn,
+                  !isDesktop && styles.toggleBtnMobile,
                   viewMode === 'types' && { backgroundColor: '#006a61' },
                 ]}
               >
@@ -347,7 +357,13 @@ export default function HRLeaveWorkflowScreen() {
         </Animated.View>
 
         {/* Search & Statistics Bar */}
-        <View style={[styles.controlsBar, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+        <View
+          style={[
+            styles.controlsBar,
+            { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
+            !isDesktop && styles.controlsBarMobile,
+          ]}
+        >
           <View style={[styles.searchBox, { borderColor: '#e2e8f0' }]}>
             <Search size={16} color={colors.textSecondary} />
             <TextInput
@@ -359,50 +375,445 @@ export default function HRLeaveWorkflowScreen() {
             />
           </View>
 
-          <View style={styles.countsRow}>
-            <View style={[styles.countBadge, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
-              <Text style={[styles.countVal, { color: '#b45309' }]}>{pendingList.length}</Text>
-              <Text style={[styles.countLabel, { color: '#b45309' }]}>Pending</Text>
+          {isDesktop && (
+            <View style={styles.countsRow}>
+              <View style={[styles.countBadge, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
+                <Text style={[styles.countVal, { color: '#b45309' }]}>{pendingList.length}</Text>
+                <Text style={[styles.countLabel, { color: '#b45309' }]}>Pending</Text>
+              </View>
+              <View style={[styles.countBadge, { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }]}>
+                <Text style={[styles.countVal, { color: '#006a61' }]}>{approvedList.length}</Text>
+                <Text style={[styles.countLabel, { color: '#006a61' }]}>Approved</Text>
+              </View>
+              <View style={[styles.countBadge, { backgroundColor: '#fff5f5', borderColor: '#ffdad6' }]}>
+                <Text style={[styles.countVal, { color: '#ba1a1a' }]}>{rejectedList.length}</Text>
+                <Text style={[styles.countLabel, { color: '#ba1a1a' }]}>Rejected</Text>
+              </View>
             </View>
-            <View style={[styles.countBadge, { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }]}>
-              <Text style={[styles.countVal, { color: '#006a61' }]}>{approvedList.length}</Text>
-              <Text style={[styles.countLabel, { color: '#006a61' }]}>Approved</Text>
-            </View>
-            <View style={[styles.countBadge, { backgroundColor: '#fff5f5', borderColor: '#ffdad6' }]}>
-              <Text style={[styles.countVal, { color: '#ba1a1a' }]}>{rejectedList.length}</Text>
-              <Text style={[styles.countLabel, { color: '#ba1a1a' }]}>Rejected</Text>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* ── KANBAN PIPELINE BOARD VIEW ────────────────────────────────────── */}
         {viewMode === 'board' ? (
-          <View style={isDesktop ? styles.boardGridDesktop : styles.boardGridMobile}>
-            {/* Column 1: Pending Review */}
-            <View style={[styles.kanbanCol, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-              <View style={[styles.colHead, { borderBottomColor: '#f1f5f9' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={[styles.statusDot, { backgroundColor: '#d97706' }]} />
-                  <Text style={[styles.colTitle, { color: colors.text }]}>Pending Review</Text>
-                </View>
-                <View style={[styles.colPill, { backgroundColor: '#fef3c7' }]}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#b45309' }}>
-                    {pendingList.length}
-                  </Text>
-                </View>
-              </View>
-
-              <ScrollView style={styles.colScroll} showsVerticalScrollIndicator={false}>
-                {pendingList.length === 0 ? (
-                  <View style={styles.colEmpty}>
-                    <CheckCircle2 size={24} color="#006a61" />
-                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 6 }}>
-                      All caught up! No pending requests.
+          isDesktop ? (
+            <View style={styles.boardGridDesktop}>
+              {/* Column 1: Pending Review */}
+              <View style={[styles.kanbanCol, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+                <View style={[styles.colHead, { borderBottomColor: '#f1f5f9' }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={[styles.statusDot, { backgroundColor: '#d97706' }]} />
+                    <Text style={[styles.colTitle, { color: colors.text }]}>Pending Review</Text>
+                  </View>
+                  <View style={[styles.colPill, { backgroundColor: '#fef3c7' }]}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#b45309' }}>
+                      {pendingList.length}
                     </Text>
                   </View>
-                ) : (
-                  <View style={{ gap: 12 }}>
-                    {pendingList.map((req) => {
+                </View>
+
+                <ScrollView style={styles.colScroll} showsVerticalScrollIndicator={false}>
+                  {pendingList.length === 0 ? (
+                    <View style={styles.colEmpty}>
+                      <CheckCircle2 size={24} color="#006a61" />
+                      <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 6 }}>
+                        All caught up! No pending requests.
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ gap: 12 }}>
+                      {pendingList.map((req) => {
+                        const emp = req.employee as any;
+                        const empName = emp?.profile?.full_name || 'Staff Member';
+                        const empCode = emp?.employee_code || emp?.id || 'EMP';
+                        const deptName = emp?.department?.name;
+
+                        return (
+                          <View
+                            key={req.id}
+                            // HTML5 Drag Support on Web
+                            {...(Platform.OS === 'web'
+                              ? ({
+                                  draggable: true,
+                                  onDragStart: (e: any) => handleDragStart(e, req.id),
+                                  style: [
+                                    styles.cardItem,
+                                    { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
+                                    draggedId === req.id && { opacity: 0.4 },
+                                  ],
+                                } as any)
+                              : {
+                                  style: [
+                                    styles.cardItem,
+                                    { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
+                                  ],
+                                })}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                              <Avatar name={empName} url={emp?.profile?.avatar_url} size={40} />
+                              <View style={{ flex: 1, gap: 2 }}>
+                                <Text style={[styles.cardEmpName, { color: colors.text }]} numberOfLines={1}>
+                                  {empName}
+                                </Text>
+
+                                {/* Employee ID & Department Meta Badges */}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <View style={[styles.idChip, { backgroundColor: '#f1f5f9' }]}>
+                                    <Text style={styles.idChipText}>{empCode}</Text>
+                                  </View>
+                                  {deptName && (
+                                    <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
+                                      <Building2 size={10} color="#006a61" />
+                                      <Text style={styles.deptChipText} numberOfLines={1}>
+                                        {deptName}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                            </View>
+
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                              <Text style={[styles.cardType, { color: colors.primary }]}>
+                                {stripEmoji(req.leave_type?.name || 'Leave')} · {req.days}d
+                              </Text>
+                              {emp?.designation && (
+                                <Text style={{ fontSize: 11, color: colors.textSecondary }} numberOfLines={1}>
+                                  {emp.designation}
+                                </Text>
+                              )}
+                            </View>
+
+                            <View style={[styles.dateChip, { backgroundColor: '#f8faff' }]}>
+                              <Calendar size={12} color={colors.textSecondary} />
+                              <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                                {formatDate(req.start_date)} → {formatDate(req.end_date)}
+                              </Text>
+                            </View>
+
+                            {req.reason && (
+                              <Text style={[styles.cardReason, { color: colors.textSecondary }]} numberOfLines={2}>
+                                "{req.reason}"
+                              </Text>
+                            )}
+
+                            {/* Quick Action Buttons */}
+                            <View style={styles.cardActions}>
+                              <TouchableOpacity
+                                style={[styles.btnApprove, { backgroundColor: '#006a61' }]}
+                                onPress={() => handleAction(req.id, 'approve')}
+                                disabled={processingId === req.id}
+                              >
+                                <CheckCircle2 size={13} color="#FFF" />
+                                <Text style={styles.btnActionText}>Approve</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.btnReject, { backgroundColor: '#ba1a1a' }]}
+                                onPress={() => handleAction(req.id, 'reject')}
+                                disabled={processingId === req.id}
+                              >
+                                <XCircle size={13} color="#FFF" />
+                                <Text style={styles.btnActionText}>Reject</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+
+              {/* Column 2: Approved */}
+              <View
+                style={[
+                  styles.kanbanCol,
+                  { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
+                  dropTargetColumn === 'approved' && {
+                    borderColor: '#006a61',
+                    borderWidth: 2,
+                    backgroundColor: '#f0fdf9',
+                  },
+                ]}
+                {...(Platform.OS === 'web'
+                  ? ({
+                      onDragOver: (e: any) => handleDragOver(e, 'approved'),
+                      onDragLeave: handleDragLeave,
+                      onDrop: (e: any) => handleDrop(e, 'approved'),
+                    } as any)
+                  : {})}
+              >
+                <View style={[styles.colHead, { borderBottomColor: '#f1f5f9' }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={[styles.statusDot, { backgroundColor: '#006a61' }]} />
+                    <Text style={[styles.colTitle, { color: colors.text }]}>Approved</Text>
+                  </View>
+                  <View style={[styles.colPill, { backgroundColor: '#edf8f6' }]}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#006a61' }}>
+                      {approvedList.length}
+                    </Text>
+                  </View>
+                </View>
+
+                <ScrollView style={styles.colScroll} showsVerticalScrollIndicator={false}>
+                  {approvedList.length === 0 ? (
+                    <View style={styles.colEmpty}>
+                      <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                        No approved requests
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ gap: 12 }}>
+                      {approvedList.map((req) => {
+                        const emp = req.employee as any;
+                        const empName = emp?.profile?.full_name || 'Staff Member';
+                        const empCode = emp?.employee_code || emp?.id || 'EMP';
+                        const deptName = emp?.department?.name;
+
+                        return (
+                          <View key={req.id} style={[styles.cardItem, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                              <Avatar name={empName} url={emp?.profile?.avatar_url} size={36} />
+                              <View style={{ flex: 1, gap: 2 }}>
+                                <Text style={[styles.cardEmpName, { color: colors.text }]} numberOfLines={1}>
+                                  {empName}
+                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <View style={[styles.idChip, { backgroundColor: '#f1f5f9' }]}>
+                                    <Text style={styles.idChipText}>{empCode}</Text>
+                                  </View>
+                                  {deptName && (
+                                    <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
+                                      <Building2 size={10} color="#006a61" />
+                                      <Text style={styles.deptChipText} numberOfLines={1}>
+                                        {deptName}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                              <Badge label="APPROVED" variant="successLight" />
+                            </View>
+                            <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700', marginTop: 4 }}>
+                              {stripEmoji(req.leave_type?.name || 'Leave')} · {req.days}d
+                            </Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                              {formatDate(req.start_date)} – {formatDate(req.end_date)}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+
+              {/* Column 3: Rejected */}
+              <View
+                style={[
+                  styles.kanbanCol,
+                  { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
+                  dropTargetColumn === 'rejected' && {
+                    borderColor: '#ba1a1a',
+                    borderWidth: 2,
+                    backgroundColor: '#fff5f5',
+                  },
+                ]}
+                {...(Platform.OS === 'web'
+                  ? ({
+                      onDragOver: (e: any) => handleDragOver(e, 'rejected'),
+                      onDragLeave: handleDragLeave,
+                      onDrop: (e: any) => handleDrop(e, 'rejected'),
+                    } as any)
+                  : {})}
+              >
+                <View style={[styles.colHead, { borderBottomColor: '#f1f5f9' }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={[styles.statusDot, { backgroundColor: '#ba1a1a' }]} />
+                    <Text style={[styles.colTitle, { color: colors.text }]}>Rejected</Text>
+                  </View>
+                  <View style={[styles.colPill, { backgroundColor: '#fff5f5' }]}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#ba1a1a' }}>
+                      {rejectedList.length}
+                    </Text>
+                  </View>
+                </View>
+
+                <ScrollView style={styles.colScroll} showsVerticalScrollIndicator={false}>
+                  {rejectedList.length === 0 ? (
+                    <View style={styles.colEmpty}>
+                      <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                        No rejected requests
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ gap: 12 }}>
+                      {rejectedList.map((req) => {
+                        const emp = req.employee as any;
+                        const empName = emp?.profile?.full_name || 'Staff Member';
+                        const empCode = emp?.employee_code || emp?.id || 'EMP';
+                        const deptName = emp?.department?.name;
+
+                        return (
+                          <View key={req.id} style={[styles.cardItem, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                              <Avatar name={empName} url={emp?.profile?.avatar_url} size={36} />
+                              <View style={{ flex: 1, gap: 2 }}>
+                                <Text style={[styles.cardEmpName, { color: colors.text }]} numberOfLines={1}>
+                                  {empName}
+                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <View style={[styles.idChip, { backgroundColor: '#f1f5f9' }]}>
+                                    <Text style={styles.idChipText}>{empCode}</Text>
+                                  </View>
+                                  {deptName && (
+                                    <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
+                                      <Building2 size={10} color="#006a61" />
+                                      <Text style={styles.deptChipText} numberOfLines={1}>
+                                        {deptName}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                              <Badge label="REJECTED" variant="dangerLight" />
+                            </View>
+                            <Text style={{ fontSize: 12, color: colors.danger, fontWeight: '700', marginTop: 4 }}>
+                              {stripEmoji(req.leave_type?.name || 'Leave')} · {req.days}d
+                            </Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                              {formatDate(req.start_date)} – {formatDate(req.end_date)}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.mobilePipelineContainer}>
+              {/* Mobile Segmented Tab Bar */}
+              <View style={[styles.mobileTabBar, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.mobileTabBtn,
+                    mobileStatusTab === 'pending' && styles.mobileTabBtnActivePending,
+                  ]}
+                  onPress={() => setMobileStatusTab('pending')}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.mobileTabDot, { backgroundColor: '#d97706' }]} />
+                  <Text
+                    style={[
+                      styles.mobileTabText,
+                      mobileStatusTab === 'pending' ? styles.mobileTabTextActive : { color: colors.textSecondary },
+                    ]}
+                  >
+                    Pending
+                  </Text>
+                  <View
+                    style={[
+                      styles.mobileTabBadge,
+                      { backgroundColor: mobileStatusTab === 'pending' ? '#d97706' : '#fef3c7' },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: mobileStatusTab === 'pending' ? '#FFF' : '#b45309',
+                      }}
+                    >
+                      {pendingList.length}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.mobileTabBtn,
+                    mobileStatusTab === 'approved' && styles.mobileTabBtnActiveApproved,
+                  ]}
+                  onPress={() => setMobileStatusTab('approved')}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.mobileTabDot, { backgroundColor: '#006a61' }]} />
+                  <Text
+                    style={[
+                      styles.mobileTabText,
+                      mobileStatusTab === 'approved' ? styles.mobileTabTextActive : { color: colors.textSecondary },
+                    ]}
+                  >
+                    Approved
+                  </Text>
+                  <View
+                    style={[
+                      styles.mobileTabBadge,
+                      { backgroundColor: mobileStatusTab === 'approved' ? '#006a61' : '#edf8f6' },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: mobileStatusTab === 'approved' ? '#FFF' : '#006a61',
+                      }}
+                    >
+                      {approvedList.length}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.mobileTabBtn,
+                    mobileStatusTab === 'rejected' && styles.mobileTabBtnActiveRejected,
+                  ]}
+                  onPress={() => setMobileStatusTab('rejected')}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.mobileTabDot, { backgroundColor: '#ba1a1a' }]} />
+                  <Text
+                    style={[
+                      styles.mobileTabText,
+                      mobileStatusTab === 'rejected' ? styles.mobileTabTextActive : { color: colors.textSecondary },
+                    ]}
+                  >
+                    Rejected
+                  </Text>
+                  <View
+                    style={[
+                      styles.mobileTabBadge,
+                      { backgroundColor: mobileStatusTab === 'rejected' ? '#ba1a1a' : '#fff5f5' },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: mobileStatusTab === 'rejected' ? '#FFF' : '#ba1a1a',
+                      }}
+                    >
+                      {rejectedList.length}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Mobile Active Tab Cards */}
+              {mobileStatusTab === 'pending' && (
+                <View style={{ gap: 14 }}>
+                  {pendingList.length === 0 ? (
+                    <View style={[styles.mobileEmptyCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+                      <CheckCircle2 size={36} color="#006a61" />
+                      <Text style={[styles.mobileEmptyTitle, { color: colors.text }]}>All Caught Up!</Text>
+                      <Text style={[styles.mobileEmptySub, { color: colors.textSecondary }]}>
+                        There are no pending leave requests awaiting approval.
+                      </Text>
+                    </View>
+                  ) : (
+                    pendingList.map((req) => {
                       const emp = req.employee as any;
                       const empName = emp?.profile?.full_name || 'Staff Member';
                       const empCode = emp?.employee_code || emp?.id || 'EMP';
@@ -411,151 +822,108 @@ export default function HRLeaveWorkflowScreen() {
                       return (
                         <View
                           key={req.id}
-                          // HTML5 Drag Support on Web
-                          {...(Platform.OS === 'web'
-                            ? ({
-                                draggable: true,
-                                onDragStart: (e: any) => handleDragStart(e, req.id),
-                                style: [
-                                  styles.cardItem,
-                                  { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
-                                  draggedId === req.id && { opacity: 0.4 },
-                                ],
-                              } as any)
-                            : {
-                                style: [
-                                  styles.cardItem,
-                                  { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
-                                ],
-                              })}
+                          style={[styles.mobileCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}
                         >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                            <Avatar name={empName} url={emp?.profile?.avatar_url} size={40} />
-                            <View style={{ flex: 1, gap: 2 }}>
-                              <Text style={[styles.cardEmpName, { color: colors.text }]} numberOfLines={1}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <Avatar name={empName} url={emp?.profile?.avatar_url} size={46} />
+                            <View style={{ flex: 1, gap: 3 }}>
+                              <Text style={[styles.mobileCardEmpName, { color: colors.text }]}>
                                 {empName}
                               </Text>
-
-                              {/* Employee ID & Department Meta Badges */}
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                 <View style={[styles.idChip, { backgroundColor: '#f1f5f9' }]}>
                                   <Text style={styles.idChipText}>{empCode}</Text>
                                 </View>
                                 {deptName && (
                                   <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
-                                    <Building2 size={10} color="#006a61" />
-                                    <Text style={styles.deptChipText} numberOfLines={1}>
-                                      {deptName}
-                                    </Text>
+                                    <Building2 size={11} color="#006a61" />
+                                    <Text style={styles.deptChipText} numberOfLines={1}>{deptName}</Text>
                                   </View>
                                 )}
                               </View>
                             </View>
+                            <Badge label="PENDING" variant="warningLight" />
                           </View>
 
-                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                            <Text style={[styles.cardType, { color: colors.primary }]}>
-                              {stripEmoji(req.leave_type?.name || 'Leave')} · {req.days}d
-                            </Text>
-                            {emp?.designation && (
-                              <Text style={{ fontSize: 11, color: colors.textSecondary }} numberOfLines={1}>
-                                {emp.designation}
+                          <View style={styles.mobileCardMetaRow}>
+                            <View style={[styles.mobileQuotaPill, { backgroundColor: '#edf8f6' }]}>
+                              <Umbrella size={13} color="#006a61" />
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: '#006a61' }}>
+                                {stripEmoji(req.leave_type?.name || 'Leave')}
                               </Text>
-                            )}
+                            </View>
+                            <Text style={[styles.mobileDaysCount, { color: colors.text }]}>
+                              {req.days} Day{req.days !== 1 ? 's' : ''} Total
+                            </Text>
                           </View>
 
                           <View style={[styles.dateChip, { backgroundColor: '#f8faff' }]}>
-                            <Calendar size={12} color={colors.textSecondary} />
-                            <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                            <Calendar size={13} color="#006a61" />
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#334155' }}>
                               {formatDate(req.start_date)} → {formatDate(req.end_date)}
                             </Text>
                           </View>
 
-                          {req.reason && (
-                            <Text style={[styles.cardReason, { color: colors.textSecondary }]} numberOfLines={2}>
-                              "{req.reason}"
-                            </Text>
-                          )}
+                          {req.reason ? (
+                            <View style={[styles.reasonBox, { backgroundColor: '#f8fafc', borderColor: '#f1f5f9' }]}>
+                              <Text style={[styles.cardReason, { color: colors.textSecondary }]}>
+                                "{req.reason}"
+                              </Text>
+                            </View>
+                          ) : null}
 
-                          {/* Quick Action Buttons */}
-                          <View style={styles.cardActions}>
+                          <View style={styles.mobileCardActions}>
                             <TouchableOpacity
-                              style={[styles.btnApprove, { backgroundColor: '#006a61' }]}
+                              style={[styles.btnMobileApprove, { backgroundColor: '#006a61' }]}
                               onPress={() => handleAction(req.id, 'approve')}
                               disabled={processingId === req.id}
+                              activeOpacity={0.8}
                             >
-                              <CheckCircle2 size={13} color="#FFF" />
-                              <Text style={styles.btnActionText}>Approve</Text>
+                              <CheckCircle2 size={16} color="#FFF" />
+                              <Text style={styles.btnMobileActionText}>Approve Request</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                              style={[styles.btnReject, { backgroundColor: '#ba1a1a' }]}
+                              style={[styles.btnMobileReject, { backgroundColor: '#ba1a1a' }]}
                               onPress={() => handleAction(req.id, 'reject')}
                               disabled={processingId === req.id}
+                              activeOpacity={0.8}
                             >
-                              <XCircle size={13} color="#FFF" />
-                              <Text style={styles.btnActionText}>Reject</Text>
+                              <XCircle size={16} color="#FFF" />
+                              <Text style={styles.btnMobileActionText}>Reject</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
                       );
-                    })}
-                  </View>
-                )}
-              </ScrollView>
-            </View>
-
-            {/* Column 2: Approved */}
-            <View
-              style={[
-                styles.kanbanCol,
-                { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
-                dropTargetColumn === 'approved' && {
-                  borderColor: '#006a61',
-                  borderWidth: 2,
-                  backgroundColor: '#f0fdf9',
-                },
-              ]}
-              {...(Platform.OS === 'web'
-                ? ({
-                    onDragOver: (e: any) => handleDragOver(e, 'approved'),
-                    onDragLeave: handleDragLeave,
-                    onDrop: (e: any) => handleDrop(e, 'approved'),
-                  } as any)
-                : {})}
-            >
-              <View style={[styles.colHead, { borderBottomColor: '#f1f5f9' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={[styles.statusDot, { backgroundColor: '#006a61' }]} />
-                  <Text style={[styles.colTitle, { color: colors.text }]}>Approved</Text>
+                    })
+                  )}
                 </View>
-                <View style={[styles.colPill, { backgroundColor: '#edf8f6' }]}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#006a61' }}>
-                    {approvedList.length}
-                  </Text>
-                </View>
-              </View>
+              )}
 
-              <ScrollView style={styles.colScroll} showsVerticalScrollIndicator={false}>
-                {approvedList.length === 0 ? (
-                  <View style={styles.colEmpty}>
-                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                      No approved requests
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={{ gap: 12 }}>
-                    {approvedList.map((req) => {
+              {/* Approved Tab */}
+              {mobileStatusTab === 'approved' && (
+                <View style={{ gap: 14 }}>
+                  {approvedList.length === 0 ? (
+                    <View style={[styles.mobileEmptyCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+                      <Text style={[styles.mobileEmptySub, { color: colors.textSecondary }]}>
+                        No approved leave requests.
+                      </Text>
+                    </View>
+                  ) : (
+                    approvedList.map((req) => {
                       const emp = req.employee as any;
                       const empName = emp?.profile?.full_name || 'Staff Member';
                       const empCode = emp?.employee_code || emp?.id || 'EMP';
                       const deptName = emp?.department?.name;
 
                       return (
-                        <View key={req.id} style={[styles.cardItem, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                            <Avatar name={empName} url={emp?.profile?.avatar_url} size={36} />
-                            <View style={{ flex: 1, gap: 2 }}>
-                              <Text style={[styles.cardEmpName, { color: colors.text }]} numberOfLines={1}>
+                        <View
+                          key={req.id}
+                          style={[styles.mobileCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <Avatar name={empName} url={emp?.profile?.avatar_url} size={42} />
+                            <View style={{ flex: 1, gap: 3 }}>
+                              <Text style={[styles.mobileCardEmpName, { color: colors.text }]}>
                                 {empName}
                               </Text>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -564,82 +932,61 @@ export default function HRLeaveWorkflowScreen() {
                                 </View>
                                 {deptName && (
                                   <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
-                                    <Building2 size={10} color="#006a61" />
-                                    <Text style={styles.deptChipText} numberOfLines={1}>
-                                      {deptName}
-                                    </Text>
+                                    <Building2 size={11} color="#006a61" />
+                                    <Text style={styles.deptChipText} numberOfLines={1}>{deptName}</Text>
                                   </View>
                                 )}
                               </View>
                             </View>
                             <Badge label="APPROVED" variant="successLight" />
                           </View>
-                          <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700', marginTop: 4 }}>
-                            {stripEmoji(req.leave_type?.name || 'Leave')} · {req.days}d
-                          </Text>
-                          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                            {formatDate(req.start_date)} – {formatDate(req.end_date)}
-                          </Text>
+
+                          <View style={styles.mobileCardMetaRow}>
+                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '700' }}>
+                              {stripEmoji(req.leave_type?.name || 'Leave')} · {req.days}d
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                              {formatDate(req.start_date)} → {formatDate(req.end_date)}
+                            </Text>
+                          </View>
+
+                          {req.reason ? (
+                            <Text style={[styles.cardReason, { color: colors.textSecondary }]}>
+                              "{req.reason}"
+                            </Text>
+                          ) : null}
                         </View>
                       );
-                    })}
-                  </View>
-                )}
-              </ScrollView>
-            </View>
-
-            {/* Column 3: Rejected */}
-            <View
-              style={[
-                styles.kanbanCol,
-                { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
-                dropTargetColumn === 'rejected' && {
-                  borderColor: '#ba1a1a',
-                  borderWidth: 2,
-                  backgroundColor: '#fff5f5',
-                },
-              ]}
-              {...(Platform.OS === 'web'
-                ? ({
-                    onDragOver: (e: any) => handleDragOver(e, 'rejected'),
-                    onDragLeave: handleDragLeave,
-                    onDrop: (e: any) => handleDrop(e, 'rejected'),
-                  } as any)
-                : {})}
-            >
-              <View style={[styles.colHead, { borderBottomColor: '#f1f5f9' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={[styles.statusDot, { backgroundColor: '#ba1a1a' }]} />
-                  <Text style={[styles.colTitle, { color: colors.text }]}>Rejected</Text>
+                    })
+                  )}
                 </View>
-                <View style={[styles.colPill, { backgroundColor: '#fff5f5' }]}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#ba1a1a' }}>
-                    {rejectedList.length}
-                  </Text>
-                </View>
-              </View>
+              )}
 
-              <ScrollView style={styles.colScroll} showsVerticalScrollIndicator={false}>
-                {rejectedList.length === 0 ? (
-                  <View style={styles.colEmpty}>
-                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                      No rejected requests
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={{ gap: 12 }}>
-                    {rejectedList.map((req) => {
+              {/* Rejected Tab */}
+              {mobileStatusTab === 'rejected' && (
+                <View style={{ gap: 14 }}>
+                  {rejectedList.length === 0 ? (
+                    <View style={[styles.mobileEmptyCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+                      <Text style={[styles.mobileEmptySub, { color: colors.textSecondary }]}>
+                        No rejected leave requests.
+                      </Text>
+                    </View>
+                  ) : (
+                    rejectedList.map((req) => {
                       const emp = req.employee as any;
                       const empName = emp?.profile?.full_name || 'Staff Member';
                       const empCode = emp?.employee_code || emp?.id || 'EMP';
                       const deptName = emp?.department?.name;
 
                       return (
-                        <View key={req.id} style={[styles.cardItem, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                            <Avatar name={empName} url={emp?.profile?.avatar_url} size={36} />
-                            <View style={{ flex: 1, gap: 2 }}>
-                              <Text style={[styles.cardEmpName, { color: colors.text }]} numberOfLines={1}>
+                        <View
+                          key={req.id}
+                          style={[styles.mobileCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <Avatar name={empName} url={emp?.profile?.avatar_url} size={42} />
+                            <View style={{ flex: 1, gap: 3 }}>
+                              <Text style={[styles.mobileCardEmpName, { color: colors.text }]}>
                                 {empName}
                               </Text>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -648,30 +995,37 @@ export default function HRLeaveWorkflowScreen() {
                                 </View>
                                 {deptName && (
                                   <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
-                                    <Building2 size={10} color="#006a61" />
-                                    <Text style={styles.deptChipText} numberOfLines={1}>
-                                      {deptName}
-                                    </Text>
+                                    <Building2 size={11} color="#006a61" />
+                                    <Text style={styles.deptChipText} numberOfLines={1}>{deptName}</Text>
                                   </View>
                                 )}
                               </View>
                             </View>
                             <Badge label="REJECTED" variant="dangerLight" />
                           </View>
-                          <Text style={{ fontSize: 12, color: colors.danger, fontWeight: '700', marginTop: 4 }}>
-                            {stripEmoji(req.leave_type?.name || 'Leave')} · {req.days}d
-                          </Text>
-                          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                            {formatDate(req.start_date)} – {formatDate(req.end_date)}
-                          </Text>
+
+                          <View style={styles.mobileCardMetaRow}>
+                            <Text style={{ fontSize: 13, color: '#ba1a1a', fontWeight: '700' }}>
+                              {stripEmoji(req.leave_type?.name || 'Leave')} · {req.days}d
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                              {formatDate(req.start_date)} → {formatDate(req.end_date)}
+                            </Text>
+                          </View>
+
+                          {req.reason ? (
+                            <Text style={[styles.cardReason, { color: colors.textSecondary }]}>
+                              "{req.reason}"
+                            </Text>
+                          ) : null}
                         </View>
                       );
-                    })}
-                  </View>
-                )}
-              </ScrollView>
+                    })
+                  )}
+                </View>
+              )}
             </View>
-          </View>
+          )
         ) : viewMode === 'list' ? (
           /* ── TABLE / LIST VIEW ────────────────────────────────────────────── */
           <View style={[styles.tableCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
@@ -699,58 +1053,121 @@ export default function HRLeaveWorkflowScreen() {
                       key={item.id}
                       style={[
                         styles.tableRow,
+                        !isDesktop && styles.tableRowMobile,
                         idx !== filtered.length - 1 && {
                           borderBottomWidth: 1,
                           borderBottomColor: '#f1f5f9',
                         },
                       ]}
                     >
-                      <Avatar name={empName} url={emp?.profile?.avatar_url} size={42} />
-                      <View style={{ flex: 1, gap: 4, paddingHorizontal: 12 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>
-                            {empName}
-                          </Text>
-                          <View style={[styles.idChip, { backgroundColor: '#f1f5f9' }]}>
-                            <Text style={styles.idChipText}>{empCode}</Text>
+                      {isDesktop ? (
+                        <>
+                          <Avatar name={empName} url={emp?.profile?.avatar_url} size={42} />
+                          <View style={{ flex: 1, gap: 4, paddingHorizontal: 12 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>
+                                {empName}
+                              </Text>
+                              <View style={[styles.idChip, { backgroundColor: '#f1f5f9' }]}>
+                                <Text style={styles.idChipText}>{empCode}</Text>
+                              </View>
+                              {deptName && (
+                                <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
+                                  <Building2 size={11} color="#006a61" />
+                                  <Text style={styles.deptChipText}>{deptName}</Text>
+                                </View>
+                              )}
+                            </View>
+
+                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>
+                              {stripEmoji(item.leave_type?.name || 'Leave')} · {formatDate(item.start_date)} — {formatDate(item.end_date)} ({item.days}d)
+                            </Text>
+                            {item.reason && (
+                              <Text style={{ fontSize: 12, color: colors.textSecondary, fontStyle: 'italic' }}>
+                                "{item.reason}"
+                              </Text>
+                            )}
                           </View>
-                          {deptName && (
-                            <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
-                              <Building2 size={11} color="#006a61" />
-                              <Text style={styles.deptChipText}>{deptName}</Text>
+
+                          <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                            <Badge label={item.status} variant={statusVariant(item.status)} />
+                            {item.status === 'pending' && (
+                              <View style={{ flexDirection: 'row', gap: 6 }}>
+                                <TouchableOpacity
+                                  style={[styles.btnApprove, { backgroundColor: '#006a61' }]}
+                                  onPress={() => handleAction(item.id, 'approve')}
+                                  disabled={processingId === item.id}
+                                >
+                                  <Text style={styles.btnActionText}>Approve</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.btnReject, { backgroundColor: '#ba1a1a' }]}
+                                  onPress={() => handleAction(item.id, 'reject')}
+                                  disabled={processingId === item.id}
+                                >
+                                  <Text style={styles.btnActionText}>Reject</Text>
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                        </>
+                      ) : (
+                        <View style={{ gap: 10, width: '100%' }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <Avatar name={empName} url={emp?.profile?.avatar_url} size={42} />
+                            <View style={{ flex: 1, gap: 2 }}>
+                              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>
+                                {empName}
+                              </Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <View style={[styles.idChip, { backgroundColor: '#f1f5f9' }]}>
+                                  <Text style={styles.idChipText}>{empCode}</Text>
+                                </View>
+                                {deptName && (
+                                  <View style={[styles.deptChip, { backgroundColor: '#edf8f6' }]}>
+                                    <Building2 size={11} color="#006a61" />
+                                    <Text style={styles.deptChipText} numberOfLines={1}>{deptName}</Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                            <Badge label={item.status} variant={statusVariant(item.status)} />
+                          </View>
+
+                          <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>
+                            {stripEmoji(item.leave_type?.name || 'Leave')} · {formatDate(item.start_date)} → {formatDate(item.end_date)} ({item.days}d)
+                          </Text>
+
+                          {item.reason && (
+                            <View style={[styles.reasonBox, { backgroundColor: '#f8fafc', borderColor: '#f1f5f9' }]}>
+                              <Text style={[styles.cardReason, { color: colors.textSecondary }]}>
+                                "{item.reason}"
+                              </Text>
+                            </View>
+                          )}
+
+                          {item.status === 'pending' && (
+                            <View style={[styles.mobileCardActions, { marginTop: 4 }]}>
+                              <TouchableOpacity
+                                style={[styles.btnMobileApprove, { backgroundColor: '#006a61' }]}
+                                onPress={() => handleAction(item.id, 'approve')}
+                                disabled={processingId === item.id}
+                              >
+                                <CheckCircle2 size={15} color="#FFF" />
+                                <Text style={styles.btnMobileActionText}>Approve</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.btnMobileReject, { backgroundColor: '#ba1a1a' }]}
+                                onPress={() => handleAction(item.id, 'reject')}
+                                disabled={processingId === item.id}
+                              >
+                                <XCircle size={15} color="#FFF" />
+                                <Text style={styles.btnMobileActionText}>Reject</Text>
+                              </TouchableOpacity>
                             </View>
                           )}
                         </View>
-
-                        <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>
-                          {stripEmoji(item.leave_type?.name || 'Leave')} · {formatDate(item.start_date)} — {formatDate(item.end_date)} ({item.days}d)
-                        </Text>
-                        {item.reason && (
-                          <Text style={{ fontSize: 12, color: colors.textSecondary, fontStyle: 'italic' }}>
-                            "{item.reason}"
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={{ alignItems: 'flex-end', gap: 8 }}>
-                        <Badge label={item.status} variant={statusVariant(item.status)} />
-                        {item.status === 'pending' && (
-                          <View style={{ flexDirection: 'row', gap: 6 }}>
-                            <TouchableOpacity
-                              style={[styles.btnApprove, { backgroundColor: '#006a61' }]}
-                              onPress={() => handleAction(item.id, 'approve')}
-                            >
-                              <Text style={styles.btnActionText}>Approve</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.btnReject, { backgroundColor: '#ba1a1a' }]}
-                              onPress={() => handleAction(item.id, 'reject')}
-                            >
-                              <Text style={styles.btnActionText}>Reject</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                      </View>
+                      )}
                     </View>
                   );
                 })}
@@ -760,8 +1177,14 @@ export default function HRLeaveWorkflowScreen() {
         ) : (
           /* ── LEAVE POLICIES / TYPES CONFIGURATION VIEW ────────────────── */
           <Animated.View entering={FadeIn.duration(300)}>
-            <View style={[styles.typesHeaderRow, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-              <View>
+            <View
+              style={[
+                styles.typesHeaderRow,
+                { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
+                !isDesktop && styles.typesHeaderRowMobile,
+              ]}
+            >
+              <View style={{ flex: isDesktop ? 1 : undefined }}>
                 <Text style={[styles.typesSectionTitle, { color: colors.text }]}>
                   Configured Leave Policies & Quotas
                 </Text>
@@ -770,7 +1193,11 @@ export default function HRLeaveWorkflowScreen() {
                 </Text>
               </View>
               <TouchableOpacity
-                style={[styles.addPolicyBtn, { backgroundColor: colors.primary }]}
+                style={[
+                  styles.addPolicyBtn,
+                  { backgroundColor: colors.primary },
+                  !isDesktop && styles.addPolicyBtnMobile,
+                ]}
                 onPress={handleOpenAddType}
               >
                 <Plus size={16} color="#FFF" />
@@ -783,7 +1210,11 @@ export default function HRLeaveWorkflowScreen() {
                 <Animated.View
                   key={lt.id}
                   entering={FadeInDown.delay(idx * 30).duration(250).springify()}
-                  style={[styles.typeCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}
+                  style={[
+                    styles.typeCard,
+                    { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
+                    !isDesktop && styles.typeCardMobile,
+                  ]}
                 >
                   <View style={styles.typeCardTop}>
                     <View style={styles.typeCardIconBox}>
@@ -1063,6 +1494,176 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   btnActionText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+
+  // Responsive Mobile Styles
+  heroBarMobile: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    paddingTop: 28,
+  },
+  viewToggleWrapMobile: {
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  toggleBtnMobile: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  controlsBarMobile: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 12,
+    padding: 12,
+  },
+  mobilePipelineContainer: {
+    gap: 16,
+  },
+  mobileTabBar: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 4,
+    gap: 6,
+  },
+  mobileTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+  },
+  mobileTabBtnActivePending: {
+    backgroundColor: '#fef3c7',
+  },
+  mobileTabBtnActiveApproved: {
+    backgroundColor: '#edf8f6',
+  },
+  mobileTabBtnActiveRejected: {
+    backgroundColor: '#fff5f5',
+  },
+  mobileTabDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  mobileTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  mobileTabTextActive: {
+    color: '#0b1c30',
+  },
+  mobileTabBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  mobileEmptyCard: {
+    padding: 36,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  mobileEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  mobileEmptySub: {
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  mobileCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+    shadowColor: '#0b1c30',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  mobileCardEmpName: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  mobileCardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mobileQuotaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  mobileDaysCount: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  reasonBox: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  mobileCardActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  btnMobileApprove: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+  },
+  btnMobileReject: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+  },
+  btnMobileActionText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tableRowMobile: {
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+  },
+  typesHeaderRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 14,
+    padding: 16,
+  },
+  addPolicyBtnMobile: {
+    width: '100%',
+    justifyContent: 'center',
+  },
+  typeCardMobile: {
+    minWidth: '100%',
+    padding: 16,
+  },
 
   // Table
   tableCard: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },

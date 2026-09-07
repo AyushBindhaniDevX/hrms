@@ -24,6 +24,7 @@ import {
   BarChart3,
   Gift,
   Workflow,
+  Building2,
 } from 'lucide-react-native';
 import type { UserRole } from '@/types';
 
@@ -31,48 +32,55 @@ export interface NavItem {
   label: string;
   href: string;
   icon?: React.ElementType;
+  feature?: string;
 }
 
 export const HR_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
-  { label: 'Users & Employees', href: '/(admin)/users', icon: Users },
-  { label: 'Departments', href: '/(hr)/departments', icon: Network },
-  { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
-  { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
-  { label: 'Holiday Calendar', href: '/(hr)/holidays', icon: CalendarDays },
-  { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock },
-  { label: 'Performance', href: '/(hr)/performance', icon: Award },
-  { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
-  { label: 'Office Locations', href: '/(hr)/locations', icon: MapPin },
+  { label: 'Users & Employees', href: '/(admin)/users', icon: Users, feature: 'users' },
+  { label: 'Departments', href: '/(hr)/departments', icon: Network, feature: 'departments' },
+  { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
+  { label: 'Leave', href: '/(hr)/leave', icon: Umbrella, feature: 'leave' },
+  { label: 'Holiday Calendar', href: '/(hr)/holidays', icon: CalendarDays, feature: 'holidays' },
+  { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock, feature: 'shifts' },
+  { label: 'Performance', href: '/(hr)/performance', icon: Award, feature: 'performance' },
+  { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard, feature: 'payroll' },
+  { label: 'Office Locations', href: '/(hr)/locations', icon: MapPin, feature: 'locations' },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
-  { label: 'Users & Employees', href: '/(admin)/users', icon: Users },
-  { label: 'Departments', href: '/(hr)/departments', icon: Network },
-  { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar },
-  { label: 'Leave', href: '/(hr)/leave', icon: Umbrella },
-  { label: 'Holiday Calendar', href: '/(hr)/holidays', icon: CalendarDays },
-  { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock },
-  { label: 'Performance', href: '/(hr)/performance', icon: Award },
-  { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard },
-  { label: 'Locations', href: '/(hr)/locations', icon: MapPin },
-  { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield },
+  { label: 'Central Portal', href: '/(admin)/portal', icon: Building2 },
+  { label: 'Users & Employees', href: '/(admin)/users', icon: Users, feature: 'users' },
+  { label: 'Departments', href: '/(hr)/departments', icon: Network, feature: 'departments' },
+  { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
+  { label: 'Leave', href: '/(hr)/leave', icon: Umbrella, feature: 'leave' },
+  { label: 'Holiday Calendar', href: '/(hr)/holidays', icon: CalendarDays, feature: 'holidays' },
+  { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock, feature: 'shifts' },
+  { label: 'Performance', href: '/(hr)/performance', icon: Award, feature: 'performance' },
+  { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard, feature: 'payroll' },
+  { label: 'Locations', href: '/(hr)/locations', icon: MapPin, feature: 'locations' },
+  { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield, feature: 'audit_logs' },
   { label: 'Settings', href: '/(admin)/settings', icon: Settings },
 ];
 
 export const EMPLOYEE_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(employee)/dashboard', icon: LayoutDashboard },
-  { label: 'Attendance', href: '/(employee)/attendance', icon: CalendarClock },
-  { label: 'Leave', href: '/(employee)/leave', icon: CalendarDays },
-  { label: 'Holiday Calendar', href: '/(hr)/holidays', icon: Gift },
-  { label: 'Performance', href: '/(employee)/performance', icon: Award },
-  { label: 'Salary & Payslips', href: '/(employee)/payslips', icon: Banknote },
-  { label: 'Directory', href: '/(employee)/directory', icon: Users },
+  { label: 'Attendance', href: '/(employee)/attendance', icon: CalendarClock, feature: 'attendance' },
+  { label: 'Leave', href: '/(employee)/leave', icon: CalendarDays, feature: 'leave' },
+  { label: 'Holiday Calendar', href: '/(employee)/holidays', icon: CalendarDays, feature: 'holidays' },
+  { label: 'Performance', href: '/(employee)/performance', icon: Award, feature: 'performance' },
+  { label: 'Salary & Payslips', href: '/(employee)/payslips', icon: Banknote, feature: 'payroll' },
+  { label: 'Directory', href: '/(employee)/directory', icon: Users, feature: 'users' },
 ];
 
-export function getNavForRole(role?: UserRole | string | null): NavItem[] {
-  if (role === 'admin') return ADMIN_NAV;
+export function getNavForRole(role?: UserRole | string | null, userEmail?: string | null): NavItem[] {
+  if (role === 'admin') {
+    if (userEmail !== 'ayushbindhani001@gmail.com') {
+      return ADMIN_NAV.filter((item) => item.href !== '/(admin)/portal');
+    }
+    return ADMIN_NAV;
+  }
   if (role === 'hr') return HR_NAV;
   return EMPLOYEE_NAV;
 }

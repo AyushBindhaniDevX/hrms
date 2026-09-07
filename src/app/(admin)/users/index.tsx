@@ -32,9 +32,10 @@ import {
   createSystemUser,
   deleteUserRecord,
 } from '@/lib/services/organization';
-import { supabase } from '@/lib/supabase';
-import { getDepartments, getWorkplaces, getEmployees, updateEmployee } from '@/lib/services/employee';
-import { getShifts } from '@/lib/services/shifts';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getDepartments, getWorkplaces, getEmployees, updateEmployee, getEmployeeByProfileId } from '@/lib/services/employee';
+import { getShifts, assignEmployeeShift } from '@/lib/services/shifts';
 import { createAuditLog } from '@/lib/services/audit';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
@@ -304,31 +305,8 @@ export default function UserManagementScreen() {
       const orgId = tenantOrg?.id || currentAdmin?.organization_id || u.organization_id || '';
       
       // Auto-resolve employee ID for profile
-      let empId: string | null = null;
-      const { data: empData } = await supabase
-        .from('employees')
-        .select('id')
-        .eq('profile_id', u.id)
-        .maybeSingle();
-
-      if (empData?.id) {
-        empId = empData.id;
-      } else {
-        // Auto-create minimal employee record so quotas can be assigned
-        const { data: newEmp } = await supabase
-          .from('employees')
-          .insert({
-            profile_id: u.id,
-            employee_code: `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
-            designation: u.role === 'admin' ? 'Administrator' : u.role === 'hr' ? 'HR Manager' : 'Staff',
-            employment_status: 'active',
-            onboarding_completed: true,
-          })
-          .select('id')
-          .maybeSingle();
-        if (newEmp?.id) empId = newEmp.id;
-      }
-
+      const emp = await getEmployeeByProfileId(u.id);
+      const empId: string | null = emp?.id || null;
       setLeaveEmployeeId(empId);
 
       const [types, balances] = await Promise.all([
@@ -382,11 +360,7 @@ export default function UserManagementScreen() {
 
     // Fetch linked employee record if any
     try {
-      const { data: empData } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('profile_id', u.id)
-        .maybeSingle();
+      const empData = await getEmployeeByProfileId(u.id);
 
       if (empData) {
         setEditEmpId(empData.id);
@@ -411,14 +385,9 @@ export default function UserManagementScreen() {
         if (!shiftVal) {
           try {
             const today = new Date().toISOString().split('T')[0];
-            const { data: shiftRoster } = await supabase
-              .from('employee_shifts')
-              .select('shift_id')
-              .eq('employee_id', empData.id)
-              .eq('date', today)
-              .maybeSingle();
-            if (shiftRoster?.shift_id) {
-              shiftVal = shiftRoster.shift_id;
+            const shiftSnap = await getDoc(doc(db, 'employee_shifts', `${empData.id}_${today}`));
+            if (shiftSnap.exists() && shiftSnap.data()?.shift_id) {
+              shiftVal = shiftSnap.data().shift_id;
             }
           } catch (sErr) {}
         }
@@ -500,7 +469,9 @@ export default function UserManagementScreen() {
           employment_status: editStatus as any,
         });
       } else {
+        const newEmpId = `emp-${Date.now()}`;
         const empPayload: Record<string, any> = {
+          id: newEmpId,
           profile_id: editUser.id,
           organization_id: editUser.organization_id,
           employee_code: editEmpCode.trim() || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -518,48 +489,15 @@ export default function UserManagementScreen() {
           updated_at: new Date().toISOString(),
         };
 
-        let newEmp: any = null;
-        let attempts = 0;
-        while (attempts < 6) {
-          attempts++;
-          const { data: insData, error: insErr } = await supabase
-            .from('employees')
-            .insert(empPayload)
-            .select()
-            .maybeSingle();
-
-          if (!insErr) {
-            newEmp = insData;
-            break;
-          }
-
-          if (insErr.code === 'PGRST204' || insErr.message?.includes('schema cache')) {
-            const match = insErr.message?.match(/Could not find the '([^']+)' column/);
-            if (match && match[1]) {
-              delete empPayload[match[1]];
-              continue;
-            }
-          }
-          break;
-        }
-
-        if (newEmp) {
-          currentEmpId = newEmp.id;
-        }
+        await setDoc(doc(db, 'employees', newEmpId), empPayload);
+        currentEmpId = newEmpId;
       }
 
       // 3. Link shift roster if assigned
       if (editShiftId && editUser.organization_id && currentEmpId) {
         try {
           const today = new Date().toISOString().split('T')[0];
-          await supabase.from('employee_shifts').upsert({
-            id: `${currentEmpId}_${today}`,
-            employee_id: currentEmpId,
-            date: today,
-            shift_id: editShiftId,
-            organization_id: editUser.organization_id,
-            created_at: new Date().toISOString(),
-          });
+          await assignEmployeeShift(currentEmpId, today, editShiftId, editUser.organization_id);
         } catch (sErr) {}
       }
 
@@ -659,11 +597,9 @@ export default function UserManagementScreen() {
 
   const handleResetPassword = async (userEmail: string) => {
     try {
-      const { supabase } = await import('@/lib/supabase');
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(userEmail.trim().toLowerCase());
-      if (resetErr) {
-        throw new Error(resetErr.message);
-      }
+      const { sendPasswordResetEmail } = await import('firebase/auth');
+      const { auth } = await import('@/lib/firebase');
+      await sendPasswordResetEmail(auth, userEmail.trim().toLowerCase());
       setInfoBanner({
         type: 'success',
         message: `Password reset email has been sent to ${userEmail}.`,
@@ -733,7 +669,7 @@ export default function UserManagementScreen() {
               Manage organization accounts, roles, and employee records.
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 }}>
-              <Badge label={`${pkg.toUpperCase()} PACKAGE`} variant={pkg === 'gold' ? 'warning' : 'neutral'} />
+              <Badge label={`${String(pkg || 'standard').toUpperCase()} PACKAGE`} variant={pkg === 'gold' ? 'warning' : 'neutral'} />
               <Text style={{ fontSize: 13, fontWeight: '600', color: isLimitReached ? colors.danger : colors.textSecondary }}>
                 {activeCount} / {limit} Users active ({Math.max(0, limit - activeCount)} left)
               </Text>
@@ -844,7 +780,7 @@ export default function UserManagementScreen() {
                     { color: roleFilter === r ? '#FFF' : colors.text },
                   ]}
                 >
-                  {r === 'all' ? 'All Roles' : r === 'hr' ? 'HR' : r.charAt(0).toUpperCase() + r.slice(1)}
+                  {r === 'all' ? 'All Roles' : r === 'hr' ? 'HR' : String(r || '').charAt(0).toUpperCase() + String(r || '').slice(1)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -869,7 +805,7 @@ export default function UserManagementScreen() {
                     { color: statusFilter === s ? '#FFF' : colors.text },
                   ]}
                 >
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                  {String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -913,7 +849,7 @@ export default function UserManagementScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <Text style={[styles.userName, { color: colors.text }]}>{u.full_name}</Text>
                       <Badge
-                        label={u.role.toUpperCase()}
+                        label={String(u.role || 'employee').toUpperCase()}
                         variant={getRoleBadgeVariant(u.role)}
                       />
                       <Badge

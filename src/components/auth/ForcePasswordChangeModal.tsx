@@ -9,7 +9,9 @@ import {
 } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
-import { supabase } from '@/lib/supabase';
+import { auth, db } from '@/lib/firebase';
+import { updatePassword } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
 import { trackUserActivity } from '@/lib/services/userActivity';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -21,6 +23,7 @@ export function ForcePasswordChangeModal() {
 
   const needsChange = Boolean(
     (profile as any)?.needs_password_change ||
+    (profile as any)?.must_change_password ||
     user?.user_metadata?.needs_password_change
   );
 
@@ -46,26 +49,21 @@ export function ForcePasswordChangeModal() {
 
     setLoading(true);
     try {
-      // 1. Update Supabase Auth user password
-      const { error: authErr } = await supabase.auth.updateUser({
-        password: newPassword.trim(),
-      });
-
-      if (authErr) {
-        throw new Error(authErr.message);
+      // 1. Update Firebase Auth user password
+      if (!auth.currentUser) {
+        throw new Error('No authenticated user found. Please re-login.');
       }
+      await updatePassword(auth.currentUser, newPassword.trim());
 
-      // 2. Update Supabase profiles table
+      // 2. Update Firestore profiles document
       try {
-        await supabase
-          .from('profiles')
-          .update({
-            needs_password_change: false,
-            updated_at: new Date().toISOString(),
-          } as any)
-          .eq('id', user.id);
+        await updateDoc(doc(db, 'profiles', user.id), {
+          needs_password_change: false,
+          must_change_password: false,
+          updated_at: new Date().toISOString(),
+        });
       } catch (profErr) {
-        // ignore if column doesn't exist
+        // ignore if document field doesn't exist
       }
 
       // 3. Log user activity

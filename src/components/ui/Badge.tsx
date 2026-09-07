@@ -62,6 +62,8 @@ export function Badge({
   const vc = getVariantColors(variant, colors);
   const sm = size === 'sm';
 
+  const displayLabel = label != null ? String(label) : '';
+
   return (
     <View
       style={[
@@ -76,7 +78,7 @@ export function Badge({
     >
       {dot && <View style={[styles.dot, { backgroundColor: vc.text }]} />}
       <Text style={[styles.text, { color: vc.text, fontSize: sm ? 10 : 11 }, textStyle]}>
-        {uppercase ? label.toUpperCase() : label}
+        {uppercase ? displayLabel.toUpperCase() : displayLabel}
       </Text>
     </View>
   );

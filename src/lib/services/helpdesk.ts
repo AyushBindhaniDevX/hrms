@@ -1,22 +1,45 @@
 /**
- * Helpdesk & Employee Support Tickets Service (Supabase)
+ * Helpdesk & Employee Support Tickets Service (Cloud Firestore)
  * Oasis HRMS Multi-Tenant Platform
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from 'firebase/firestore';
 import { SupportTicket, TicketStatus, TicketPriority, TicketCategory } from '@/types/database';
 import { triggerAutomationEvent } from './automations';
 
-export async function getTickets(employeeId?: string): Promise<SupportTicket[]> {
-  let query = supabase.from('tickets').select('*');
+export async function getTickets(employeeId?: string, organizationId?: string): Promise<SupportTicket[]> {
+  try {
+    const snap = await getDocs(collection(db, 'tickets'));
+    const tickets: SupportTicket[] = [];
+    snap.forEach((d) => {
+      const t = { id: d.id, ...d.data() } as SupportTicket;
+      const orgMatch =
+        !organizationId ||
+        t.organization_id === organizationId ||
+        (organizationId === 'shanti-memorial-hospital' && t.organization_id === 'smh');
+      if (orgMatch && (!employeeId || t.employee_id === employeeId)) {
+        tickets.push(t);
+      }
+    });
 
-  if (employeeId) {
-    query = query.eq('employee_id', employeeId);
+    tickets.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return tickets;
+  } catch (err) {
+    console.error('getTickets error:', err);
+    return [];
   }
-
-  const { data, error } = await query.order('created_at', { ascending: false });
-  if (error || !data) return [];
-  return data as SupportTicket[];
 }
 
 export async function createTicket(
@@ -35,26 +58,17 @@ export async function createTicket(
     updated_at: now,
   };
 
-  const { error } = await supabase.from('tickets').insert(newTicket);
-  if (error) {
-    console.error('Error creating ticket in Supabase:', error);
-  }
-
+  await setDoc(doc(db, 'tickets', newId), newTicket);
   return newTicket;
 }
 
 export async function resolveTicket(ticketId: string, resolutionNotes: string): Promise<void> {
   const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('tickets')
-    .update({
-      status: 'resolved',
-      resolution_notes: resolutionNotes,
-      updated_at: now,
-    })
-    .eq('id', ticketId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'tickets', ticketId), {
+    status: 'resolved',
+    resolution_notes: resolutionNotes,
+    updated_at: now,
+  });
 
   await triggerAutomationEvent('on_ticket_resolved', {
     ticketNumber: ticketId,
@@ -64,7 +78,7 @@ export async function resolveTicket(ticketId: string, resolutionNotes: string): 
   try {
     const { sendTicketStatusEmail } = await import('./resend');
     await sendTicketStatusEmail(
-      'employee@subedge.com',
+      'employee@oasis.io',
       ticketId,
       'Service Ticket',
       resolutionNotes

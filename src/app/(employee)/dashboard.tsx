@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -27,7 +28,7 @@ import {
   CalendarDays, CheckCircle2,
   Clock, LogIn, LogOut as LogOutIcon,
   Mic, Navigation, Receipt,
-  Users,
+  Users, Globe, Lock, Building2,
 } from 'lucide-react-native';
 
 // Components & Context
@@ -55,6 +56,12 @@ import { getPayslips } from '@/lib/services/payroll';
 // Types & Utils
 import type { Attendance, Employee, LeaveBalance, Payslip } from '@/types';
 import { formatCurrency, formatDate, formatMinutes, formatTime, getGreeting } from '@/utils/format';
+import { ScreenErrorFallback } from '@/components/ui/ScreenErrorBoundary';
+
+// Expo Router renders this if the dashboard subtree throws, instead of crashing the app.
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
+  return <ScreenErrorFallback error={error} retry={retry} />;
+}
 
 // ─── Animated Pulse Clock-In Button ───────────────────────────────────────────
 function PulseButton({ onPress, loading, title, color }: { onPress: () => void; loading: boolean; title: string; color: string }) {
@@ -139,7 +146,9 @@ const clockBtnStyle = StyleSheet.create({
 export default function EmployeeDashboard() {
   const colors = useTheme();
   const { profile } = useAuth();
-  const { officeName } = useTenant();
+  const { officeName, isFeatureEnabled, organization, employee: tenantEmp, workplace: tenantWp } = useTenant();
+  const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id;
+  const isWfhEnabled = isFeatureEnabled('wfh');
   const { unreadCount } = useNotifications();
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -167,13 +176,16 @@ export default function EmployeeDashboard() {
   const loadData = useCallback(async () => {
     if (!profile) return;
     try {
-      const emp = await getEmployeeByProfileId(profile.id);
+      const emp = tenantEmp || (await getEmployeeByProfileId(profile.id, activeOrgId));
+      if (emp && !emp.workplace && tenantWp) {
+        emp.workplace = tenantWp;
+      }
       setEmployee(emp);
       if (emp) {
         const [today, history, balances, payslips] = await Promise.all([
           getTodayAttendance(emp.id),
           getAttendanceHistory(emp.id, 5),
-          getLeaveBalances(emp.id),
+          getLeaveBalances(emp.id, undefined, activeOrgId),
           getPayslips(emp.id),
         ]);
         setTodayAttendance(today);
@@ -183,7 +195,7 @@ export default function EmployeeDashboard() {
       }
     } catch (err) { console.error('Dashboard load error:', err); }
     finally { setLoading(false); }
-  }, [profile]);
+  }, [profile, activeOrgId, tenantEmp, tenantWp]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -223,29 +235,57 @@ export default function EmployeeDashboard() {
     return () => { if (interval) clearInterval(interval); };
   }, [employee]);
 
+  // Remote Clock In state
+  const [isRemoteClock, setIsRemoteClock] = useState(false);
+  const [remoteReason, setRemoteReason] = useState('Work From Home');
+
   const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
 
-  const handleClock = async (type: 'in' | 'out') => {
+  const handleClock = async (type: 'in' | 'out', remote: boolean = false) => {
     setClockError('');
+    if (remote && !isWfhEnabled) {
+      setClockError('Work From Home (WFH) remote clock-in is locked for your organization. Please clock in on-site.');
+      return;
+    }
     setClockLoading(true);
+    setIsRemoteClock(remote);
     try {
-      let loc = { latitude: 0, longitude: 0 };
+      let loc = userLocation;
       try {
         loc = await getCurrentLocation();
         setUserLocation(loc);
       } catch (locErr) {
-        loc = userLocation || { latitude: 20.2961, longitude: 85.8245 };
+        if (!remote && type === 'in') {
+          throw new Error('GPS location required. Please enable location permissions or use Remote Clock-In.');
+        }
       }
 
-      if (employee?.workplace?.latitude && employee?.workplace?.longitude) {
-        const dist = calculateDistance(
-          loc.latitude, loc.longitude,
-          employee.workplace.latitude, employee.workplace.longitude
+      const activeLoc = loc || { latitude: 0, longitude: 0 };
+      setPendingLoc(activeLoc);
+
+      if (employee?.workplace?.latitude && employee?.workplace?.longitude && activeLoc.latitude && activeLoc.longitude) {
+        const dist = Math.round(
+          calculateDistance(
+            activeLoc.latitude, activeLoc.longitude,
+            employee.workplace.latitude, employee.workplace.longitude
+          )
         );
-        setDistance(Math.round(dist));
+        setDistance(dist);
+
+        // Block office clock-in if outside geofence!
+        if (type === 'in' && !remote && dist > geofenceRadius) {
+          setClockError(
+            `You are outside the office geofence (${dist}m away from ${employee.workplace.name || officeName}). Office clock-in requires being within ${geofenceRadius}m. Please move within range or tap "Clock In Remotely (WFH)".`
+          );
+          setClockLoading(false);
+          return;
+        }
+      } else if (type === 'in' && !remote && employee?.workplace?.latitude) {
+        setClockError('Unable to obtain your GPS location to verify office proximity. Please turn on location services or use Remote Clock-In.');
+        setClockLoading(false);
+        return;
       }
 
-      setPendingLoc(loc);
       setFaceModalType(type);
       setShowFaceModal(true);
     } catch (err: unknown) {
@@ -261,8 +301,11 @@ export default function EmployeeDashboard() {
     try {
       const loc = pendingLoc || userLocation || { latitude: 0, longitude: 0 };
       const result = faceModalType === 'in'
-        ? await clockIn(loc.latitude, loc.longitude, faceSnapshot)
-        : await clockOut(loc.latitude, loc.longitude, faceSnapshot);
+        ? await clockIn(loc.latitude, loc.longitude, faceSnapshot, profile?.id, {
+            isRemote: isRemoteClock,
+            remoteReason: isRemoteClock ? remoteReason : undefined,
+          })
+        : await clockOut(loc.latitude, loc.longitude, faceSnapshot, profile?.id);
 
       if (!result.success) {
         setClockError(result.message || 'Operation failed');
@@ -348,6 +391,7 @@ export default function EmployeeDashboard() {
         <ScreenHeader
           eyebrow={getGreeting()}
           title={profile?.full_name?.split(' ')[0] || 'Team Member'}
+          subtitle={organization?.name ? `${organization.name} · Org ID: ${activeOrgId || 'N/A'}` : `Org ID: ${activeOrgId || 'N/A'}`}
           paddingBottom={26}
           right={
             <View style={styles.headerActions}>
@@ -373,7 +417,19 @@ export default function EmployeeDashboard() {
             { label: 'Clock Out', value: todayAttendance?.clock_out ? formatTime(todayAttendance.clock_out) : '--:--' },
             { label: 'Hours', value: todayAttendance?.working_minutes ? formatMinutes(todayAttendance.working_minutes) : '0h 0m', valueColor: '#6EE7B7' },
           ]}
-        />
+        >
+          {/* Organization & Org ID badge */}
+          <View style={styles.orgBadgeWrap}>
+            <Building2 size={13} color="rgba(255,255,255,0.9)" />
+            <Text style={styles.orgBadgeName} numberOfLines={1}>
+              {organization?.name || 'Organization'}
+            </Text>
+            <View style={styles.orgBadgePill}>
+              <Text style={styles.orgBadgePillLabel}>ORG ID</Text>
+              <Text style={styles.orgBadgePillVal}>{activeOrgId || 'N/A'}</Text>
+            </View>
+          </View>
+        </ScreenHeader>
 
         {/* Responsive content */}
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
@@ -390,8 +446,58 @@ export default function EmployeeDashboard() {
                   <Text style={[styles.clockDate, { color: colors.textSecondary }]}>{formatDate(new Date().toISOString())}</Text>
                 </View>
 
+                {/* Outside Geofence Alert (Prior to Clock-In) */}
+                {!todayAttendance && isOutsideGeofence && (
+                  <View style={[styles.banner, { backgroundColor: colors.warningLight, borderColor: `${colors.warning}33`, alignItems: 'flex-start' }]}>
+                    <AlertCircle color={colors.warning} size={18} style={{ marginTop: 2 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.bannerTitle, { color: colors.warning }]}>Outside Assigned Workplace</Text>
+                      <Text style={[styles.bannerBody, { color: colors.warning }]}>
+                        You are {Math.round(distance ?? 0)}m from {employee?.workplace?.name || officeName || 'the office'} (geofence radius: {geofenceRadius}m). Normal clock-in requires being on-site. Use Remote Clock-In if working from home.
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
                 {!todayAttendance && (
-                  <PulseButton title="Clock In for Shift" onPress={() => handleClock('in')} loading={clockLoading} color={primaryColor} />
+                  <View style={{ gap: 10 }}>
+                    <PulseButton
+                      title={isOutsideGeofence ? 'Clock In for Office (Out of Bounds)' : 'Clock In for Shift'}
+                      onPress={() => handleClock('in', false)}
+                      loading={clockLoading}
+                      color={isOutsideGeofence ? '#64748B' : primaryColor}
+                    />
+                    {isWfhEnabled ? (
+                      <Button
+                        title="Clock In Remotely (WFH)"
+                        onPress={() => handleClock('in', true)}
+                        loading={clockLoading}
+                        variant="outline"
+                        size="lg"
+                        fullWidth
+                        icon={<Globe size={18} color={primaryColor} />}
+                        style={{ borderColor: primaryColor }}
+                        textStyle={{ color: primaryColor, fontWeight: '700' }}
+                      />
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() =>
+                          Alert.alert(
+                            'WFH Feature Locked',
+                            'Work From Home (WFH) remote clock-in is locked for your organization. Please clock in on-site within your campus geofence.'
+                          )
+                        }
+                        style={styles.lockedWfhBtn}
+                        activeOpacity={0.75}
+                      >
+                        <Lock size={16} color="#94A3B8" />
+                        <Text style={styles.lockedWfhBtnText}>Clock In Remotely (WFH Locked)</Text>
+                        <View style={styles.lockedWfhTag}>
+                          <Text style={styles.lockedWfhTagText}>LOCKED</Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 )}
                 {isClockedIn && (
                   <View style={{ marginTop: 6 }}>
@@ -406,6 +512,17 @@ export default function EmployeeDashboard() {
                       style={{ backgroundColor: colors.text }}
                       textStyle={{ color: '#FFF' }}
                     />
+                  </View>
+                )}
+                {isClockedIn && todayAttendance?.is_remote && (
+                  <View style={[styles.banner, { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD', alignItems: 'center' }]}>
+                    <Globe size={18} color="#0284C7" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.bannerTitle, { color: '#0284C7' }]}>Remote Shift Active</Text>
+                      <Text style={[styles.bannerBody, { color: '#0369A1' }]}>
+                        Working remotely today ({todayAttendance?.remote_reason || 'WFH'})
+                      </Text>
+                    </View>
                   </View>
                 )}
                 {isClockedOut && (
@@ -424,13 +541,13 @@ export default function EmployeeDashboard() {
                   </View>
                 ) : null}
 
-                {/* Geofence Alert */}
-                {isOutsideGeofence && isClockedIn && (
+                {/* Geofence Alert when clocked in on-site but wandering away */}
+                {isOutsideGeofence && isClockedIn && !todayAttendance?.is_remote && (
                   <View style={[styles.banner, { backgroundColor: colors.warningLight, borderColor: `${colors.warning}33`, alignItems: 'flex-start' }]}>
                     <AlertCircle color={colors.warning} size={20} style={{ marginTop: 2 }} />
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.bannerTitle, { color: colors.warning }]}>Outside Office Zone</Text>
-                      <Text style={[styles.bannerBody, { color: colors.warning }]}>You are {Math.round(distance ?? 0)}m from {employee?.workplace?.name || 'workplace'}. Logged as remote.</Text>
+                      <Text style={[styles.bannerBody, { color: colors.warning }]}>You are {Math.round(distance ?? 0)}m from {employee?.workplace?.name || 'workplace'}.</Text>
                     </View>
                   </View>
                 )}
@@ -604,6 +721,8 @@ export default function EmployeeDashboard() {
         employeeName={profile?.full_name || 'Team Member'}
         officeName={officeName || employee?.workplace?.name || 'Office Workplace'}
         isClockingIn={faceModalType === 'in'}
+        isRemote={isRemoteClock}
+        remoteReason={remoteReason}
       />
     </View>
   );
@@ -635,6 +754,46 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.4)',
+  },
+  orgBadgeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  orgBadgeName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    maxWidth: 200,
+  },
+  orgBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 10,
+  },
+  orgBadgePillLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.75)',
+    letterSpacing: 0.5,
+  },
+  orgBadgePillVal: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6EE7B7',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 
   body: {
@@ -743,5 +902,35 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 10,
+  },
+  lockedWfhBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
+  },
+  lockedWfhBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  lockedWfhTag: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  lockedWfhTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#DC2626',
+    letterSpacing: 0.5,
   },
 });

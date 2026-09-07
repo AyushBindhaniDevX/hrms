@@ -15,28 +15,36 @@ import { ForcePasswordChangeModal } from '@/components/auth/ForcePasswordChangeM
 import { GluestackUIProvider } from '@gluestack-ui/themed';
 import { config } from '@gluestack-ui/config';
 
-// Prevent native splash screen from auto hiding until initialization is complete
-SplashScreen.preventAutoHideAsync().catch(() => {});
+import { View, Text, TouchableOpacity } from 'react-native';
+
+// Immediately hide splash screen to avoid black splash / logo delay
+SplashScreen.hideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
 
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#FFFFFF' }}>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: '#1E293B', marginBottom: 8 }}>
+        Something went wrong
+      </Text>
+      <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 24 }}>
+        {error?.message || 'An unexpected error occurred. Please try again.'}
+      </Text>
+      <TouchableOpacity
+        onPress={retry}
+        style={{ backgroundColor: '#0D7377', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+      >
+        <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Try Again</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function AuthLayoutWrapper({ children }: { children: React.ReactNode }) {
-  const { isLoading } = useAuth();
-
   useEffect(() => {
-    // Hide splash screen once auth loading finishes
-    if (!isLoading) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [isLoading]);
-
-  // Safety fallback: Ensure splash screen hides within 3 seconds regardless of network/auth latency
-  useEffect(() => {
-    const safetyTimer = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    }, 3000);
-
-    return () => clearTimeout(safetyTimer);
+    // Ensure native splash is hidden immediately
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
 
   return (

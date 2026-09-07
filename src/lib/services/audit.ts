@@ -1,5 +1,15 @@
-import { supabase } from '@/lib/supabase';
-import type { AuditLog } from '@/types';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  onSnapshot,
+} from 'firebase/firestore';
+import type { AuditLog, Profile } from '@/types';
 import { Platform } from 'react-native';
 
 export async function createAuditLog(
@@ -11,19 +21,15 @@ export async function createAuditLog(
 ): Promise<void> {
   try {
     let actorName = 'System / Administrator';
-    let actorEmail = 'admin@subedge.com';
+    let actorEmail = 'admin@oasis.io';
     let actorRole = 'admin';
     let actorOrgId: string | null = null;
     let userId: string | null = actorUserId || null;
 
     if (userId) {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (prof) {
+      const profSnap = await getDoc(doc(db, 'profiles', userId));
+      if (profSnap.exists()) {
+        const prof = profSnap.data() as Profile;
         actorName = prof.full_name || actorName;
         actorEmail = prof.email || actorEmail;
         actorRole = prof.role || actorRole;
@@ -32,11 +38,12 @@ export async function createAuditLog(
     }
 
     if (!actorOrgId) {
-      const { data: org } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-      if (org?.id) actorOrgId = org.id;
+      actorOrgId = '00000000-0000-0000-0000-000000000001';
     }
 
-    const logData = {
+    const logId = `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const logData: AuditLog = {
+      id: logId,
       action,
       entity_type: entityType,
       entity_id: entityId || null,
@@ -50,54 +57,53 @@ export async function createAuditLog(
       user: {
         full_name: actorName,
         email: actorEmail,
-        role: actorRole,
+        role: actorRole as any,
       },
       created_at: new Date().toISOString(),
     };
 
-    await supabase.from('audit_logs').insert(logData);
+    await setDoc(doc(db, 'audit_logs', logId), logData);
   } catch (error) {
-    console.error('Error creating audit log in Supabase:', error);
+    console.error('Error creating audit log in Firestore:', error);
   }
 }
 
 export async function getAuditLogs(limitCount = 100, organizationId?: string): Promise<AuditLog[]> {
-  let query = supabase
-    .from('audit_logs')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const snap = await getDocs(collection(db, 'audit_logs'));
+    const logs: AuditLog[] = [];
+    snap.forEach((d) => {
+      const l = { id: d.id, ...d.data() } as AuditLog;
+      if (!organizationId || !l.organization_id || l.organization_id === organizationId) {
+        logs.push(l);
+      }
+    });
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId);
+    logs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return logs.slice(0, limitCount);
+  } catch (err) {
+    console.error('getAuditLogs error:', err);
+    return [];
   }
-
-  const { data, error } = await query.limit(limitCount);
-
-  if (error || !data) return [];
-  return data as AuditLog[];
 }
 
 export function subscribeToAuditLogs(
   onUpdate: (logs: AuditLog[]) => void
 ): () => void {
-  getAuditLogs().then(onUpdate);
+  const q = collection(db, 'audit_logs');
 
-  const channel = supabase
-    .channel('public:audit_logs')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'audit_logs',
-      },
-      () => {
-        getAuditLogs().then(onUpdate);
-      }
-    )
-    .subscribe();
+  const unsubscribe = onSnapshot(
+    q,
+    (snapshot) => {
+      const logs: AuditLog[] = [];
+      snapshot.forEach((d) => logs.push({ id: d.id, ...d.data() } as AuditLog));
+      logs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      onUpdate(logs.slice(0, 100));
+    },
+    (err) => {
+      console.warn('subscribeToAuditLogs error:', err);
+    }
+  );
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return unsubscribe;
 }

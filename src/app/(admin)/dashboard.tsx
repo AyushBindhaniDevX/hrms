@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
   TouchableOpacity,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,7 +22,8 @@ import { getEmployeeCount } from '@/lib/services/employee';
 import { getAttendanceStats } from '@/lib/services/attendance';
 import { getOrgUsers, getOrganization } from '@/lib/services/organization';
 import { getAuditLogs } from '@/lib/services/audit';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { useBiometrics } from '@/hooks/useBiometrics';
 import { OrgSetupWizard } from '@/components/admin/OrgSetupWizard';
 import { formatDate, formatDateTime, getGreeting } from '@/utils/format';
@@ -46,6 +48,7 @@ import {
   Radio,
   Fingerprint,
   Zap,
+  Building2,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -65,6 +68,7 @@ export default function AdminDashboard() {
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, late: 0, halfDay: 0, total: 0 });
   const [recentLogs, setRecentLogs] = useState<AuditLog[]>([]);
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const currentOrgId = organization?.id || tenantOrg?.id || profile?.organization_id;
   const [showWizard, setShowWizard] = useState(false);
   const [latencyMs, setLatencyMs] = useState<number>(24);
   const [lastLivePing, setLastLivePing] = useState<Date>(new Date());
@@ -107,26 +111,20 @@ export default function AdminDashboard() {
     load();
   }, [load]);
 
-  // Real-time PostgreSQL update subscription via Supabase Realtime Channels
+  // Real-time Firestore update subscription via onSnapshot
   useEffect(() => {
     if (!profile) return;
     const orgId = tenantOrg?.id || profile.organization_id;
 
-    const channel = supabase
-      .channel('admin-dashboard-realtime-sub')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'audit_logs' }, () => {
-        load();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => {
-        load();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        load();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => {
-        load();
-      })
-      .subscribe();
+    const qAudit = query(collection(db, 'audit_logs'), where('organization_id', '==', orgId));
+    const unsubAudit = onSnapshot(qAudit, () => {
+      load();
+    }, (err) => console.warn('Realtime audit listener error:', err));
+
+    const qAttendance = query(collection(db, 'attendance'), where('organization_id', '==', orgId));
+    const unsubAttendance = onSnapshot(qAttendance, () => {
+      load();
+    }, (err) => console.warn('Realtime attendance listener error:', err));
 
     // Heartbeat ping interval
     const timer = setInterval(() => {
@@ -134,7 +132,8 @@ export default function AdminDashboard() {
     }, 10000);
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubAudit();
+      unsubAttendance();
       clearInterval(timer);
     };
   }, [profile, tenantOrg, load]);
@@ -260,13 +259,15 @@ export default function AdminDashboard() {
           </View>
           <View style={mStyles.orgDivider} />
           <View style={mStyles.orgChip}>
-            <Text style={mStyles.orgChipLabel}>Active Accounts</Text>
-            <Text style={mStyles.orgChipValue}>{activeCount}</Text>
+            <Text style={mStyles.orgChipLabel}>Org ID</Text>
+            <Text style={[mStyles.orgChipValue, { color: '#6EE7B7', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 11 }]} numberOfLines={1}>
+              {currentOrgId || 'N/A'}
+            </Text>
           </View>
           <View style={mStyles.orgDivider} />
           <View style={mStyles.orgChip}>
-            <Text style={mStyles.orgChipLabel}>HR Managers</Text>
-            <Text style={mStyles.orgChipValue}>{hrCount}</Text>
+            <Text style={mStyles.orgChipLabel}>Active Staff</Text>
+            <Text style={mStyles.orgChipValue}>{empCount}</Text>
           </View>
         </View>
       </View>
@@ -331,11 +332,11 @@ export default function AdminDashboard() {
           <View style={{ paddingHorizontal: 16, paddingBottom: 14, gap: 10 }}>
             <View style={mStyles.infraRow}>
               <Text style={mStyles.infraLabel}>Database Engine</Text>
-              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Supabase PostgreSQL Realtime</Text>
+              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Cloud Firestore Realtime</Text>
             </View>
             <View style={mStyles.infraRow}>
               <Text style={mStyles.infraLabel}>Identity & Auth</Text>
-              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Supabase Auth Multi-Tenant</Text>
+              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Firebase Auth Multi-Tenant</Text>
             </View>
             <View style={mStyles.infraRow}>
               <Text style={mStyles.infraLabel}>Biometric Vault</Text>
@@ -419,9 +420,24 @@ export default function AdminDashboard() {
           <Text style={{ fontSize: 28, fontWeight: '800', color: colors.text, letterSpacing: -0.5 }}>
             {profile?.full_name || 'Administrator'}
           </Text>
-          <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-            {formatDate(new Date().toISOString())} · Real-time Admin Control Console
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+            <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+              {formatDate(new Date().toISOString())} · Real-time Admin Control Console
+            </Text>
+            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primaryLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: `${colors.primary}25` }}>
+              <Building2 size={13} color={colors.primary} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                {organization?.name || 'Organization'}
+              </Text>
+              <Text style={{ fontSize: 11, color: colors.primary, opacity: 0.6 }}>·</Text>
+              <View style={{ backgroundColor: colors.primary, paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
+                <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFF', letterSpacing: 0.4 }}>
+                  ORG ID: {currentOrgId || 'N/A'}
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
         <Avatar name={profile?.full_name || 'Admin'} url={profile?.avatar_url} size={48} />
       </View>
@@ -496,11 +512,11 @@ export default function AdminDashboard() {
               <View style={styles.infraGrid}>
                 <View style={styles.infraItem}>
                   <Text style={styles.infraLabel}>Database</Text>
-                  <Text style={[styles.infraVal, { color: '#006a61' }]}>Supabase PostgreSQL (Connected)</Text>
+                  <Text style={[styles.infraVal, { color: '#006a61' }]}>Cloud Firestore (Connected)</Text>
                 </View>
                 <View style={styles.infraItem}>
                   <Text style={styles.infraLabel}>Auth Service</Text>
-                  <Text style={[styles.infraVal, { color: '#006a61' }]}>Supabase Auth (GoTrue)</Text>
+                  <Text style={[styles.infraVal, { color: '#006a61' }]}>Firebase Auth</Text>
                 </View>
                 <View style={styles.infraItem}>
                   <Text style={styles.infraLabel}>Org ID</Text>

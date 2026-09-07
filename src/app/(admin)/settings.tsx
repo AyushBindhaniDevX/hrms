@@ -161,7 +161,7 @@ export default function SettingsScreen() {
           <View style={[styles.alertBox, { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }]}>
             <CheckCircle2 size={18} color="#006a61" />
             <Text style={{ color: '#006a61', fontWeight: '700', fontSize: 14 }}>
-              Organization settings saved successfully to Supabase!
+              Organization settings saved successfully!
             </Text>
           </View>
         )}
@@ -189,11 +189,11 @@ export default function SettingsScreen() {
           <View style={{ gap: 10, paddingHorizontal: 4 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Authentication Engine</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Supabase Auth (Active)</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Firebase Auth (Active)</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Database & Realtime</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Supabase PostgreSQL (Realtime)</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Cloud Firestore (Realtime)</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Biometrics & Security</Text>

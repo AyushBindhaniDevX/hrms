@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  useWindowDimensions, RefreshControl,
+  useWindowDimensions, RefreshControl, Platform,
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { HR_NAV } from '@/constants/navigation';
@@ -24,6 +24,7 @@ import {
   Users, Calendar, Umbrella, CreditCard, Network, Briefcase,
   ArrowRight, CheckCircle2, XCircle, Clock, Award, BarChart3,
   Receipt, Laptop, GraduationCap, FileText, MapPin, LifeBuoy,
+  Building2,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -31,6 +32,7 @@ export default function HRDashboard() {
   const colors = useTheme();
   const { profile, role } = useAuth();
   const { organization: tenantOrg } = useTenant();
+  const activeOrgId = tenantOrg?.id || profile?.organization_id;
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -118,6 +120,16 @@ export default function HRDashboard() {
             <Text style={mStyles.heroGreeting}>{getGreeting()}</Text>
             <Text style={mStyles.heroName}>{profile?.full_name?.split(' ')[0] ?? 'HR'}</Text>
             <Text style={mStyles.heroDate}>HR Management Console</Text>
+            <View style={mStyles.orgBadge}>
+              <Building2 size={11} color="rgba(255,255,255,0.85)" />
+              <Text style={mStyles.orgBadgeName} numberOfLines={1}>
+                {tenantOrg?.name || 'Organization'}
+              </Text>
+              <View style={mStyles.orgBadgePill}>
+                <Text style={mStyles.orgBadgePillLabel}>ORG ID</Text>
+                <Text style={mStyles.orgBadgePillVal}>{activeOrgId || 'N/A'}</Text>
+              </View>
+            </View>
           </View>
           {profile && (
             <View style={mStyles.heroAvatarRing}>
@@ -249,9 +261,24 @@ export default function HRDashboard() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       <Text style={[styles.pageTitle, { color: colors.text }]}>HR Dashboard</Text>
-      <Text style={{ color: colors.textSecondary, marginBottom: 16, fontSize: 15 }}>
-        Welcome back, {profile?.full_name}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <Text style={{ color: colors.textSecondary, fontSize: 15 }}>
+          Welcome back, {profile?.full_name}
+        </Text>
+        <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primaryLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: `${colors.primary}25` }}>
+          <Building2 size={13} color={colors.primary} />
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+            {tenantOrg?.name || 'Organization'}
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.primary, opacity: 0.6 }}>·</Text>
+          <View style={{ backgroundColor: colors.primary, paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
+            <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFF', letterSpacing: 0.4 }}>
+              ORG ID: {activeOrgId || 'N/A'}
+            </Text>
+          </View>
+        </View>
+      </View>
 
       {/* Stats */}
       <View style={[styles.statsGrid, styles.statsGridDesktop]}>
@@ -370,6 +397,46 @@ const mStyles = StyleSheet.create({
   heroGreeting: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600', letterSpacing: 0.3 },
   heroName: { fontSize: 26, color: '#FFFFFF', fontWeight: '800', marginTop: 2, letterSpacing: -0.5 },
   heroDate: { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 4 },
+  orgBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  orgBadgeName: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    maxWidth: 130,
+  },
+  orgBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  orgBadgePillLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.75)',
+    letterSpacing: 0.4,
+  },
+  orgBadgePillVal: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#6EE7B7',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
   heroAvatarRing: {
     width: 52, height: 52, borderRadius: 26,
     borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.4)',

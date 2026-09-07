@@ -56,7 +56,7 @@ export function AnalyticalCard({
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.categoryText, { color: colors.textSecondary }]}>{category.toUpperCase()}</Text>
+          <Text style={[styles.categoryText, { color: colors.textSecondary }]}>{String(category || '').toUpperCase()}</Text>
           <Text style={[styles.kpiTitleText, { color: colors.text }]} numberOfLines={1}>
             {kpiTitle}
           </Text>

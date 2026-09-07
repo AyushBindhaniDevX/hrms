@@ -10,11 +10,16 @@ import {
   RefreshControl,
   useWindowDimensions,
   Platform,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '@/hooks/use-theme';
 import { LoadingState } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
+import { getEmployeeByProfileId } from '@/lib/services/employee';
 import { getTickets, createTicket } from '@/lib/services/helpdesk';
 import { SupportTicket, TicketCategory, TicketPriority } from '@/types/database';
 import {
@@ -38,13 +43,20 @@ const CATEGORIES: { key: TicketCategory; label: string }[] = [
 
 export default function EmployeeHelpdeskScreen() {
   const colors = useTheme();
+  const { profile } = useAuth();
+  const { organization, employee: tenantEmp } = useTenant();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
+  const isDesktop = width >= 1024;
+  const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
+
+  const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
 
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [empId, setEmpId] = useState('');
 
   // Form
   const [title, setTitle] = useState('');
@@ -53,8 +65,12 @@ export default function EmployeeHelpdeskScreen() {
   const [desc, setDesc] = useState('');
 
   const loadData = async () => {
+    if (!profile) return;
     try {
-      const data = await getTickets('emp_demo');
+      const emp = tenantEmp || (await getEmployeeByProfileId(profile.id, activeOrgId));
+      const targetEmpId = emp?.id || profile.id;
+      setEmpId(targetEmpId);
+      const data = await getTickets(targetEmpId, activeOrgId);
       setTickets(data);
     } catch (e) {
       console.error(e);
@@ -63,16 +79,18 @@ export default function EmployeeHelpdeskScreen() {
       setRefreshing(false);
     }
   };
+
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [])
+    }, [profile, activeOrgId, tenantEmp])
   );
+
   const handleSubmit = async () => {
     if (!title.trim() || !desc.trim()) return;
     await createTicket({
-      organization_id: 'subedge_org',
-      employee_id: 'emp_demo',
+      organization_id: activeOrgId,
+      employee_id: empId || profile?.id || 'emp-user',
       title,
       category: cat,
       priority,
@@ -88,70 +106,95 @@ export default function EmployeeHelpdeskScreen() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isDesktop) {
     return (
-      <View style={[mStyles.root, { backgroundColor: colors.background }]}>
-        <Animated.View entering={FadeInDown.duration(300).springify()} style={[mStyles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <Text style={[mStyles.headerTitle, { color: colors.text }]}>Helpdesk</Text>
-        </Animated.View>
+      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+          {/* Top bounce underlay matching hero header */}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 250, backgroundColor: '#004D47' }} />
 
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
-          showsVerticalScrollIndicator={false}
-        >
-          <Animated.View entering={FadeInDown.delay(100).duration(300).springify()}>
-            <Text style={[mStyles.sectionTitle, { color: colors.text }]}>My Tickets ({tickets.length})</Text>
-
-            {tickets.length === 0 ? (
-              <View style={mStyles.emptyState}>
-                <LifeBuoy size={40} color={colors.textSecondary} />
-                <Text style={mStyles.emptyText}>No active tickets. You're all good!</Text>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 100 }}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor="#FFFFFF" colors={['#004D47']} />}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ── Dark Hero Header ── */}
+            <View style={[mStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
+              <Text style={mStyles.heroTag}>SUPPORT CENTER</Text>
+              <Text style={mStyles.heroTitle}>Helpdesk</Text>
+              <View style={mStyles.heroStatsRow}>
+                <View style={mStyles.heroStatCol}>
+                  <Text style={mStyles.heroStatLabel}>Open</Text>
+                  <Text style={mStyles.heroStatVal}>{tickets.filter(t => t.status === 'open').length}</Text>
+                </View>
+                <View style={mStyles.heroStatDivider} />
+                <View style={mStyles.heroStatCol}>
+                  <Text style={mStyles.heroStatLabel}>In Progress</Text>
+                  <Text style={[mStyles.heroStatVal, { color: '#7DD3FC' }]}>{tickets.filter(t => t.status === 'in_progress').length}</Text>
+                </View>
+                <View style={mStyles.heroStatDivider} />
+                <View style={mStyles.heroStatCol}>
+                  <Text style={mStyles.heroStatLabel}>Resolved</Text>
+                  <Text style={[mStyles.heroStatVal, { color: '#6EE7B7' }]}>{tickets.filter(t => t.status === 'resolved').length}</Text>
+                </View>
               </View>
-            ) : (
-              <View style={{ gap: 12 }}>
-                {tickets.map((t, idx) => (
-                  <Animated.View key={t.id} entering={FadeInDown.delay(idx * 80).duration(300).springify()}>
-                    <View style={[mStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      <View style={mStyles.cardHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Text style={mStyles.tktNum}>{t.ticket_number}</Text>
-                          <Text style={mStyles.tktCat}>{t.category.replace('_', ' ').toUpperCase()}</Text>
+            </View>
+
+            {/* ── Tickets List ── */}
+            <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+              <Text style={mStyles.sectionTitle}>My Tickets ({tickets.length})</Text>
+
+              {tickets.length === 0 ? (
+                <View style={mStyles.emptyState}>
+                  <LifeBuoy size={40} color="#94A3B8" />
+                  <Text style={mStyles.emptyText}>No active tickets. You're all good!</Text>
+                </View>
+              ) : (
+                <View style={{ gap: 12 }}>
+                  {tickets.map((t, idx) => (
+                    <Animated.View key={t.id} entering={FadeInDown.delay(idx * 80).duration(300).springify()}>
+                      <View style={[mStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        <View style={mStyles.cardHeader}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={mStyles.tktNum}>{t.ticket_number}</Text>
+                            <Text style={mStyles.tktCat}>{String(t.category || '').replace('_', ' ').toUpperCase()}</Text>
+                          </View>
+                          <View style={[mStyles.statusBadge, t.status === 'resolved' ? { backgroundColor: '#D1FAE5' } : t.status === 'in_progress' ? { backgroundColor: '#CCECEC' } : { backgroundColor: '#FEF3C7' }]}>
+                            <Text style={[mStyles.statusBadgeText, t.status === 'resolved' ? { color: '#059669' } : t.status === 'in_progress' ? { color: '#0D7377' } : { color: '#D97706' }]}>
+                              {String(t.status || '').replace('_', ' ').toUpperCase()}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={[mStyles.statusBadge, t.status === 'resolved' ? { backgroundColor: '#D1FAE5' } : t.status === 'in_progress' ? { backgroundColor: '#CCECEC' } : { backgroundColor: '#FEF3C7' }]}>
-                          <Text style={[mStyles.statusBadgeText, t.status === 'resolved' ? { color: '#059669' } : t.status === 'in_progress' ? { color: '#0D7377' } : { color: '#D97706' }]}>
-                            {t.status.replace('_', ' ').toUpperCase()}
+                        
+                        <Text style={[mStyles.tktTitle, { color: colors.text }]}>{t.title}</Text>
+                        <Text style={[mStyles.tktDesc, { color: colors.textSecondary }]} numberOfLines={2}>{t.description}</Text>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
+                          <AlertCircle size={12} color={t.priority === 'urgent' || t.priority === 'high' ? '#DC2626' : colors.textSecondary} />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: t.priority === 'urgent' || t.priority === 'high' ? '#DC2626' : colors.textSecondary, textTransform: 'uppercase' }}>
+                            Priority: {t.priority}
                           </Text>
                         </View>
+
+                        {t.resolution_notes ? (
+                          <View style={mStyles.resBox}>
+                            <Text style={mStyles.resLabel}>Resolution from Support:</Text>
+                            <Text style={mStyles.resText}>{t.resolution_notes}</Text>
+                          </View>
+                        ) : null}
                       </View>
-                      
-                      <Text style={[mStyles.tktTitle, { color: colors.text }]}>{t.title}</Text>
-                      <Text style={[mStyles.tktDesc, { color: colors.textSecondary }]} numberOfLines={2}>{t.description}</Text>
+                    </Animated.View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </ScrollView>
 
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
-                        <AlertCircle size={12} color={t.priority === 'urgent' || t.priority === 'high' ? '#DC2626' : colors.textSecondary} />
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: t.priority === 'urgent' || t.priority === 'high' ? '#DC2626' : colors.textSecondary, textTransform: 'uppercase' }}>
-                          Priority: {t.priority}
-                        </Text>
-                      </View>
-
-                      {t.resolution_notes ? (
-                        <View style={mStyles.resBox}>
-                          <Text style={mStyles.resLabel}>Resolution from Support:</Text>
-                          <Text style={mStyles.resText}>{t.resolution_notes}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </Animated.View>
-                ))}
-              </View>
-            )}
-          </Animated.View>
-          <View style={{ height: 80 }} />
-        </ScrollView>
-
-        <TouchableOpacity onPress={() => setShowModal(true)} style={mStyles.fab} activeOpacity={0.8}>
-          <Plus size={24} color="#FFF" />
-        </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowModal(true)} style={mStyles.fab} activeOpacity={0.8}>
+            <Plus size={24} color="#FFF" />
+          </TouchableOpacity>
 
         {/* Mobile Modal */}
         <RNModal visible={showModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowModal(false)}>
@@ -214,6 +257,7 @@ export default function EmployeeHelpdeskScreen() {
             </ScrollView>
           </View>
         </RNModal>
+        </View>
       </View>
     );
   }
@@ -241,7 +285,7 @@ export default function EmployeeHelpdeskScreen() {
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={styles.tktNum}>{t.ticket_number}</Text>
-                    <Text style={styles.tktCat}>{t.category.toUpperCase()}</Text>
+                    <Text style={styles.tktCat}>{String(t.category || '').toUpperCase()}</Text>
                   </View>
                   <Text style={styles.tktTitle}>{t.title}</Text>
                   <Text style={styles.tktDesc}>{t.description}</Text>
@@ -254,7 +298,7 @@ export default function EmployeeHelpdeskScreen() {
                 </View>
                 <View style={[styles.statusBadge, t.status === 'resolved' && { backgroundColor: '#D1FAE5' }, t.status === 'in_progress' && { backgroundColor: '#CCECEC' }, t.status === 'open' && { backgroundColor: '#FEF3C7' }]}>
                   <Text style={[styles.statusBadgeText, t.status === 'resolved' && { color: '#059669' }, t.status === 'in_progress' && { color: '#0D7377' }, t.status === 'open' && { color: '#D97706' }]}>
-                    {t.status.replace('_', ' ').toUpperCase()}
+                    {String(t.status || '').replace('_', ' ').toUpperCase()}
                   </Text>
                 </View>
               </View>
@@ -305,23 +349,55 @@ export default function EmployeeHelpdeskScreen() {
 
 // ─── MOBILE STYLES ─────────────────────────────────────────────────────────────
 const mStyles = StyleSheet.create({
-  root: { flex: 1 },
-  header: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+  heroGradient: {
+    backgroundColor: '#004D47',
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+  },
+  heroTag: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 4,
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+  },
+  heroStatsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    marginTop: 16,
+  },
+  heroStatCol: {
+    flex: 1,
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 22,
+  heroStatLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  heroStatVal: {
+    fontSize: 18,
     fontWeight: '800',
-    color: '#0F172A',
-    paddingHorizontal: 20,
-    letterSpacing: -0.5,
+    color: '#FFFFFF',
+  },
+  heroStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 12 },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 40 },
@@ -341,7 +417,7 @@ const mStyles = StyleSheet.create({
   resText: { fontSize: 13, color: '#15803D' },
 
   fab: {
-    position: 'absolute', right: 20, bottom: 20,
+    position: 'absolute', right: 20, bottom: 90,
     backgroundColor: '#0D7377', width: 56, height: 56, borderRadius: 28,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 5,

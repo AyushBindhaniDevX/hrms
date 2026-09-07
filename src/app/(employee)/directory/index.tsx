@@ -12,6 +12,8 @@ import type { Employee, Department } from '@/types';
 import { Mail, MessageSquare, Search, Users, Phone, Building, Briefcase, MapPin, Calendar, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
+
+const AnyFlashList = FlashList as any;
 export default function DirectoryScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
@@ -159,11 +161,11 @@ export default function DirectoryScreen() {
         </View>
       ) : (
         <View style={{ flex: 1, minHeight: 600, width: '100%' }}>
-          <FlashList
+          <AnyFlashList
             data={employees}
             numColumns={isDesktop ? 3 : 1}
             estimatedItemSize={220}
-            renderItem={({ item: emp }) => (
+            renderItem={({ item: emp }: any) => (
               <View style={{ flex: 1, padding: 8 }}>
                 <TouchableOpacity
                   activeOpacity={0.85}

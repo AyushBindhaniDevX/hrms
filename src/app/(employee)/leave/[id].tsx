@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingState } from '@/components/ui/States';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { cancelLeave } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
 import type { LeaveRequest } from '@/types';
@@ -24,14 +25,25 @@ export default function LeaveDetailScreen() {
   useEffect(() => {
     (async () => {
       if (!id) return;
-      const { data } = await supabase
-        .from('leave_requests')
-        .select('*, leave_type:leave_types(*)')
-        .eq('id', id)
-        .maybeSingle();
-
-      setRequest((data || null) as LeaveRequest | null);
-      setLoading(false);
+      try {
+        const snap = await getDoc(doc(db, 'leave_requests', id));
+        if (snap.exists()) {
+          const data = { id: snap.id, ...snap.data() } as LeaveRequest;
+          if (data.leave_type_id) {
+            const ltSnap = await getDoc(doc(db, 'leave_types', data.leave_type_id));
+            if (ltSnap.exists()) {
+              (data as any).leave_type = { id: ltSnap.id, ...ltSnap.data() };
+            }
+          }
+          setRequest(data);
+        } else {
+          setRequest(null);
+        }
+      } catch (err) {
+        console.error('Failed to load leave request detail:', err);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [id]);
 

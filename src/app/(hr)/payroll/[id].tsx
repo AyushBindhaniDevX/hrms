@@ -33,7 +33,8 @@ import {
   calculateStatutoryForEmployee,
 } from '@/lib/services/payroll';
 import { getAllEmployees } from '@/lib/services/employee';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { formatCurrency } from '@/utils/format';
 import { MONTHS } from '@/constants/config';
 import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
@@ -93,12 +94,12 @@ export default function PayrollDetailScreen() {
     setError(null);
     try {
       const orgId = tenantOrg?.id || profile?.organization_id;
-      const [periodRes, entriesData, emps] = await Promise.all([
-        supabase.from('payroll_periods').select('*').eq('id', id!).single(),
+      const [periodSnap, entriesData, emps] = await Promise.all([
+        getDoc(doc(db, 'payroll_periods', id!)),
         getPayrollEntries(id!),
         getAllEmployees(orgId),
       ]);
-      setPeriod(periodRes.data as PayrollPeriod);
+      setPeriod(periodSnap.exists() ? ({ id: periodSnap.id, ...periodSnap.data() } as PayrollPeriod) : null);
       setEntries(entriesData);
       setEmployees(emps);
       if (emps.length > 0 && !selEmpId) {

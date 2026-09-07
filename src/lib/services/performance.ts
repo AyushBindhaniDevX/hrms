@@ -1,4 +1,16 @@
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from 'firebase/firestore';
 import type {
   Goal,
   KeyResult,
@@ -9,6 +21,7 @@ import type {
   AppraisalRecommendation,
   Employee,
   Profile,
+  Department,
 } from '@/types';
 import { createAuditLog } from './audit';
 import { createNotification } from './notifications';
@@ -22,51 +35,83 @@ export async function getGoals(options?: {
   status?: string;
   organizationId?: string;
 }): Promise<Goal[]> {
-  let query = supabase.from('goals').select('*, employee:employees(*, profile:profiles(*)), department:departments(*)');
+  try {
+    const [goalsSnap, empsSnap, profsSnap, deptsSnap] = await Promise.all([
+      getDocs(collection(db, 'goals')),
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'profiles')),
+      getDocs(collection(db, 'departments')),
+    ]);
 
-  if (options?.employeeId) query = query.eq('employee_id', options.employeeId);
-  if (options?.departmentId) query = query.eq('department_id', options.departmentId);
-  if (options?.category) query = query.eq('category', options.category);
-  if (options?.status) query = query.eq('status', options.status);
-  if (options?.organizationId) query = query.or(`organization_id.eq.${options.organizationId},organization_id.is.null`);
+    const profMap = new Map<string, Profile>();
+    profsSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
 
-  const { data, error } = await query.order('created_at', { ascending: false });
-  if (error || !data) return [];
-  return data as Goal[];
+    const deptMap = new Map<string, Department>();
+    deptsSnap.forEach((d) => deptMap.set(d.id, { id: d.id, ...d.data() } as Department));
+
+    const empMap = new Map<string, Employee>();
+    empsSnap.forEach((d) => {
+      const emp = { id: d.id, ...d.data() } as Employee;
+      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+      empMap.set(d.id, emp);
+    });
+
+    const goals: Goal[] = [];
+    goalsSnap.forEach((d) => {
+      const g = { id: d.id, ...d.data() } as Goal;
+      if (options?.employeeId && g.employee_id !== options.employeeId) return;
+      if (options?.departmentId && g.department_id !== options.departmentId) return;
+      if (options?.category && g.category !== options.category) return;
+      if (options?.status && g.status !== options.status) return;
+      if (options?.organizationId && g.organization_id && g.organization_id !== options.organizationId) return;
+
+      g.employee = g.employee_id ? empMap.get(g.employee_id) : undefined;
+      g.department = g.department_id ? deptMap.get(g.department_id) : undefined;
+      goals.push(g);
+    });
+
+    goals.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return goals;
+  } catch (err) {
+    console.error('getGoals error:', err);
+    return [];
+  }
 }
 
 export async function createGoal(
   data: Omit<Goal, 'id' | 'created_at' | 'updated_at'>,
   userId?: string
 ): Promise<Goal> {
+  const goalId = `goal_${Date.now()}`;
   const now = new Date().toISOString();
-  const { data: result, error } = await supabase
-    .from('goals')
-    .insert({
-      ...data,
-      created_at: now,
-      updated_at: now,
-    })
-    .select('*')
-    .single();
+  const goal: Goal = {
+    ...data,
+    id: goalId,
+    created_at: now,
+    updated_at: now,
+  };
 
-  if (error) throw error;
+  await setDoc(doc(db, 'goals', goalId), goal);
 
-  await createAuditLog('CREATE_GOAL', 'goal', result.id, {
-    title: result.title,
-    category: result.category,
-    priority: result.priority,
+  await createAuditLog('CREATE_GOAL', 'goal', goalId, {
+    title: goal.title,
+    category: goal.category,
+    priority: goal.priority,
   });
 
-  return result as Goal;
+  return goal;
 }
 
 export async function deleteGoal(goalId: string, userId?: string): Promise<boolean> {
-  const { error } = await supabase.from('goals').delete().eq('id', goalId);
-  if (!error && userId) {
-    await createAuditLog('DELETE_GOAL', 'goal', goalId, { deleted_by: userId });
+  try {
+    await deleteDoc(doc(db, 'goals', goalId));
+    if (userId) {
+      await createAuditLog('DELETE_GOAL', 'goal', goalId, { deleted_by: userId });
+    }
+    return true;
+  } catch {
+    return false;
   }
-  return !error;
 }
 
 export async function updateGoal(
@@ -75,15 +120,9 @@ export async function updateGoal(
   userId?: string
 ): Promise<Goal> {
   const now = new Date().toISOString();
-  const { data: result, error } = await supabase
-    .from('goals')
-    .update({ ...data, updated_at: now })
-    .eq('id', id)
-    .select('*')
-    .single();
-
-  if (error) throw error;
-  return result as Goal;
+  await updateDoc(doc(db, 'goals', id), { ...data, updated_at: now });
+  const snap = await getDoc(doc(db, 'goals', id));
+  return { id: snap.id, ...snap.data() } as Goal;
 }
 
 export async function updateKeyResult(
@@ -92,13 +131,9 @@ export async function updateKeyResult(
   currentValue: number,
   userId?: string
 ): Promise<Goal> {
-  const { data: goal } = await supabase
-    .from('goals')
-    .select('*')
-    .eq('id', goalId)
-    .single();
-
-  if (!goal) throw new Error('Goal not found');
+  const snap = await getDoc(doc(db, 'goals', goalId));
+  if (!snap.exists()) throw new Error('Goal not found');
+  const goal = snap.data() as Goal;
 
   const keyResults = (goal.key_results || []).map((kr: KeyResult) => {
     if (kr.id === krId) {
@@ -121,41 +156,65 @@ export async function getAppraisals(options?: {
   period?: string;
   organizationId?: string;
 }): Promise<AppraisalReview[]> {
-  let query = supabase.from('appraisal_reviews').select('*, employee:employees(*, profile:profiles(*)), reviewer:profiles(*)');
+  try {
+    const [appSnap, empsSnap, profsSnap] = await Promise.all([
+      getDocs(collection(db, 'appraisal_reviews')),
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'profiles')),
+    ]);
 
-  if (options?.employeeId) query = query.eq('employee_id', options.employeeId);
-  if (options?.status) query = query.eq('status', options.status);
-  if (options?.period) query = query.eq('period', options.period);
-  if (options?.organizationId) query = query.or(`organization_id.eq.${options.organizationId},organization_id.is.null`);
+    const profMap = new Map<string, Profile>();
+    profsSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
 
-  const { data, error } = await query.order('created_at', { ascending: false });
-  if (error || !data) return [];
-  return data as AppraisalReview[];
+    const empMap = new Map<string, Employee>();
+    empsSnap.forEach((d) => {
+      const emp = { id: d.id, ...d.data() } as Employee;
+      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+      empMap.set(d.id, emp);
+    });
+
+    const appraisals: AppraisalReview[] = [];
+    appSnap.forEach((d) => {
+      const a = { id: d.id, ...d.data() } as AppraisalReview;
+      if (options?.employeeId && a.employee_id !== options.employeeId) return;
+      if (options?.status && a.status !== options.status) return;
+      if (options?.period && a.period !== options.period) return;
+      if (options?.organizationId && a.organization_id && a.organization_id !== options.organizationId) return;
+
+      a.employee = a.employee_id ? empMap.get(a.employee_id) : undefined;
+      a.reviewer = a.reviewer_id ? profMap.get(a.reviewer_id) : undefined;
+      appraisals.push(a);
+    });
+
+    appraisals.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return appraisals;
+  } catch (err) {
+    console.error('getAppraisals error:', err);
+    return [];
+  }
 }
 
 export async function createAppraisal(
   data: Omit<AppraisalReview, 'id' | 'created_at' | 'updated_at'>,
   userId?: string
 ): Promise<AppraisalReview> {
+  const appId = `app_${Date.now()}`;
   const now = new Date().toISOString();
-  const { data: result, error } = await supabase
-    .from('appraisal_reviews')
-    .insert({
-      ...data,
-      created_at: now,
-      updated_at: now,
-    })
-    .select('*')
-    .single();
+  const appraisal: AppraisalReview = {
+    ...data,
+    id: appId,
+    created_at: now,
+    updated_at: now,
+  };
 
-  if (error) throw error;
+  await setDoc(doc(db, 'appraisal_reviews', appId), appraisal);
 
-  await createAuditLog('INITIATE_APPRAISAL', 'appraisal_review', result.id, {
-    cycle: result.cycle_name,
-    employee_id: result.employee_id,
+  await createAuditLog('INITIATE_APPRAISAL', 'appraisal_review', appId, {
+    cycle: appraisal.cycle_name,
+    employee_id: appraisal.employee_id,
   });
 
-  return result as AppraisalReview;
+  return appraisal;
 }
 
 export async function submitSelfReview(
@@ -168,19 +227,14 @@ export async function submitSelfReview(
   userId?: string
 ): Promise<void> {
   const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('appraisal_reviews')
-    .update({
-      self_rating: data.self_rating,
-      self_comments: data.self_comments,
-      ratings_breakdown: data.ratings_breakdown || null,
-      self_submitted_at: now,
-      status: 'manager_review',
-      updated_at: now,
-    })
-    .eq('id', id);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'appraisal_reviews', id), {
+    self_rating: data.self_rating,
+    self_comments: data.self_comments,
+    ratings_breakdown: data.ratings_breakdown || null,
+    self_submitted_at: now,
+    status: 'manager_review',
+    updated_at: now,
+  });
 
   await createAuditLog('SUBMIT_SELF_APPRAISAL', 'appraisal_review', id, {
     rating: data.self_rating,
@@ -200,22 +254,17 @@ export async function submitManagerReview(
   employeeProfileId?: string
 ): Promise<void> {
   const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('appraisal_reviews')
-    .update({
-      manager_rating: data.manager_rating,
-      manager_comments: data.manager_comments,
-      overall_score: data.overall_score,
-      recommendation: data.recommendation,
-      ratings_breakdown: data.ratings_breakdown || null,
-      reviewer_id: data.reviewer_id,
-      manager_submitted_at: now,
-      status: 'completed',
-      updated_at: now,
-    })
-    .eq('id', id);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'appraisal_reviews', id), {
+    manager_rating: data.manager_rating,
+    manager_comments: data.manager_comments,
+    overall_score: data.overall_score,
+    recommendation: data.recommendation,
+    ratings_breakdown: data.ratings_breakdown || null,
+    reviewer_id: data.reviewer_id,
+    manager_submitted_at: now,
+    status: 'completed',
+    updated_at: now,
+  });
 
   await createAuditLog('COMPLETE_MANAGER_APPRAISAL', 'appraisal_review', id, {
     rating: data.manager_rating,
@@ -234,13 +283,29 @@ export async function submitManagerReview(
 }
 
 export async function getKudos(): Promise<Kudos[]> {
-  const { data, error } = await supabase
-    .from('kudos')
-    .select('*, sender:profiles!kudos_sender_id_fkey(*), receiver:profiles!kudos_receiver_id_fkey(*)')
-    .order('created_at', { ascending: false });
+  try {
+    const [kudosSnap, profsSnap] = await Promise.all([
+      getDocs(collection(db, 'kudos')),
+      getDocs(collection(db, 'profiles')),
+    ]);
 
-  if (error || !data) return [];
-  return data as Kudos[];
+    const profMap = new Map<string, Profile>();
+    profsSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
+
+    const kudosList: Kudos[] = [];
+    kudosSnap.forEach((d) => {
+      const k = { id: d.id, ...d.data() } as Kudos;
+      k.sender = k.sender_id ? profMap.get(k.sender_id) : undefined;
+      k.receiver = k.receiver_id ? profMap.get(k.receiver_id) : undefined;
+      kudosList.push(k);
+    });
+
+    kudosList.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return kudosList;
+  } catch (err) {
+    console.error('getKudos error:', err);
+    return [];
+  }
 }
 
 export async function sendKudos(data: {
@@ -250,21 +315,19 @@ export async function sendKudos(data: {
   message: string;
   sender_name?: string;
 }): Promise<Kudos> {
+  const kudosId = `kudos_${Date.now()}`;
   const now = new Date().toISOString();
-  const { data: result, error } = await supabase
-    .from('kudos')
-    .insert({
-      organization_id: DEFAULT_ORG_ID,
-      sender_id: data.sender_id,
-      receiver_id: data.receiver_id,
-      badge: data.badge,
-      message: data.message,
-      created_at: now,
-    })
-    .select('*')
-    .single();
+  const kudos: Kudos = {
+    id: kudosId,
+    organization_id: DEFAULT_ORG_ID,
+    sender_id: data.sender_id,
+    receiver_id: data.receiver_id,
+    badge: data.badge,
+    message: data.message,
+    created_at: now,
+  };
 
-  if (error) throw error;
+  await setDoc(doc(db, 'kudos', kudosId), kudos);
 
   await createNotification(
     data.receiver_id,
@@ -273,5 +336,5 @@ export async function sendKudos(data: {
     `${data.sender_name || 'A teammate'} sent you a "${data.badge.toUpperCase()}" badge: "${data.message}"`
   );
 
-  return result as Kudos;
+  return kudos;
 }

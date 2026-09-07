@@ -1,4 +1,4 @@
-// Database types matching Supabase schema
+// Database types for Oasis HRMS Cloud Architecture
 
 export type UserRole = 'employee' | 'hr' | 'admin';
 export type EmploymentStatus = 'active' | 'inactive' | 'terminated';
@@ -7,15 +7,45 @@ export type LeaveRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelle
 export type PayrollStatus = 'draft' | 'processed' | 'paid';
 export type PayrollPeriodStatus = 'open' | 'processing' | 'closed';
 
+export type SubscriptionPlan = 'starter' | 'growth' | 'enterprise';
+
+export interface OrganizationFeatures {
+  payroll?: boolean;
+  biometrics?: boolean;
+  geofencing?: boolean;
+  performance?: boolean;
+  learning?: boolean;
+  recruitment?: boolean;
+  expenses?: boolean;
+  helpdesk?: boolean;
+  assets?: boolean;
+  audit_logs?: boolean;
+  wfh?: boolean;
+  attendance?: boolean;
+  leave?: boolean;
+  holidays?: boolean;
+  shifts?: boolean;
+  departments?: boolean;
+  users?: boolean;
+  locations?: boolean;
+  directory?: boolean;
+  [key: string]: boolean | undefined;
+}
+
 export interface Organization {
   id: string;
   name: string;
   slug?: string | null;
   logo_url?: string | null;
   primary_color?: string | null;
-  package_type?: 'basic' | 'silver' | 'gold';
+  accent_color?: string | null;
+  package_type?: 'basic' | 'silver' | 'gold' | 'starter' | 'growth' | 'enterprise';
+  plan?: SubscriptionPlan;
+  features?: OrganizationFeatures;
+  max_employees?: number;
   settings: Record<string, unknown>;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Profile {
@@ -31,6 +61,8 @@ export interface Profile {
   last_login_ip?: string;
   last_active?: string;
   biometric_enrolled?: boolean;
+  needs_password_change?: boolean;
+  must_change_password?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -142,6 +174,8 @@ export interface Attendance {
   status: AttendanceStatus;
   breaks?: { start: string; end: string | null; reason: string }[];
   overtime_minutes?: number;
+  is_remote?: boolean;
+  remote_reason?: string | null;
   created_at: string;
   updated_at: string;
   // Joined
@@ -278,7 +312,7 @@ export interface AuditLog {
   metadata: Record<string, unknown>;
   created_at: string;
   // Joined
-  user?: Profile;
+  user?: Partial<Profile> | null;
 }
 
 export interface Notification {

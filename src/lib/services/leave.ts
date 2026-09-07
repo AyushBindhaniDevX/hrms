@@ -1,5 +1,18 @@
-import { supabase } from '@/lib/supabase';
-import type { LeaveType, LeaveBalance, LeaveRequest, LeaveProcessResponse, Employee } from '@/types';
+import { db } from '@/lib/firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
+import type { LeaveType, LeaveBalance, LeaveRequest, LeaveProcessResponse, Employee, Profile, Department } from '@/types';
 import { getWorkingDaysCount } from './holidays';
 
 const DEFAULT_LEAVE_TYPES = [
@@ -15,61 +28,58 @@ const DEFAULT_LEAVE_TYPES = [
 
 export async function getLeaveTypes(organizationId?: string): Promise<LeaveType[]> {
   try {
-    let query = supabase.from('leave_types').select('*');
-    if (organizationId) {
-      query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
+    const snap = await getDocs(collection(db, 'leave_types'));
+    const types: LeaveType[] = [];
+    snap.forEach((d) => {
+      const lt = { id: d.id, ...d.data() } as LeaveType;
+      if (organizationId) {
+        if (lt.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && lt.organization_id === 'smh')) {
+          types.push(lt);
+        }
+      } else {
+        types.push(lt);
+      }
+    });
+
+    if (types.length > 0) {
+      types.sort((a, b) => a.name.localeCompare(b.name));
+      return types;
     }
 
-    const { data, error } = await query.order('name', { ascending: true });
-
-    if (!error && data && data.length > 0) {
-      const unique = Array.from(new Map((data as LeaveType[]).map((item) => [item.name, item])).values());
-      return unique;
+    // Auto-seed real leave types into Firestore if this organization has none yet
+    const resolvedOrgId = organizationId || '00000000-0000-0000-0000-000000000001';
+    const seeded: LeaveType[] = [];
+    for (let i = 0; i < DEFAULT_LEAVE_TYPES.length; i++) {
+      const lt = DEFAULT_LEAVE_TYPES[i];
+      const ltId = `lt-${resolvedOrgId}-${i + 1}`;
+      const docData: LeaveType = {
+        id: ltId,
+        organization_id: resolvedOrgId,
+        name: lt.name,
+        annual_days: lt.annual_days,
+        is_paid: lt.is_paid,
+        description: lt.description,
+        created_at: new Date().toISOString(),
+      };
+      await setDoc(doc(db, 'leave_types', ltId), docData);
+      seeded.push(docData);
     }
-
-    // Auto-seed real leave types into the database if table is empty
-    let resolvedOrgId = organizationId;
-    if (!resolvedOrgId) {
-      const { data: orgData } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-      if (orgData?.id) resolvedOrgId = orgData.id;
-    }
-
-    const insertPayload = DEFAULT_LEAVE_TYPES.map((lt) => ({
-      organization_id: resolvedOrgId || null,
-      name: lt.name,
-      annual_days: lt.annual_days,
-      is_paid: lt.is_paid,
-      description: lt.description,
-    }));
-
-    const { data: seeded, error: seedError } = await supabase
-      .from('leave_types')
-      .insert(insertPayload)
-      .select('*');
-
-    if (!seedError && seeded && seeded.length > 0) {
-      return seeded as LeaveType[];
-    }
+    return seeded;
   } catch (err) {
-    console.warn('Could not query remote leave_types, using defaults:', err);
+    console.warn('Could not query Firestore leave_types, using defaults:', err);
   }
 
-  // Safe fallback to default leave types
   return DEFAULT_LEAVE_TYPES.map((lt, idx) => ({
-    id: `00000000-0000-0000-0000-00000000000${idx + 1}`,
+    id: `lt-${idx + 1}`,
     name: lt.name,
     annual_days: lt.annual_days,
     is_paid: lt.is_paid,
     description: lt.description,
-    organization_id: organizationId || '190b952b-df91-4011-8e48-a5e02fad80fe',
+    organization_id: organizationId || '00000000-0000-0000-0000-000000000001',
     created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
   })) as LeaveType[];
 }
 
-/**
- * Add a new Leave Type / Policy (Admin / HR)
- */
 export async function createLeaveType(data: {
   name: string;
   annual_days: number;
@@ -77,84 +87,71 @@ export async function createLeaveType(data: {
   description?: string;
   organization_id?: string;
 }): Promise<LeaveType> {
+  const ltId = `lt-${Date.now()}`;
   const now = new Date().toISOString();
-  let orgId = data.organization_id;
-  if (!orgId) {
-    const { data: anyOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-    orgId = anyOrg?.id;
-  }
+  const orgId = data.organization_id || '00000000-0000-0000-0000-000000000001';
 
-  const { data: result, error } = await supabase
-    .from('leave_types')
-    .insert({
-      organization_id: orgId || null,
-      name: data.name.trim(),
-      annual_days: data.annual_days || 12,
-      is_paid: data.is_paid ?? true,
-      description: data.description?.trim() || null,
-      created_at: now,
-    })
-    .select('*')
-    .single();
+  const newType: LeaveType = {
+    id: ltId,
+    organization_id: orgId,
+    name: data.name.trim(),
+    annual_days: data.annual_days || 12,
+    is_paid: data.is_paid ?? true,
+    description: data.description?.trim() || null,
+    created_at: now,
+  };
 
-  if (error) {
-    console.error('createLeaveType error:', error);
-    throw new Error(error.message || 'Failed to create leave policy');
-  }
-
-  return result as LeaveType;
+  await setDoc(doc(db, 'leave_types', ltId), newType);
+  return newType;
 }
 
-/**
- * Update an existing Leave Type (Admin / HR)
- */
 export async function updateLeaveType(
   id: string,
   updates: Partial<Omit<LeaveType, 'id' | 'created_at'>>
 ): Promise<LeaveType> {
-  const { data, error } = await supabase
-    .from('leave_types')
-    .update(updates)
-    .eq('id', id)
-    .select('*')
-    .single();
-
-  if (error) {
-    console.error('updateLeaveType error:', error);
-    throw new Error(error.message || 'Failed to update leave policy');
-  }
-
-  return data as LeaveType;
+  await updateDoc(doc(db, 'leave_types', id), updates);
+  const snap = await getDoc(doc(db, 'leave_types', id));
+  return { id: snap.id, ...snap.data() } as LeaveType;
 }
 
-/**
- * Delete a Leave Type (Admin / HR)
- */
 export async function deleteLeaveType(id: string): Promise<void> {
-  const { error } = await supabase.from('leave_types').delete().eq('id', id);
-  if (error) {
-    console.error('deleteLeaveType error:', error);
-    throw new Error(error.message || 'Failed to delete leave type');
-  }
+  await deleteDoc(doc(db, 'leave_types', id));
 }
 
-export async function getLeaveBalances(employeeId: string, year?: number): Promise<LeaveBalance[]> {
+export async function getLeaveBalances(
+  employeeId: string,
+  year?: number,
+  organizationId?: string
+): Promise<LeaveBalance[]> {
   const y = year ?? new Date().getFullYear();
   try {
-    const { data, error } = await supabase
-      .from('leave_balances')
-      .select('*, leave_type:leave_types(*)')
-      .eq('employee_id', employeeId)
-      .eq('year', y);
+    const q = query(
+      collection(db, 'leave_balances'),
+      where('employee_id', '==', employeeId),
+      where('year', '==', y)
+    );
+    const snap = await getDocs(q);
 
-    if (!error && data && data.length > 0) {
-      return data as LeaveBalance[];
+    if (!snap.empty) {
+      const types = await getLeaveTypes(organizationId);
+      const typeMap = new Map(types.map((t) => [t.id, t]));
+
+      const balances: LeaveBalance[] = [];
+      snap.forEach((d) => {
+        const bal = { id: d.id, ...d.data() } as LeaveBalance;
+        bal.leave_type = typeMap.get(bal.leave_type_id);
+        if (!organizationId || bal.leave_type) {
+          balances.push(bal);
+        }
+      });
+      if (balances.length > 0) {
+        return balances;
+      }
     }
   } catch (err) {}
 
-  // If no specific balance rows exist yet in the database for this employee,
-  // generate default active quotas from leave types
-  const types = await getLeaveTypes();
+  // Generate default active quotas from leave types strictly for this organization
+  const types = await getLeaveTypes(organizationId);
   return types.map((lt) => ({
     id: `bal_${employeeId}_${lt.id}_${y}`,
     employee_id: employeeId,
@@ -167,15 +164,29 @@ export async function getLeaveBalances(employeeId: string, year?: number): Promi
   })) as LeaveBalance[];
 }
 
-export async function getLeaveRequests(employeeId: string): Promise<LeaveRequest[]> {
-  const { data, error } = await supabase
-    .from('leave_requests')
-    .select('*, leave_type:leave_types(*)')
-    .eq('employee_id', employeeId)
-    .order('created_at', { ascending: false });
+export async function getLeaveRequests(employeeId: string, organizationId?: string): Promise<LeaveRequest[]> {
+  try {
+    const [reqSnap, types] = await Promise.all([
+      getDocs(query(collection(db, 'leave_requests'), where('employee_id', '==', employeeId))),
+      getLeaveTypes(organizationId),
+    ]);
 
-  if (error || !data) return [];
-  return data as LeaveRequest[];
+    const typeMap = new Map(types.map((t) => [t.id, t]));
+    const requests: LeaveRequest[] = [];
+    reqSnap.forEach((d) => {
+      const req = { id: d.id, ...d.data() } as LeaveRequest;
+      req.leave_type = typeMap.get(req.leave_type_id);
+      if (!organizationId || req.leave_type) {
+        requests.push(req);
+      }
+    });
+
+    requests.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return requests;
+  } catch (err) {
+    console.error('getLeaveRequests error:', err);
+    return [];
+  }
 }
 
 export async function applyLeave(params: {
@@ -186,184 +197,130 @@ export async function applyLeave(params: {
   days: number;
   is_half_day: boolean;
   reason: string;
+  organization_id?: string;
 }): Promise<LeaveRequest> {
   const now = new Date().toISOString();
-
-  // 1. Ensure employee_id is valid and resolve organization
-  let empId = params.employee_id;
-  let empOrgId: string | null = null;
-
-  if (empId) {
-    const { data: empRecord } = await supabase
-      .from('employees')
-      .select('id, organization_id, profile:profiles(organization_id), department:departments(organization_id)')
-      .eq('id', empId)
-      .maybeSingle();
-    if (empRecord) {
-      empOrgId = empRecord.organization_id || (empRecord.profile as any)?.organization_id || (empRecord.department as any)?.organization_id || null;
-    }
-  }
-
-  if (!empId) {
-    const { data: empRecord } = await supabase
-      .from('employees')
-      .select('id, organization_id, profile:profiles(organization_id), department:departments(organization_id)')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (empRecord?.id) {
-      empId = empRecord.id;
-      empOrgId = empRecord.organization_id || (empRecord.profile as any)?.organization_id || (empRecord.department as any)?.organization_id || null;
-    }
-  }
-
-  if (!empOrgId) {
-    const { data: anyOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
-    if (anyOrg?.id) empOrgId = anyOrg.id;
-  }
+  const empId = params.employee_id;
 
   if (!empId) {
     throw new Error('Employee record could not be identified. Please ensure your profile is active.');
   }
 
-  // 2. Ensure leave_type_id exists in leave_types table to satisfy foreign key constraint
-  let validLeaveTypeId: string | null = null;
-
-  if (params.leave_type_id && !params.leave_type_id.startsWith('00000000-0000-0000-0000-')) {
-    const { data: matchedType } = await supabase
-      .from('leave_types')
-      .select('id')
-      .eq('id', params.leave_type_id)
-      .maybeSingle();
-    if (matchedType?.id) {
-      validLeaveTypeId = matchedType.id;
-    }
+  // Verify leave type exists for this organization
+  const types = await getLeaveTypes(params.organization_id);
+  let matchedType = types.find((t) => t.id === params.leave_type_id);
+  if (!matchedType && types.length > 0) {
+    matchedType = types[0];
   }
 
-  // If not found by ID (e.g. fallback dummy ID was sent), find any existing leave_type in DB
-  if (!validLeaveTypeId) {
-    const { data: existingTypes } = await supabase
-      .from('leave_types')
-      .select('id, name')
-      .limit(10);
+  const validLeaveTypeId = matchedType?.id || params.leave_type_id;
 
-    if (existingTypes && existingTypes.length > 0) {
-      validLeaveTypeId = existingTypes[0].id;
-    } else {
-      // Seed default leave types with valid organization ID
-      const { data: insTypes } = await supabase
-        .from('leave_types')
-        .insert(
-          DEFAULT_LEAVE_TYPES.map((lt) => ({
-            name: lt.name,
-            annual_days: lt.annual_days,
-            is_paid: lt.is_paid,
-            organization_id: empOrgId,
-          }))
-        )
-        .select('id')
-        .limit(1);
-
-      if (insTypes && insTypes.length > 0) {
-        validLeaveTypeId = insTypes[0].id;
-      }
-    }
-  }
-
-  if (!validLeaveTypeId) {
-    throw new Error('Leave type configuration not found. Please contact your HR administrator.');
-  }
-
-  // Calculate net working days by automatically excluding weekends and declared public holidays
+  // Calculate working days
   let calculatedDays = params.days;
   try {
-    const workingDaysInfo = await getWorkingDaysCount(
-      params.start_date,
-      params.end_date,
-      empOrgId || undefined,
-      params.is_half_day
-    );
+    const workingDaysInfo = await getWorkingDaysCount(params.start_date, params.end_date);
     if (workingDaysInfo.workingDays > 0) {
-      calculatedDays = workingDaysInfo.workingDays;
+      calculatedDays = params.is_half_day ? 0.5 : workingDaysInfo.workingDays;
     }
-  } catch (dayErr) {
-    console.warn('Working days calculation notice:', dayErr);
-  }
+  } catch (e) {}
 
-  const { data, error } = await supabase
-    .from('leave_requests')
-    .insert({
-      employee_id: empId,
-      leave_type_id: validLeaveTypeId,
-      start_date: params.start_date,
-      end_date: params.end_date,
-      days: calculatedDays,
-      is_half_day: params.is_half_day,
-      reason: params.reason,
-      status: 'pending',
-      created_at: now,
-      updated_at: now,
-    })
-    .select('*')
-    .single();
+  const reqId = `lr-${Date.now()}`;
+  const request: LeaveRequest = {
+    id: reqId,
+    employee_id: empId,
+    leave_type_id: validLeaveTypeId,
+    start_date: params.start_date,
+    end_date: params.end_date,
+    days: calculatedDays,
+    is_half_day: params.is_half_day,
+    reason: params.reason,
+    status: 'pending',
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: now,
+    updated_at: now,
+  };
 
-  if (error) {
-    console.error('applyLeave error:', error);
-    throw new Error(error.message || 'Failed to submit leave request');
-  }
-
-  return data as LeaveRequest;
+  await setDoc(doc(db, 'leave_requests', reqId), request);
+  request.leave_type = matchedType;
+  return request;
 }
 
 export async function cancelLeave(requestId: string): Promise<void> {
-  const { error } = await supabase
-    .from('leave_requests')
-    .update({
-      status: 'cancelled',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', requestId);
-
-  if (error) throw error;
+  await updateDoc(doc(db, 'leave_requests', requestId), {
+    status: 'cancelled',
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export async function getPendingLeaveRequests(organizationId?: string): Promise<LeaveRequest[]> {
-  let query = supabase
-    .from('leave_requests')
-    .select(`
-      *,
-      leave_type:leave_types(*),
-      employee:employees!inner(*, profile:profiles!inner(*), department:departments!employees_department_id_fkey(*))
-    `)
-    .eq('status', 'pending');
-
-  if (organizationId) {
-    query = query.eq('employee.profile.organization_id', organizationId);
-  }
-
-  const { data, error } = await query.order('created_at', { ascending: true });
-
-  if (error || !data) return [];
-  return data as LeaveRequest[];
+  return getFilteredLeaveRequests(organizationId, 'pending');
 }
 
 export async function getAllLeaveRequests(organizationId?: string): Promise<LeaveRequest[]> {
-  let query = supabase
-    .from('leave_requests')
-    .select(`
-      *,
-      leave_type:leave_types(*),
-      employee:employees!inner(*, profile:profiles!inner(*), department:departments!employees_department_id_fkey(*))
-    `);
+  return getFilteredLeaveRequests(organizationId);
+}
 
-  if (organizationId) {
-    query = query.eq('employee.profile.organization_id', organizationId);
+async function getFilteredLeaveRequests(
+  organizationId?: string,
+  status?: LeaveRequest['status']
+): Promise<LeaveRequest[]> {
+  try {
+    const [reqSnap, empsSnap, profsSnap, deptsSnap, types] = await Promise.all([
+      getDocs(collection(db, 'leave_requests')),
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'profiles')),
+      getDocs(collection(db, 'departments')),
+      getLeaveTypes(organizationId),
+    ]);
+
+    const typeMap = new Map(types.map((t) => [t.id, t]));
+    const profMap = new Map<string, Profile>();
+    profsSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
+
+    const deptMap = new Map<string, Department>();
+    deptsSnap.forEach((d) => deptMap.set(d.id, { id: d.id, ...d.data() } as Department));
+
+    const empMap = new Map<string, Employee>();
+    empsSnap.forEach((d) => {
+      const emp = { id: d.id, ...d.data() } as Employee;
+      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+      emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
+      empMap.set(d.id, emp);
+    });
+
+    const requests: LeaveRequest[] = [];
+    reqSnap.forEach((d) => {
+      const req = { id: d.id, ...d.data() } as LeaveRequest;
+      const emp = req.employee_id ? empMap.get(req.employee_id) : undefined;
+
+      if (organizationId) {
+        const empOrg = emp?.organization_id || emp?.profile?.organization_id;
+        if (empOrg && empOrg !== organizationId && !(organizationId === 'shanti-memorial-hospital' && empOrg === 'smh')) {
+          return;
+        }
+      }
+      if (status && req.status !== status) {
+        return;
+      }
+
+      req.employee = emp;
+      req.leave_type = typeMap.get(req.leave_type_id);
+      requests.push(req);
+    });
+
+    requests.sort((a, b) => {
+      if (status === 'pending') {
+        return (a.created_at || '').localeCompare(b.created_at || '');
+      }
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    });
+
+    return requests;
+  } catch (err) {
+    console.error('getFilteredLeaveRequests error:', err);
+    return [];
   }
-
-  const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
-
-  if (error || !data) return [];
-  return data as LeaveRequest[];
 }
 
 export async function processLeaveRequest(
@@ -373,81 +330,66 @@ export async function processLeaveRequest(
 ): Promise<LeaveProcessResponse> {
   const now = new Date().toISOString();
 
-  // 1. Fetch request details
-  const { data: reqData, error: reqErr } = await supabase
-    .from('leave_requests')
-    .select('*, employee:employees(*, profile:profiles(*))')
-    .eq('id', requestId)
-    .single();
-
-  if (reqErr || !reqData) throw new Error('Leave request not found');
+  const reqSnap = await getDoc(doc(db, 'leave_requests', requestId));
+  if (!reqSnap.exists()) throw new Error('Leave request not found');
+  const reqData = reqSnap.data() as LeaveRequest;
 
   if (action === 'approve') {
     const y = new Date(reqData.start_date).getFullYear();
-    const { data: balData } = await supabase
-      .from('leave_balances')
-      .select('*')
-      .eq('employee_id', reqData.employee_id)
-      .eq('leave_type_id', reqData.leave_type_id)
-      .eq('year', y)
-      .maybeSingle();
+    const balId = `bal_${reqData.employee_id}_${reqData.leave_type_id}_${y}`;
+    const balSnap = await getDoc(doc(db, 'leave_balances', balId));
 
-    if (balData) {
-      // Row exists — update used/remaining days
+    if (balSnap.exists()) {
+      const balData = balSnap.data() as LeaveBalance;
       const newUsed = (balData.used_days || 0) + reqData.days;
       const newRem = Math.max(0, (balData.allocated_days || 0) - newUsed);
-      await supabase
-        .from('leave_balances')
-        .update({ used_days: newUsed, remaining_days: newRem, updated_at: now })
-        .eq('id', balData.id);
+      await updateDoc(doc(db, 'leave_balances', balId), {
+        used_days: newUsed,
+        remaining_days: newRem,
+        updated_at: now,
+      });
     } else {
-      // No DB row yet — look up the leave type's annual allocation and insert a fresh balance row
-      const { data: ltData } = await supabase
-        .from('leave_types')
-        .select('annual_days')
-        .eq('id', reqData.leave_type_id)
-        .maybeSingle();
-      const allocated = ltData?.annual_days ?? 12;
+      const types = await getLeaveTypes();
+      const lt = types.find((t) => t.id === reqData.leave_type_id);
+      const allocated = lt?.annual_days ?? 12;
       const newUsed = reqData.days;
       const newRem = Math.max(0, allocated - newUsed);
-      await supabase
-        .from('leave_balances')
-        .insert({
-          employee_id: reqData.employee_id,
-          leave_type_id: reqData.leave_type_id,
-          year: y,
-          allocated_days: allocated,
-          used_days: newUsed,
-          remaining_days: newRem,
-          updated_at: now,
-        });
+      await setDoc(doc(db, 'leave_balances', balId), {
+        id: balId,
+        employee_id: reqData.employee_id,
+        leave_type_id: reqData.leave_type_id,
+        year: y,
+        allocated_days: allocated,
+        used_days: newUsed,
+        remaining_days: newRem,
+        updated_at: now,
+      });
     }
   }
 
-  // 2. Update status
-  const { error: updateErr } = await supabase
-    .from('leave_requests')
-    .update({
-      status: action === 'approve' ? 'approved' : 'rejected',
-      approved_by: approverName || 'HR Management',
-      updated_at: now,
-    })
-    .eq('id', requestId);
+  // Update request status
+  await updateDoc(doc(db, 'leave_requests', requestId), {
+    status: action === 'approve' ? 'approved' : 'rejected',
+    approved_by: approverName || 'HR Management',
+    updated_at: now,
+  });
 
-  if (updateErr) throw updateErr;
-
-  // 3. Trigger Notification
-  if (reqData.employee?.profile_id) {
-    try {
-      const { createNotification } = await import('./notifications');
-      await createNotification(
-        reqData.employee.profile_id,
-        `Leave Request ${action === 'approve' ? 'Approved' : 'Rejected'}`,
-        `Your ${reqData.leave_type?.name || 'leave'} request for ${reqData.days} day(s) from ${reqData.start_date} to ${reqData.end_date} has been ${action === 'approve' ? 'approved' : 'rejected'}.`,
-        action === 'approve' ? 'success' : 'alert'
-      );
-    } catch (e) {}
-  }
+  // Notify employee
+  try {
+    const empSnap = await getDoc(doc(db, 'employees', reqData.employee_id));
+    if (empSnap.exists()) {
+      const emp = empSnap.data() as Employee;
+      if (emp.profile_id) {
+        const { createNotification } = await import('./notifications');
+        await createNotification(
+          emp.profile_id,
+          action === 'approve' ? 'success' : 'alert',
+          `Leave Request ${action === 'approve' ? 'Approved' : 'Rejected'}`,
+          `Your leave request for ${reqData.days} day(s) from ${reqData.start_date} to ${reqData.end_date} has been ${action === 'approve' ? 'approved' : 'rejected'}.`
+        );
+      }
+    }
+  } catch (e) {}
 
   return {
     success: true,
@@ -467,46 +409,20 @@ export async function updateLeaveBalance(
   const y = year ?? new Date().getFullYear();
   const remaining = Math.max(0, allocatedDays - usedDays);
   const now = new Date().toISOString();
+  const balId = `bal_${employeeId}_${leaveTypeId}_${y}`;
 
-  // Find real leave_type_id if needed
-  let validLeaveTypeId = leaveTypeId;
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(leaveTypeId);
-  if (!isUuid) {
-    const { data: realTypes } = await supabase.from('leave_types').select('id').limit(1);
-    if (realTypes && realTypes.length > 0) {
-      validLeaveTypeId = realTypes[0].id;
-    }
-  }
-
-  const payload: Record<string, any> = {
-    employee_id: employeeId,
-    leave_type_id: validLeaveTypeId,
-    year: y,
-    allocated_days: allocatedDays,
-    used_days: usedDays,
-    remaining_days: remaining,
-    updated_at: now,
-  };
-
-  // Check if balance record exists
-  const { data: existing } = await supabase
-    .from('leave_balances')
-    .select('id')
-    .eq('employee_id', employeeId)
-    .eq('leave_type_id', validLeaveTypeId)
-    .eq('year', y)
-    .maybeSingle();
-
-  if (existing?.id) {
-    const { error: updErr } = await supabase
-      .from('leave_balances')
-      .update(payload)
-      .eq('id', existing.id);
-    if (updErr) throw updErr;
-  } else {
-    const { error: insErr } = await supabase
-      .from('leave_balances')
-      .insert(payload);
-    if (insErr) throw insErr;
-  }
+  await setDoc(
+    doc(db, 'leave_balances', balId),
+    {
+      id: balId,
+      employee_id: employeeId,
+      leave_type_id: leaveTypeId,
+      year: y,
+      allocated_days: allocatedDays,
+      used_days: usedDays,
+      remaining_days: remaining,
+      updated_at: now,
+    },
+    { merge: true }
+  );
 }

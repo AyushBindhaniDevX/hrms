@@ -1,7 +1,9 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { supabase } from '@/lib/supabase';
+import { storage, db } from '@/lib/firebase';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { doc, updateDoc } from 'firebase/firestore';
 import { trackUserActivity } from '@/lib/services/userActivity';
 
 const BIOMETRIC_ENABLED_KEY = 'hcm_biometric_enabled';
@@ -185,16 +187,13 @@ export async function registerDeviceBiometrics(
       await SecureStore.setItemAsync(BIOMETRIC_SECRET_KEY, secret);
     }
 
-    // Update Supabase profile biometric enrollment flag & log activity
+    // Update profile biometric enrollment flag & log activity
     if (userId) {
       try {
-        await supabase
-          .from('profiles')
-          .update({
-            biometric_enrolled: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId);
+        await updateDoc(doc(db, 'profiles', userId), {
+          biometric_enrolled: true,
+          updated_at: new Date().toISOString(),
+        });
 
         await trackUserActivity({
           userId,
@@ -243,13 +242,10 @@ export async function disableBiometricVault(userId?: string): Promise<void> {
 
     if (userId) {
       try {
-        await supabase
-          .from('profiles')
-          .update({
-            biometric_enrolled: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId);
+        await updateDoc(doc(db, 'profiles', userId), {
+          biometric_enrolled: false,
+          updated_at: new Date().toISOString(),
+        });
       } catch (dbErr) {}
     }
   } catch (err) {
@@ -320,7 +316,7 @@ export async function verifyBiometricsForAttendance(
 }
 
 /**
- * Uploads a biometric face photo to Supabase Storage (or stores base64 fallback)
+ * Uploads a biometric face photo to Firebase Cloud Storage (or stores base64 fallback)
  */
 export async function uploadBiometricFace(
   userId: string,
@@ -330,36 +326,20 @@ export async function uploadBiometricFace(
     return base64OrUri;
   }
 
-  const fileName = `face_${userId}_${Date.now()}.jpg`;
+  const fileName = `avatars/face_${userId}_${Date.now()}.jpg`;
 
   try {
-    if (typeof window !== 'undefined' && base64OrUri.includes('base64,')) {
-      const base64Data = base64OrUri.split('base64,')[1].replace(/\s/g, '');
-      const binaryStr = window.atob(base64Data);
-      const len = binaryStr.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: 'image/jpeg' });
-
-      const { data, error } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, blob, {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-
-      if (!error && data) {
-        const { data: urlData } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(data.path);
-        if (urlData?.publicUrl) {
-          return urlData.publicUrl;
-        }
-      }
+    const storageRef = ref(storage, fileName);
+    if (base64OrUri.startsWith('data:')) {
+      await uploadString(storageRef, base64OrUri, 'data_url');
+      return await getDownloadURL(storageRef);
+    } else if (base64OrUri.includes('base64,')) {
+      await uploadString(storageRef, `data:image/jpeg;base64,${base64OrUri.split('base64,')[1]}`, 'data_url');
+      return await getDownloadURL(storageRef);
     }
-  } catch (err) {}
+  } catch (err) {
+    console.warn('Firebase storage upload fallback:', err);
+  }
 
   return base64OrUri;
 }
@@ -373,17 +353,14 @@ export async function enrollEmployeeFace(
 ): Promise<string> {
   const storedUrl = await uploadBiometricFace(profileId, photoBase64OrUri);
 
-  const { error } = await supabase
-    .from('profiles')
-    .update({
+  try {
+    await updateDoc(doc(db, 'profiles', profileId), {
       avatar_url: storedUrl,
       biometric_enrolled: true,
       updated_at: new Date().toISOString(),
-    })
-    .eq('id', profileId);
-
-  if (error) {
-    console.error('Failed to save enrolled face to profile:', error);
+    });
+  } catch (error) {
+    console.error('Failed to save enrolled face to profile in Firestore:', error);
   }
 
   try {
