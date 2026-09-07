@@ -7,11 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "oasis",
     "userInterfaceStyle": "automatic",
-    "androidNavigationBar": {
-      "visible": "always",
-      "barStyle": "dark-content",
-      "backgroundColor": "#FFFFFF"
-    },
     "androidStatusBar": {
       "barStyle": "dark-content",
       "backgroundColor": "#FFFFFF",
@@ -28,7 +23,6 @@
     "android": {
       "package": "com.oasis.hrms",
       "versionCode": 3,
-      "_comment_googleMaps": "Set a REAL 'Maps SDK for Android' key below to enable the native map. Until then the app safely renders a static geofence card (see GeofenceMap.tsx). A placeholder/blank key must NOT crash the release build.",
       "config": {
         "googleMaps": {
           "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"

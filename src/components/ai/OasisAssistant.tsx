@@ -166,7 +166,7 @@ export function OasisAssistant({ visible, onClose }: { visible: boolean; onClose
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)' },
   modalContent: {
     width: '100%',
     maxWidth: 600,

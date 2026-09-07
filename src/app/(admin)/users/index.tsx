@@ -64,6 +64,8 @@ import {
   RefreshCw,
   Umbrella,
   Eye,
+  MoreVertical,
+  ChevronRight,
 } from 'lucide-react-native';
 
 export default function UserManagementScreen() {
@@ -92,6 +94,7 @@ export default function UserManagementScreen() {
   const [editUser, setEditUser] = useState<Profile | null>(null);
   const [toggleUser, setToggleUser] = useState<Profile | null>(null);
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
+  const [actionSheetUser, setActionSheetUser] = useState<Profile | null>(null);
   const [infoBanner, setInfoBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Add User Form State
@@ -845,14 +848,19 @@ export default function UserManagementScreen() {
           ) : (
             <View style={styles.userList}>
               {filteredUsers.map((u, idx) => (
-                <View
+                <TouchableOpacity
                   key={u.id}
+                  activeOpacity={!isDesktop ? 0.7 : 1}
+                  onPress={() => {
+                    if (!isDesktop) setActionSheetUser(u);
+                  }}
                   style={[
                     styles.userRow,
                     idx !== filteredUsers.length - 1 && {
                       borderBottomWidth: 1,
                       borderBottomColor: '#f1f5f9',
                     },
+                    !isDesktop && styles.userRowMobile,
                   ]}
                 >
                   <Avatar name={u.full_name} url={u.avatar_url} size={44} />
@@ -888,84 +896,95 @@ export default function UserManagementScreen() {
                     </View>
                   </View>
 
-                  <View style={styles.userActions}>
-                    {/* View Employee Profile */}
-                    {managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id) && (
-                      <TouchableOpacity
-                        onPress={() => {
-                          const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
-                          if (emp?.id) router.push(`/(hr)/employees/${emp.id}`);
-                        }}
-                        style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1, backgroundColor: '#f8faff' }]}
-                      >
-                        <Eye size={14} color="#4f46e5" />
-                        <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Profile</Text>
-                      </TouchableOpacity>
-                    )}
-
+                  {!isDesktop ? (
                     <TouchableOpacity
-                      onPress={() => handleResendInvite(u)}
-                      style={[styles.actionBtn, { borderColor: '#c7d2fe', borderWidth: 1, backgroundColor: '#eef2ff' }]}
+                      onPress={() => setActionSheetUser(u)}
+                      style={styles.mobileManageBtn}
+                      activeOpacity={0.7}
                     >
-                      <Mail size={14} color="#4f46e5" />
-                      <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Invite</Text>
+                      <MoreVertical size={16} color="#0D7377" />
+                      <Text style={styles.mobileManageBtnText}>Manage</Text>
                     </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => openEditModal(u)}
-                      style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
-                    >
-                      <Edit2 size={14} color={colors.primary} />
-                      <Text style={[styles.actionBtnText, { color: colors.primary }]}>Edit</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => openLeaveModalForUser(u)}
-                      style={[styles.actionBtn, { borderColor: '#0D737740', borderWidth: 1, backgroundColor: '#F0F9F8' }]}
-                    >
-                      <Umbrella size={14} color="#0D7377" />
-                      <Text style={[styles.actionBtnText, { color: '#0D7377' }]}>Leave</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handleResetPassword(u.email)}
-                      style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
-                    >
-                      <KeyRound size={14} color="#64748B" />
-                      <Text style={[styles.actionBtnText, { color: '#64748B' }]}>Reset Pwd</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => setToggleUser(u)}
-                      style={[
-                        styles.actionBtn,
-                        u.is_active
-                          ? { backgroundColor: '#fff5f5' }
-                          : { backgroundColor: '#edf8f6' },
-                      ]}
-                    >
-                      {u.is_active ? (
-                        <>
-                          <UserX size={14} color={colors.danger} />
-                          <Text style={[styles.actionBtnText, { color: colors.danger }]}>Deactivate</Text>
-                        </>
-                      ) : (
-                        <>
-                          <UserCheck size={14} color="#006a61" />
-                          <Text style={[styles.actionBtnText, { color: '#006a61' }]}>Activate</Text>
-                        </>
+                  ) : (
+                    <View style={styles.userActions}>
+                      {/* View Employee Profile */}
+                      {managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id) && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+                            if (emp?.id) router.push(`/(hr)/employees/${emp.id}`);
+                          }}
+                          style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1, backgroundColor: '#f8faff' }]}
+                        >
+                          <Eye size={14} color="#4f46e5" />
+                          <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Profile</Text>
+                        </TouchableOpacity>
                       )}
-                    </TouchableOpacity>
 
-                    <TouchableOpacity
-                      onPress={() => setDeleteUser(u)}
-                      style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}
-                    >
-                      <Trash2 size={14} color={colors.danger} />
-                      <Text style={[styles.actionBtnText, { color: colors.danger }]}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                      <TouchableOpacity
+                        onPress={() => handleResendInvite(u)}
+                        style={[styles.actionBtn, { borderColor: '#c7d2fe', borderWidth: 1, backgroundColor: '#eef2ff' }]}
+                      >
+                        <Mail size={14} color="#4f46e5" />
+                        <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Invite</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => openEditModal(u)}
+                        style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
+                      >
+                        <Edit2 size={14} color={colors.primary} />
+                        <Text style={[styles.actionBtnText, { color: colors.primary }]}>Edit</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => openLeaveModalForUser(u)}
+                        style={[styles.actionBtn, { borderColor: '#0D737740', borderWidth: 1, backgroundColor: '#F0F9F8' }]}
+                      >
+                        <Umbrella size={14} color="#0D7377" />
+                        <Text style={[styles.actionBtnText, { color: '#0D7377' }]}>Leave</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => handleResetPassword(u.email)}
+                        style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
+                      >
+                        <KeyRound size={14} color="#64748B" />
+                        <Text style={[styles.actionBtnText, { color: '#64748B' }]}>Reset Pwd</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => setToggleUser(u)}
+                        style={[
+                          styles.actionBtn,
+                          u.is_active
+                            ? { backgroundColor: '#fff5f5' }
+                            : { backgroundColor: '#edf8f6' },
+                        ]}
+                      >
+                        {u.is_active ? (
+                          <>
+                            <UserX size={14} color={colors.danger} />
+                            <Text style={[styles.actionBtnText, { color: colors.danger }]}>Deactivate</Text>
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck size={14} color="#006a61" />
+                            <Text style={[styles.actionBtnText, { color: '#006a61' }]}>Activate</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => setDeleteUser(u)}
+                        style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}
+                      >
+                        <Trash2 size={14} color={colors.danger} />
+                        <Text style={[styles.actionBtnText, { color: colors.danger }]}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -1507,6 +1526,241 @@ export default function UserManagementScreen() {
           loading={processing}
           variant="danger"
         />
+
+        {/* ── Modal: Tap-to-Select Operation Action Sheet (Mobile) ────────── */}
+        <Modal
+          visible={!!actionSheetUser}
+          onClose={() => setActionSheetUser(null)}
+          title="Select Operation"
+        >
+          {actionSheetUser && (
+            <View style={{ gap: 14 }}>
+              {/* Target User Summary Card */}
+              <View style={[styles.actionSheetHeaderCard, { backgroundColor: '#F8FAFC', borderColor: colors.border }]}>
+                <Avatar
+                  name={actionSheetUser.full_name || 'U'}
+                  url={actionSheetUser.avatar_url}
+                  size={42}
+                />
+                <View style={{ flex: 1, gap: 3 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>
+                      {actionSheetUser.full_name}
+                    </Text>
+                    <Badge
+                      label={String(actionSheetUser.role || 'employee').toUpperCase()}
+                      variant={getRoleBadgeVariant(actionSheetUser.role)}
+                    />
+                    <Badge
+                      label={actionSheetUser.is_active ? 'ACTIVE' : 'INACTIVE'}
+                      variant={actionSheetUser.is_active ? 'successLight' : 'dangerLight'}
+                    />
+                  </View>
+                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                    {actionSheetUser.email}
+                  </Text>
+                  {actionSheetUser.phone && (
+                    <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                      {actionSheetUser.phone}
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 }}>
+                Select Operation
+              </Text>
+
+              {/* Operations List */}
+              <View style={{ gap: 8 }}>
+                {/* 1. View Employee Profile (if linked employee exists) */}
+                {(() => {
+                  const emp = managers.find(m => m.profile_id === actionSheetUser.id || (m.profile as any)?.id === actionSheetUser.id);
+                  if (!emp?.id) return null;
+                  return (
+                    <TouchableOpacity
+                      style={styles.operationRow}
+                      onPress={() => {
+                        const targetId = emp.id;
+                        setActionSheetUser(null);
+                        router.push(`/(hr)/employees/${targetId}`);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.opIconWrap, { backgroundColor: '#EEF2FF' }]}>
+                        <Eye size={18} color="#4F46E5" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.opTitle, { color: colors.text }]}>View Full Profile</Text>
+                        <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                          Review employee record, documents & details
+                        </Text>
+                      </View>
+                      <ChevronRight size={18} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  );
+                })()}
+
+                {/* 2. Resend Welcome Invitation */}
+                <TouchableOpacity
+                  style={styles.operationRow}
+                  onPress={() => {
+                    const u = actionSheetUser;
+                    setActionSheetUser(null);
+                    handleResendInvite(u);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.opIconWrap, { backgroundColor: '#EEF2FF' }]}>
+                    <Mail size={18} color="#4F46E5" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.opTitle, { color: colors.text }]}>Send Welcome Invitation</Text>
+                    <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                      Email login credentials and access instructions
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* 3. Edit User Details & Role */}
+                <TouchableOpacity
+                  style={styles.operationRow}
+                  onPress={() => {
+                    const u = actionSheetUser;
+                    setActionSheetUser(null);
+                    openEditModal(u);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.opIconWrap, { backgroundColor: '#F0F9FF' }]}>
+                    <Edit2 size={18} color="#0284C7" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.opTitle, { color: colors.text }]}>Edit Account & Role</Text>
+                    <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                      Update designation, department, compensation & role
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* 4. Manage Leave Quotas */}
+                <TouchableOpacity
+                  style={styles.operationRow}
+                  onPress={() => {
+                    const u = actionSheetUser;
+                    setActionSheetUser(null);
+                    openLeaveModalForUser(u);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.opIconWrap, { backgroundColor: '#F0F9F8' }]}>
+                    <Umbrella size={18} color="#0D7377" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.opTitle, { color: colors.text }]}>Manage Leave Balances</Text>
+                    <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                      Adjust annual leaves, quotas & policy balances
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* 5. Reset Password */}
+                <TouchableOpacity
+                  style={styles.operationRow}
+                  onPress={() => {
+                    const email = actionSheetUser.email;
+                    setActionSheetUser(null);
+                    handleResetPassword(email);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.opIconWrap, { backgroundColor: '#F8FAFC' }]}>
+                    <KeyRound size={18} color="#64748B" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.opTitle, { color: colors.text }]}>Reset Password</Text>
+                    <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                      Issue temporary credentials or reset access
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* 6. Toggle Active Status */}
+                <TouchableOpacity
+                  style={styles.operationRow}
+                  onPress={() => {
+                    const u = actionSheetUser;
+                    setActionSheetUser(null);
+                    setToggleUser(u);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.opIconWrap,
+                      { backgroundColor: actionSheetUser.is_active ? '#FFF1F2' : '#F0FDF4' },
+                    ]}
+                  >
+                    {actionSheetUser.is_active ? (
+                      <UserX size={18} color="#E11D48" />
+                    ) : (
+                      <UserCheck size={18} color="#16A34A" />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.opTitle,
+                        { color: actionSheetUser.is_active ? '#E11D48' : '#16A34A' },
+                      ]}
+                    >
+                      {actionSheetUser.is_active ? 'Deactivate User Account' : 'Reactivate User Account'}
+                    </Text>
+                    <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                      {actionSheetUser.is_active
+                        ? 'Temporarily disable portal login access'
+                        : 'Restore user login access to Oasis'}
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* 7. Delete User Record */}
+                <TouchableOpacity
+                  style={[styles.operationRow, { borderColor: '#FEE2E2', backgroundColor: '#FFF5F5' }]}
+                  onPress={() => {
+                    const u = actionSheetUser;
+                    setActionSheetUser(null);
+                    setDeleteUser(u);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.opIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                    <Trash2 size={18} color="#DC2626" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.opTitle, { color: '#DC2626' }]}>Permanently Delete Account</Text>
+                    <Text style={[styles.opSubtitle, { color: '#991B1B' }]}>
+                      Remove user profile and linked records permanently
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color="#DC2626" />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.opCancelBtn, { borderColor: colors.border }]}
+                onPress={() => setActionSheetUser(null)}
+              >
+                <Text style={[styles.opCancelBtnText, { color: colors.textSecondary }]}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </Modal>
       </ScrollView>
     </SidebarLayout>
   );
@@ -1578,9 +1832,78 @@ const styles = StyleSheet.create({
     gap: 10,
     flexWrap: 'wrap',
   },
+  userRowMobile: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
   userName: { fontSize: 15, fontWeight: '700' },
   userMeta: { fontSize: 12 },
   userActions: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 6 },
+  mobileManageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F0F9F8',
+    borderWidth: 1,
+    borderColor: '#0D737740',
+    alignSelf: 'center',
+  },
+  mobileManageBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0D7377',
+  },
+  actionSheetHeaderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  operationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  opIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  opTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  opSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  opCancelBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 6,
+  },
+  opCancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
