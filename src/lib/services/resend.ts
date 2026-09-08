@@ -84,7 +84,11 @@ export async function resolveOrgContext(orgInput?: string | OrgEmailContext | nu
 
   if (!orgInput) return defaultContext;
 
-  if (typeof orgInput === 'object') {
+  const rawOrgId = typeof orgInput === 'object' ? orgInput.organizationId : orgInput;
+  const orgId = rawOrgId ? String(rawOrgId).trim() : '';
+
+  // If full org context object was provided with an explicit valid name, use it
+  if (typeof orgInput === 'object' && orgInput.organizationName && orgInput.organizationName !== 'Subedge Technology Pvt Ltd') {
     return {
       ...defaultContext,
       ...orgInput,
@@ -93,37 +97,51 @@ export async function resolveOrgContext(orgInput?: string | OrgEmailContext | nu
     };
   }
 
-  const orgId = orgInput.trim();
   const isSMH = orgId === 'shanti-memorial-hospital' || orgId === 'smh';
 
   if (isSMH) {
+    const extra = typeof orgInput === 'object' ? orgInput : {};
     return {
       organizationId: 'shanti-memorial-hospital',
-      organizationName: 'Shanti Memorial Hospital',
       logoUrl: 'https://www.shantimemorialhospital.com/wp-content/uploads/2021/05/SMH-Logo.jpg',
       brandColor: '#006a61',
       accentColor: '#48cbb5',
       portalUrl: defaultPortalUrl,
       supportEmail: 'contact@shantimemorialhospital.com',
+      ...extra,
+      organizationName: 'Shanti Memorial Hospital',
     };
   }
 
-  try {
-    const { getOrganization } = await import('./organization');
-    const org = await getOrganization(orgId);
-    if (org && org.name) {
-      return {
-        organizationId: org.id,
-        organizationName: org.name,
-        logoUrl: org.logo_url || null,
-        brandColor: org.primary_color || defaultContext.brandColor,
-        accentColor: org.accent_color || defaultContext.accentColor,
-        portalUrl: defaultPortalUrl,
-        supportEmail: (org.settings as any)?.support_email || `support@${org.slug || 'subedge'}.com`,
-      };
+  if (orgId) {
+    try {
+      const { getOrganization } = await import('./organization');
+      const org = await getOrganization(orgId);
+      if (org && org.name) {
+        const extra = typeof orgInput === 'object' ? orgInput : {};
+        return {
+          organizationId: org.id,
+          logoUrl: org.logo_url || null,
+          brandColor: org.primary_color || defaultContext.brandColor,
+          accentColor: org.accent_color || defaultContext.accentColor,
+          portalUrl: defaultPortalUrl,
+          supportEmail: (org.settings as any)?.support_email || `support@${org.slug || 'oasis'}.com`,
+          ...extra,
+          organizationName: org.name,
+        };
+      }
+    } catch (err) {
+      console.warn('Could not resolve organization context for email:', err);
     }
-  } catch (err) {
-    console.warn('Could not resolve organization context for email:', err);
+  }
+
+  if (typeof orgInput === 'object') {
+    return {
+      ...defaultContext,
+      ...orgInput,
+      brandColor: orgInput.brandColor || defaultContext.brandColor,
+      portalUrl: orgInput.portalUrl || defaultPortalUrl,
+    };
   }
 
   return defaultContext;

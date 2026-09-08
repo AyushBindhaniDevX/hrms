@@ -71,7 +71,7 @@ import {
 export default function UserManagementScreen() {
   const colors = useTheme();
   const { profile: currentAdmin } = useAuth();
-  const { organization: tenantOrg } = useTenant();
+  const { organization: tenantOrg, allOrganizations } = useTenant();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -98,6 +98,7 @@ export default function UserManagementScreen() {
   const [infoBanner, setInfoBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Add User Form State
+  const [newOrgId, setNewOrgId] = useState<string>('');
   const [newFullName, setNewFullName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
@@ -192,19 +193,23 @@ export default function UserManagementScreen() {
 
   const tenantDomain = (tenantOrg?.settings as any)?.domain || (typeof window !== 'undefined' && window.location.hostname.includes('shanti') ? 'shantimemorialhospital.com' : 'subedge.com');
 
-  const generateRandomCode = () => {
-    const prefix = tenantDomain.includes('shanti') ? 'SMH' : 'EMP';
+  const generateRandomCode = (targetOrgId?: string) => {
+    const activeOrg = targetOrgId || newOrgId || tenantOrg?.id || '';
+    const isSMH = activeOrg.includes('shanti') || tenantDomain.includes('shanti');
+    const prefix = isSMH ? 'SMH' : 'EMP';
     const randomDigits = Math.floor(1000 + Math.random() * 9000);
     return `${prefix}-${randomDigits}`;
   };
 
   const openAddModal = () => {
+    const defaultOrgId = tenantOrg?.id || currentAdmin?.organization_id || 'shanti-memorial-hospital';
+    setNewOrgId(defaultOrgId);
     setNewFullName('');
     setNewEmail('');
     setNewPhone('');
     setNewRole('employee');
     setCreateEmpRecord(true);
-    setNewEmpCode(generateRandomCode());
+    setNewEmpCode(generateRandomCode(defaultOrgId));
     setNewDeptId(departments.length > 0 ? departments[0].id : null);
     setNewDesignation('');
     setNewWorkplaceId(workplaces.length > 0 ? workplaces[0].id : null);
@@ -214,6 +219,28 @@ export default function UserManagementScreen() {
     setFormError('');
     setFormSuccess(false);
     setAddModalOpen(true);
+  };
+
+  const handleOrgChange = async (val: string | null) => {
+    if (!val) return;
+    setNewOrgId(val);
+    setNewEmpCode(generateRandomCode(val));
+    try {
+      const [deptData, wpData, shiftData, empData] = await Promise.all([
+        getDepartments(val),
+        getWorkplaces(val),
+        getShifts(val),
+        getEmployees({ organization_id: val }),
+      ]);
+      setDepartments(deptData);
+      setWorkplaces(wpData);
+      setShifts(shiftData || []);
+      setManagers(empData || []);
+      if (deptData.length > 0) setNewDeptId(deptData[0].id);
+      if (wpData.length > 0) setNewWorkplaceId(wpData[0].id);
+    } catch (err) {
+      console.warn('Error loading org details for add modal:', err);
+    }
   };
 
   const handleFullNameChange = (name: string) => {
@@ -254,7 +281,7 @@ export default function UserManagementScreen() {
     setFormError('');
     setSavingUser(true);
     try {
-      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '';
+      const orgId = newOrgId || tenantOrg?.id || currentAdmin?.organization_id || 'shanti-memorial-hospital';
       const fullEmail = newEmail.trim().toLowerCase();
 
       const uid = await createSystemUser({
@@ -1009,6 +1036,28 @@ export default function UserManagementScreen() {
                     <Text style={{ color: colors.danger, fontSize: 13, flex: 1 }}>{formError}</Text>
                   </View>
                 ) : null}
+
+                {/* Organization / Entity Selector */}
+                {(() => {
+                  const orgOptions =
+                    allOrganizations && allOrganizations.length > 0
+                      ? allOrganizations.map((o) => ({
+                          label: o.name || o.id,
+                          value: o.id,
+                        }))
+                      : [
+                          { label: 'Shanti Memorial Hospital', value: 'shanti-memorial-hospital' },
+                          { label: 'Subedge Technology Pvt Ltd', value: '00000000-0000-0000-0000-000000000001' },
+                        ];
+                  return (
+                    <Select
+                      label="Organization / Entity *"
+                      options={orgOptions}
+                      value={newOrgId || orgOptions[0]?.value}
+                      onValueChange={handleOrgChange}
+                    />
+                  );
+                })()}
 
                 <Input
                   label="Full Name *"

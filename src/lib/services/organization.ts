@@ -287,6 +287,19 @@ export async function createSystemUser(params: {
     const { sendWelcomeEmail } = await import('./resend');
     let deptName = '';
     let wpName = '';
+    let resolvedOrgName = '';
+    if (orgId) {
+      if (orgId === 'shanti-memorial-hospital' || orgId === 'smh') {
+        resolvedOrgName = 'Shanti Memorial Hospital';
+      } else {
+        try {
+          const orgSnap = await getDoc(doc(db, 'organizations', orgId));
+          if (orgSnap.exists()) {
+            resolvedOrgName = orgSnap.data()?.name || '';
+          }
+        } catch (oErr) {}
+      }
+    }
     if (params.department_id) {
       try {
         const dSnap = await getDoc(doc(db, 'departments', params.department_id));
@@ -308,6 +321,7 @@ export async function createSystemUser(params: {
       params.designation || (params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Staff'),
       {
         organizationId: orgId,
+        organizationName: resolvedOrgName || undefined,
         department: deptName,
         workplace: wpName,
         temporaryPassword: defaultPassword,
