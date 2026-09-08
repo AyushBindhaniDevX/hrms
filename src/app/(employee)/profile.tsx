@@ -15,6 +15,7 @@ import { formatDate } from '@/utils/format';
 import type { Employee } from '@/types';
 import { updateUserProfileData } from '@/lib/services/organization';
 import { Edit2, Mail, Phone, MapPin, Building, User, FileText, Upload, CheckCircle2 } from 'lucide-react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 export default function ProfileScreen() {
   const colors = useTheme();
@@ -89,17 +90,17 @@ export default function ProfileScreen() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
+      <View style={{ flex: 1, backgroundColor: colors.primaryDark }}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
           {/* Top bounce underlay matching header card */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: colors.primaryDark }} />
 
           {/* Edit Modal */}
           <Modal visible={editOpen} onClose={() => setEditOpen(false)} title="Edit Profile">
             {saveSuccess ? (
               <View style={{ alignItems: 'center', padding: 24, gap: 12 }}>
-                <CheckCircle2 size={40} color="#006a61" />
+                <CheckCircle2 size={40} color={colors.primary} />
                 <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16 }}>Profile Updated!</Text>
               </View>
             ) : (
@@ -119,7 +120,7 @@ export default function ProfileScreen() {
                 />
                 <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                   <Button title="Cancel" onPress={() => setEditOpen(false)} variant="outline" style={{ flex: 1, borderRadius: 12 }} />
-                  <Button title="Save" onPress={handleSave} loading={saving} style={{ flex: 1, backgroundColor: '#006a61', borderRadius: 12 }} />
+                  <Button title="Save" onPress={handleSave} loading={saving} style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12 }} />
                 </View>
               </View>
             )}
@@ -133,13 +134,13 @@ export default function ProfileScreen() {
             showsVerticalScrollIndicator={false}
           >
             {/* ── Mobile Gradient Profile Hero ── */}
-            <View style={[mProfStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
-            <View style={mProfStyles.avatarWrap}>
+            <View style={[mProfStyles.heroGradient, { paddingTop: topPadding + 10, backgroundColor: colors.primaryDark }]}>
+            <Animated.View entering={FadeInDown.springify().damping(15)} style={mProfStyles.avatarWrap}>
               <Avatar name={profile?.full_name || ''} url={profile?.avatar_url} size={90} />
-              <TouchableOpacity style={mProfStyles.editAvatarBtn} onPress={openEdit}>
+              <TouchableOpacity style={[mProfStyles.editAvatarBtn, { backgroundColor: colors.primary }]} onPress={openEdit}>
                 <Edit2 size={14} color="#FFF" />
               </TouchableOpacity>
-            </View>
+            </Animated.View>
 
             <Text style={mProfStyles.heroName}>{profile?.full_name}</Text>
             <Text style={mProfStyles.heroRole}>{role}</Text>
@@ -233,7 +234,7 @@ export default function ProfileScreen() {
           {/* ── Edit Button Action ── */}
           <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
             <TouchableOpacity
-              style={mProfStyles.editActionBtn}
+              style={[mProfStyles.editActionBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
               onPress={openEdit}
               activeOpacity={0.85}
             >
@@ -444,7 +445,6 @@ const styles = StyleSheet.create({
 // ─── MOBILE PROFILE STYLES ──────────────────────────────────────────────────
 const mProfStyles = StyleSheet.create({
   heroGradient: {
-    backgroundColor: '#004D47',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 56 : 28,
     paddingBottom: 28,
@@ -476,7 +476,6 @@ const mProfStyles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#006a61',
     borderWidth: 2,
     borderColor: '#FFFFFF',
     alignItems: 'center',
@@ -570,13 +569,11 @@ const mProfStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#006a61',
     paddingVertical: 15,
     borderRadius: 16,
     ...Platform.select({
       web: { boxShadow: '0 4px 12px rgba(0, 106, 97, 0.25)' },
       default: {
-        shadowColor: '#006a61',
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.25,
         shadowRadius: 6,

@@ -20,6 +20,7 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
+  FadeInUp,
 } from 'react-native-reanimated';
 
 // Lucide Icons
@@ -43,6 +44,7 @@ import { Button } from '@/components/ui/Button';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
+import { MOBILE } from '@/constants/mobile';
 import { useAuth } from '@/hooks/useAuth';
 
 // Services
@@ -705,13 +707,25 @@ export default function EmployeeDashboard() {
       </ScrollView>
 
       {/* Ovi AI Floating Action Button */}
-      <TouchableOpacity
-        onPress={() => router.push('/(employee)/call-ovi' as never)}
-        style={[styles.fab, { backgroundColor: primaryColor, shadowColor: primaryColor }]}
-        activeOpacity={0.85}
+      <Animated.View
+        entering={FadeInUp.delay(500).springify().damping(15)}
+        style={[
+          styles.fab,
+          { 
+            backgroundColor: primaryColor, 
+            shadowColor: primaryColor,
+            bottom: MOBILE.FAB_BOTTOM_OFFSET
+          }
+        ]}
       >
-        <Mic size={26} color="#FFF" />
-      </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.push('/(employee)/call-ovi' as never)}
+          style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }}
+          activeOpacity={0.85}
+        >
+          <Mic size={26} color="#FFF" />
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* Face Verification Modal */}
       <FaceVerificationModal

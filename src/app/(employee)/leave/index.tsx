@@ -118,11 +118,11 @@ export default function LeaveScreen() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
+      <View style={{ flex: 1, backgroundColor: colors.primaryDark }}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
           {/* Top bounce background underlay */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: colors.primaryDark }} />
 
           <ConfirmDialog
             visible={!!cancelTarget}
@@ -140,11 +140,11 @@ export default function LeaveScreen() {
             contentContainerStyle={{ paddingBottom: 100 }}
             contentInsetAdjustmentBehavior="never"
             automaticallyAdjustContentInsets={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" colors={['#004D47']} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" colors={[colors.primaryDark]} />}
             showsVerticalScrollIndicator={false}
           >
             {/* ── Mobile Gradient Header ── */}
-            <View style={[mLeaveStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
+            <View style={[mLeaveStyles.heroGradient, { paddingTop: topPadding + 10, backgroundColor: colors.primaryDark }]}>
               <View style={mLeaveStyles.heroTop}>
                 <View>
                   <Text style={mLeaveStyles.heroTag}>TOTAL AVAILABLE LEAVE</Text>
@@ -189,7 +189,14 @@ export default function LeaveScreen() {
                 <Text style={{ color: '#64748B', fontSize: 12, marginTop: 2 }}>Contact HR to assign your leave policies.</Text>
               </View>
             ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                contentContainerStyle={{ gap: 10, paddingVertical: 4, paddingRight: 20 }}
+                snapToInterval={150}
+                snapToAlignment="start"
+                decelerationRate="fast"
+              >
                 {balances.map((b) => {
                   const pct = b.allocated_days > 0 ? b.remaining_days / b.allocated_days : 0;
                   const barColor = pct > 0.5 ? '#006a61' : pct > 0.2 ? '#D97706' : '#DC2626';
@@ -549,7 +556,6 @@ const styles = StyleSheet.create({
 // ─── MOBILE LEAVE STYLES ────────────────────────────────────────────────────
 const mLeaveStyles = StyleSheet.create({
   heroGradient: {
-    backgroundColor: '#004D47',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 56 : 20,
     paddingBottom: 22,

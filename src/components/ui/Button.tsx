@@ -14,7 +14,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { Shadows, BrandShadow } from '@/constants/theme';
 import type { ThemeColors } from '@/constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost' | 'success';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps {
@@ -29,6 +29,7 @@ interface ButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   icon?: React.ReactNode;
+  iconRight?: React.ReactNode;
 }
 
 function getVariantStyles(variant: ButtonVariant, colors: ThemeColors) {
@@ -38,12 +39,13 @@ function getVariantStyles(variant: ButtonVariant, colors: ThemeColors) {
     outline: { bg: 'transparent', text: colors.text, border: colors.border, shadow: undefined },
     danger: { bg: colors.danger, text: '#FFFFFF', shadow: Shadows?.md },
     ghost: { bg: 'transparent', text: colors.primary, shadow: undefined },
+    success: { bg: colors.success, text: '#FFFFFF', shadow: BrandShadow },
   };
   return map[variant];
 }
 
 const sizeStyles: Record<ButtonSize, { h: number; px: number; fontSize: number; borderRadius: number }> = {
-  sm: { h: 40, px: 16, fontSize: 13, borderRadius: 12 },
+  sm: { h: 48, px: 16, fontSize: 13, borderRadius: 12 },
   md: { h: 52, px: 24, fontSize: 15, borderRadius: 16 },
   lg: { h: 58, px: 32, fontSize: 16, borderRadius: 18 },
 };
@@ -60,6 +62,7 @@ export function Button({
   style,
   textStyle,
   icon,
+  iconRight,
 }: ButtonProps) {
   const colors = useTheme();
   const vs = getVariantStyles(variant, colors);
@@ -89,7 +92,7 @@ export function Button({
         onPressOut={handlePressOut}
         disabled={disabled || loading}
         android_ripple={{
-          color: variant === 'primary' || variant === 'danger' ? 'rgba(255,255,255,0.22)' : 'rgba(15,23,42,0.06)',
+          color: variant === 'primary' || variant === 'danger' || variant === 'success' ? 'rgba(255,255,255,0.22)' : 'rgba(15,23,42,0.06)',
           borderless: false,
         }}
         style={({ pressed }) => [
@@ -114,6 +117,7 @@ export function Button({
           <>
             {icon}
             <Text style={[styles.text, { color: vs.text, fontSize: ss.fontSize }, textStyle]}>{title}</Text>
+            {iconRight}
           </>
         )}
       </Pressable>

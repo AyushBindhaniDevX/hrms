@@ -58,6 +58,9 @@ import {
 } from 'lucide-react-native';
 import { MONTHS } from '@/constants/config';
 import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
+import { MOBILE } from '@/constants/mobile';
+import { FlashList } from '@shopify/flash-list';
+import * as Haptics from 'expo-haptics';
 import { RegularizationModal } from '@/components/attendance/RegularizationModal';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { DEFAULT_SUBEDGE_LOGO as SUBEDGE_LOGO } from '@/components/ui/SubedgeBrand';
@@ -346,22 +349,23 @@ export default function AttendanceScreen() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
+      <View style={{ flex: 1, backgroundColor: colors.primaryDark }}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
           {/* Top bounce underlay matching header card */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: colors.primaryDark }} />
 
-          <ScrollView
-            style={{ flex: 1 }}
+          <FlashList
+            data={displayedRecords}
+            // @ts-ignore - Type definition issue with estimatedItemSize
+            estimatedItemSize={120}
             contentContainerStyle={{ paddingBottom: 100 }}
-            contentInsetAdjustmentBehavior="never"
-            automaticallyAdjustContentInsets={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" colors={['#004D47']} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" colors={[colors.primaryDark]} />}
             showsVerticalScrollIndicator={false}
-          >
+            ListHeaderComponent={
+              <View>
             {/* ── Mobile Gradient Header ── */}
-            <View style={[mAttStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
+            <View style={[mAttStyles.heroGradient, { paddingTop: topPadding + 10, backgroundColor: colors.primaryDark }]}>
               <View style={mAttStyles.heroTop}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -595,31 +599,21 @@ export default function AttendanceScreen() {
             </ScrollView>
           </View>
 
-          {/* ── Regularize CTA ── */}
-          <View style={{ paddingHorizontal: 20, marginTop: 14 }}>
-            <TouchableOpacity
-              onPress={() => {
-                setRegularizeDate(null);
-                setShowRegularize(true);
-              }}
-              activeOpacity={0.85}
-              style={mAttStyles.regularizeBtn}
-            >
-              <CalendarClock size={16} color="#006a61" />
-              <Text style={mAttStyles.regularizeBtnText}>Request Attendance Regularization</Text>
-            </TouchableOpacity>
-          </View>
 
           {/* ── Attendance History Cards ── */}
-          <View style={{ paddingHorizontal: 20, marginTop: 16, gap: 10 }}>
-            {displayedRecords.length === 0 ? (
-              <View style={mAttStyles.emptyBox}>
-                <CalendarX size={36} color="#94A3B8" />
-                <Text style={mAttStyles.emptyText}>No attendance records found</Text>
-              </View>
-            ) : (
-              displayedRecords.map((item, idx) => (
-                <Animated.View key={item.id || idx} entering={FadeInDown.delay(Math.min(idx * 40, 300)).duration(300)}>
+          <View style={{ paddingHorizontal: 20, marginTop: 16, gap: 10, paddingBottom: 10 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>History Logs</Text>
+          </View>
+        </View>
+      }
+      ListEmptyComponent={
+        <View style={mAttStyles.emptyBox}>
+          <CalendarX size={36} color="#94A3B8" />
+          <Text style={mAttStyles.emptyText}>No attendance records found</Text>
+        </View>
+      }
+      renderItem={({ item, index: idx }) => (
+        <Animated.View style={{ paddingHorizontal: 20, marginBottom: 10 }} entering={FadeInDown.delay(Math.min(idx * 40, 300)).duration(300)}>
                   <View style={mAttStyles.historyCard}>
                     <View style={mAttStyles.cardLeft}>
                       <Text style={mAttStyles.cardDate}>{formatShortDate(item.date)}</Text>
@@ -674,11 +668,27 @@ export default function AttendanceScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                </Animated.View>
-              ))
-            )}
-          </View>
-        </ScrollView>
+        </Animated.View>
+      )}
+    />
+
+        {/* ── Floating Regularize CTA ── */}
+        <Animated.View 
+          entering={FadeInDown.delay(400).springify()}
+          style={{ position: 'absolute', bottom: MOBILE.FAB_BOTTOM_OFFSET, left: 20, right: 20 }}
+        >
+          <TouchableOpacity
+            onPress={() => {
+              setRegularizeDate(null);
+              setShowRegularize(true);
+            }}
+            activeOpacity={0.85}
+            style={[mAttStyles.regularizeBtn, { shadowColor: '#006a61', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 8 }]}
+          >
+            <CalendarClock size={16} color="#006a61" />
+            <Text style={mAttStyles.regularizeBtnText}>Request Attendance Regularization</Text>
+          </TouchableOpacity>
+        </Animated.View>
 
         <FaceVerificationModal
           visible={showFaceModal}
@@ -1267,7 +1277,6 @@ const styles = StyleSheet.create({
 // ─── MOBILE ATTENDANCE STYLES ────────────────────────────────────────────────
 const mAttStyles = StyleSheet.create({
   heroGradient: {
-    backgroundColor: '#004D47',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 56 : 20,
     paddingBottom: 24,
@@ -1309,19 +1318,20 @@ const mAttStyles = StyleSheet.create({
   timerPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   timerPillText: {
     color: '#6EE7B7',
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
   },
   timeStrip: {
     flexDirection: 'row',

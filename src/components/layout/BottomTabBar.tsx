@@ -46,6 +46,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { FeatureGate } from '@/components/ui/FeatureGate';
 import { getRouteFeature } from '@/components/layout/Sidebar';
 import { useNotifications } from '@/context/NotificationContext';
+import * as Haptics from 'expo-haptics';
 
 interface TabItem {
   key: string;
@@ -93,9 +94,11 @@ function getActiveTab(pathname: string): string {
 
 interface BottomTabBarProps {
   children: React.ReactNode;
+  tabs?: TabItem[];
+  moreItems?: MoreItem[];
 }
 
-export function BottomTabBar({ children }: BottomTabBarProps) {
+export function BottomTabBar({ children, tabs = TABS, moreItems = MORE_ITEMS }: BottomTabBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
@@ -132,6 +135,10 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
   };
 
   const handleTabPress = (tab: TabItem) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+
     if (tab.key === 'more') {
       setMoreOpen(true);
       return;
@@ -164,7 +171,7 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
     router.push(item.href as never);
   };
 
-  const filteredMoreItems = MORE_ITEMS.filter((item) => {
+  const filteredMoreItems = moreItems.filter((item) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return item.label.toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q);
@@ -215,51 +222,51 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
             </View>
 
             {/* Header with Organization Branding */}
-            <View style={styles.moreHeader}>
+            <View style={[styles.moreHeader, { borderBottomColor: colors.backgroundElement }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                 {companyLogoUrl ? (
                   <Image source={{ uri: companyLogoUrl }} style={styles.orgLogo} resizeMode="contain" />
                 ) : (
-                  <View style={styles.orgLogoPlaceholder}>
-                    <Building2 size={18} color="#006a61" />
+                  <View style={[styles.orgLogoPlaceholder, { backgroundColor: colors.primaryLight }]}>
+                    <Building2 size={18} color={colors.primary} />
                   </View>
                 )}
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.moreTitle} numberOfLines={1}>
+                  <Text style={[styles.moreTitle, { color: colors.text }]} numberOfLines={1}>
                     {organization?.name || companyName}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                    <View style={styles.activePlanChip}>
-                      <ShieldCheck size={10} color="#006a61" />
-                      <Text style={styles.activePlanText}>{String(activePlan).toUpperCase()}</Text>
+                    <View style={[styles.activePlanChip, { backgroundColor: colors.primaryLight }]}>
+                      <ShieldCheck size={10} color={colors.primary} />
+                      <Text style={[styles.activePlanText, { color: colors.primary }]}>{String(activePlan).toUpperCase()}</Text>
                     </View>
-                    <Text style={styles.moreSubtitle}>Apps & Console</Text>
+                    <Text style={[styles.moreSubtitle, { color: colors.textSecondary }]}>Apps & Console</Text>
                   </View>
                 </View>
               </View>
 
               <TouchableOpacity
                 onPress={() => setMoreOpen(false)}
-                style={styles.moreCloseBtn}
+                style={[styles.moreCloseBtn, { backgroundColor: colors.backgroundElement }]}
                 activeOpacity={0.7}
               >
-                <X size={18} color="#64748B" />
+                <X size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             {/* Module Search Bar */}
-            <View style={styles.searchBar}>
-              <Search size={16} color="#94A3B8" />
+            <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Search size={16} color={colors.textTertiary} />
               <TextInput
-                style={styles.searchInput}
+                style={[styles.searchInput, { color: colors.text }]}
                 placeholder="Search modules, claims, support..."
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={colors.textTertiary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <X size={14} color="#94A3B8" />
+                  <X size={14} color={colors.textTertiary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -281,7 +288,8 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
                       key={item.label}
                       style={[
                         styles.moreItem,
-                        isActive && { backgroundColor: '#F0FDFA', borderColor: '#CCFBF1' },
+                        { backgroundColor: colors.surface, borderColor: colors.backgroundElement },
+                        isActive && { backgroundColor: colors.primaryLight, borderColor: colors.primaryLight },
                         isLocked && { opacity: 0.65 },
                       ]}
                       onPress={() => handleMoreItemPress(item)}
@@ -290,11 +298,11 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
                       <View
                         style={[
                           styles.moreItemIcon,
-                          isActive ? { backgroundColor: '#006a61' } : { backgroundColor: '#F1F5F9' },
-                          isLocked && { backgroundColor: '#FEE2E2' },
+                          isActive ? { backgroundColor: colors.primary } : { backgroundColor: colors.backgroundElement },
+                          isLocked && { backgroundColor: colors.dangerLight },
                         ]}
                       >
-                        <Icon size={20} color={isActive ? '#FFFFFF' : isLocked ? '#DC2626' : '#0F172A'} />
+                        <Icon size={20} color={isActive ? '#FFFFFF' : isLocked ? colors.danger : colors.text} />
                         {isLocked && (
                           <View style={styles.lockBadgeIcon}>
                             <Lock size={8} color="#FFFFFF" strokeWidth={2.5} />
@@ -307,44 +315,45 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
                           <Text
                             style={[
                               styles.moreItemLabel,
-                              isActive && { color: '#006a61', fontWeight: '700' },
-                              isLocked && { color: '#64748B' },
+                              { color: colors.text },
+                              isActive && { color: colors.primary, fontWeight: '700' },
+                              isLocked && { color: colors.textSecondary },
                             ]}
                             numberOfLines={1}
                           >
                             {item.label}
                           </Text>
                           {isLocked && (
-                            <View style={styles.lockedChip}>
-                              <Text style={styles.lockedChipText}>LOCKED</Text>
+                            <View style={[styles.lockedChip, { backgroundColor: colors.dangerLight }]}>
+                              <Text style={[styles.lockedChipText, { color: colors.danger }]}>LOCKED</Text>
                             </View>
                           )}
                         </View>
                         {item.description ? (
-                          <Text style={styles.moreItemDesc} numberOfLines={1}>
+                          <Text style={[styles.moreItemDesc, { color: colors.textSecondary }]} numberOfLines={1}>
                             {item.description}
                           </Text>
                         ) : null}
                       </View>
 
-                      <ChevronRight size={14} color={isActive ? '#006a61' : '#CBD5E1'} />
+                      <ChevronRight size={14} color={isActive ? colors.primary : colors.borderStrong} />
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
               {/* Bottom Quick Actions: Sign Out */}
-              <View style={styles.sheetFooter}>
+              <View style={[styles.sheetFooter, { borderTopColor: colors.backgroundElement }]}>
                 <TouchableOpacity
-                  style={styles.signOutBtn}
+                  style={[styles.signOutBtn, { backgroundColor: colors.dangerLight }]}
                   onPress={() => {
                     setMoreOpen(false);
                     signOut();
                   }}
                   activeOpacity={0.8}
                 >
-                  <LogOut size={16} color="#DC2626" />
-                  <Text style={styles.signOutText}>Sign Out of Oasis HCM</Text>
+                  <LogOut size={16} color={colors.danger} />
+                  <Text style={[styles.signOutText, { color: colors.danger }]}>Sign Out of Oasis HCM</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -357,14 +366,14 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
         style={[
           styles.tabBar,
           {
-            backgroundColor: '#FFFFFF',
-            borderTopColor: '#E2E8F0',
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
             paddingBottom: bottomInset,
             minHeight: 56 + bottomInset,
           },
         ]}
       >
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           const isLocked = isTabLocked(tab);
           const Icon = tab.icon;
@@ -379,12 +388,12 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
               <View
                 style={[
                   styles.tabIndicator,
-                  isActive && { backgroundColor: '#E6F4F2' },
+                  isActive && { backgroundColor: colors.primaryLight },
                 ]}
               >
                 <Icon
                   size={20}
-                  color={isActive ? '#006a61' : isLocked ? '#94A3B8' : '#64748B'}
+                  color={isActive ? colors.primary : isLocked ? colors.textTertiary : colors.textSecondary}
                   strokeWidth={isActive ? 2.4 : 1.8}
                 />
                 {isLocked && (
@@ -393,13 +402,17 @@ export function BottomTabBar({ children }: BottomTabBarProps) {
                   </View>
                 )}
                 {tab.key === 'more' && unreadCount > 0 && !isLocked && (
-                  <View style={styles.tabDotBadge} />
+                  <View style={[styles.tabCountBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.tabCountText}>
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </Text>
+                  </View>
                 )}
               </View>
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: isActive ? '#006a61' : isLocked ? '#94A3B8' : '#64748B' },
+                  { color: isActive ? colors.primary : isLocked ? colors.textTertiary : colors.textSecondary },
                   isActive && styles.tabLabelActive,
                 ]}
                 numberOfLines={1}
@@ -454,8 +467,8 @@ const styles = StyleSheet.create({
   },
   tabLockBadge: {
     position: 'absolute',
-    top: 0,
-    right: 6,
+    top: -2,
+    right: -4,
     width: 14,
     height: 14,
     borderRadius: 7,
@@ -464,6 +477,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
+  },
+  tabCountBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  tabCountText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   tabDotBadge: {
     position: 'absolute',
@@ -691,3 +722,8 @@ const styles = StyleSheet.create({
     color: '#DC2626',
   },
 });
+
+export function useTabBarHeight() {
+  const insets = useSafeAreaInsets();
+  return 56 + Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 12);
+}

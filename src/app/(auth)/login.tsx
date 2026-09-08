@@ -134,8 +134,10 @@ export default function LoginScreen() {
   const busy = loading || googleLoading || authLoading;
 
   // ── Auth Form Card Component ───────────────────────────────────────────────
+  const showGoogleSignIn = Platform.OS === 'web';
+
   const authFormCard = (
-    <View style={styles.card}>
+    <View style={[styles.card, !isSplitScreen && !isTablet && styles.mobileCardNative]}>
       {/* Mobile brand header inside card */}
       {!isSplitScreen && (
         <View style={styles.mobileBrandHeader}>
@@ -159,32 +161,36 @@ export default function LoginScreen() {
       </View>
 
       {/* Google Sign In Button */}
-      <TouchableOpacity
-        onPress={handleGoogleLogin}
-        disabled={busy}
-        activeOpacity={0.85}
-        style={[styles.googleBtn, busy && styles.btnDisabled]}
-      >
-        {googleLoading ? (
-          <ActivityIndicator size="small" color="#1A1A2E" />
-        ) : (
-          <ExpoImage
-            source={{ uri: GOOGLE_ICON_URL }}
-            style={{ width: 20, height: 20 }}
-            contentFit="contain"
-          />
-        )}
-        <Text style={styles.googleBtnText}>
-          {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
-        </Text>
-      </TouchableOpacity>
+      {showGoogleSignIn && (
+        <>
+          <TouchableOpacity
+            onPress={handleGoogleLogin}
+            disabled={busy}
+            activeOpacity={0.85}
+            style={[styles.googleBtn, busy && styles.btnDisabled]}
+          >
+            {googleLoading ? (
+              <ActivityIndicator size="small" color="#1A1A2E" />
+            ) : (
+              <ExpoImage
+                source={{ uri: GOOGLE_ICON_URL }}
+                style={{ width: 20, height: 20 }}
+                contentFit="contain"
+              />
+            )}
+            <Text style={styles.googleBtnText}>
+              {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
+            </Text>
+          </TouchableOpacity>
 
-      {/* Divider */}
-      <View style={styles.dividerRow}>
-        <View style={styles.divider} />
-        <Text style={styles.dividerText}>OR WITH WORK EMAIL</Text>
-        <View style={styles.divider} />
-      </View>
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>OR WITH WORK EMAIL</Text>
+            <View style={styles.divider} />
+          </View>
+        </>
+      )}
 
       {/* Error alert banner */}
       {error && (
@@ -300,25 +306,27 @@ export default function LoginScreen() {
     <View style={styles.pageContainer}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-      {/* Top Header Navbar */}
-      <View style={[styles.topNavBar, { paddingTop: Math.max(insets.top, 16) }]}>
-        <View style={styles.topNavInner}>
-          <TouchableOpacity
-            style={styles.topNavLeft}
-            onPress={() => void Linking.openURL('https://www.subedge.com')}
-            activeOpacity={0.85}
-          >
-            <Image
-              source={tenant?.logo_url ? { uri: tenant.logo_url } : SUBEDGE_LOGO}
-              style={styles.topNavLogo}
-              resizeMode="contain"
-            />
-            <View style={styles.topNavBadge}>
-              <Text style={styles.topNavBadgeText}>OASIS HRMS</Text>
-            </View>
-          </TouchableOpacity>
+      {/* Top Header Navbar - Only visible on split screen (web/tablet landscape) */}
+      {isSplitScreen && (
+        <View style={[styles.topNavBar, { paddingTop: Math.max(insets.top, 16) }]}>
+          <View style={styles.topNavInner}>
+            <TouchableOpacity
+              style={styles.topNavLeft}
+              onPress={() => void Linking.openURL('https://www.subedge.com')}
+              activeOpacity={0.85}
+            >
+              <Image
+                source={tenant?.logo_url ? { uri: tenant.logo_url } : SUBEDGE_LOGO}
+                style={styles.topNavLogo}
+                resizeMode="contain"
+              />
+              <View style={styles.topNavBadge}>
+                <Text style={styles.topNavBadgeText}>OASIS HRMS</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -453,7 +461,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   pageContainer: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: Platform.OS === 'web' ? '#F8FAFC' : '#FFFFFF',
   },
 
   // Top Navbar (Matching subedge.vercel.app fixed header)
@@ -624,6 +632,14 @@ const styles = StyleSheet.create({
         elevation: 6,
       },
     }),
+  },
+  mobileCardNative: {
+    borderWidth: 0,
+    elevation: 0,
+    shadowOpacity: 0,
+    padding: 24,
+    paddingTop: 40,
+    backgroundColor: 'transparent',
   },
 
   mobileBrandHeader: {

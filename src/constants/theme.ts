@@ -83,6 +83,11 @@ export const Colors = {
     // Utility
     overlay: 'rgba(15, 23, 42, 0.55)',
     onPrimaryMuted: 'rgba(255,255,255,0.72)',
+
+    // Mobile-specific tokens
+    heroBg: '#004D47',          // Mobile hero gradient dark bg
+    heroGradientStart: '#006a61', // Hero gradient start
+    heroGradientEnd: '#004D47',   // Hero gradient end  
   },
   dark: {
     // Dark palette is intentionally a scaffold mirroring light for now.
@@ -114,6 +119,11 @@ export const Colors = {
     infoLight: '#E0F2FE',
     overlay: 'rgba(15, 23, 42, 0.55)',
     onPrimaryMuted: 'rgba(255,255,255,0.72)',
+
+    // Mobile-specific tokens
+    heroBg: '#004D47',
+    heroGradientStart: '#006a61',
+    heroGradientEnd: '#004D47',
   },
 };
 
@@ -129,6 +139,7 @@ export const Gradients = {
   heroSoft: [Teal[600], Teal[800]] as const,
   accent: [Teal[500], Teal[700]] as const,
   navy: ['#1E293B', '#0F172A'] as const, // graphite hero (admin/hr)
+  mobileHero: ['#006a61', '#004D47'] as const,
 } as const;
 
 export const Fonts = Platform.select({
@@ -177,6 +188,7 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
+  screenPadding: 20,
 } as const;
 
 export const BorderRadius = {

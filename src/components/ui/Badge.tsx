@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
 import type { ThemeColors } from '@/constants/theme';
+import { MotiView } from 'moti';
 
 type BadgeVariant =
   | 'success'
@@ -25,6 +26,10 @@ interface BadgeProps {
   size?: 'sm' | 'md';
   dot?: boolean;
   uppercase?: boolean;
+  /** Leading icon rendered before the label */
+  icon?: React.ReactNode;
+  /** Animate entrance with scale + fade */
+  animate?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
 }
@@ -55,6 +60,8 @@ export function Badge({
   size = 'md',
   dot = false,
   uppercase = true,
+  icon,
+  animate = false,
   style,
   textStyle,
 }: BadgeProps) {
@@ -64,22 +71,42 @@ export function Badge({
 
   const displayLabel = label != null ? String(label) : '';
 
-  return (
-    <View
-      style={[
-        styles.badge,
-        {
-          backgroundColor: vc.bg,
-          paddingHorizontal: sm ? 8 : 10,
-          paddingVertical: sm ? 3 : 4,
-        },
-        style,
-      ]}
-    >
+  const badgeContent = (
+    <>
+      {icon}
       {dot && <View style={[styles.dot, { backgroundColor: vc.text }]} />}
       <Text style={[styles.text, { color: vc.text, fontSize: sm ? 10 : 11 }, textStyle]}>
         {uppercase ? displayLabel.toUpperCase() : displayLabel}
       </Text>
+    </>
+  );
+
+  const badgeStyle = [
+    styles.badge,
+    {
+      backgroundColor: vc.bg,
+      paddingHorizontal: sm ? 8 : 10,
+      paddingVertical: sm ? 3 : 4,
+    },
+    style,
+  ];
+
+  if (animate) {
+    return (
+      <MotiView
+        from={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'spring', damping: 15 }}
+        style={badgeStyle as any}
+      >
+        {badgeContent}
+      </MotiView>
+    );
+  }
+
+  return (
+    <View style={badgeStyle}>
+      {badgeContent}
     </View>
   );
 }

@@ -44,6 +44,8 @@ export interface ScreenHeaderProps {
   gradient?: readonly [string, string, ...string[]];
   /** Rounded bottom corners (gradient variant only). Default true. */
   rounded?: boolean;
+  /** Skip top safe area inset calculation (use when parent layout handles it). */
+  skipTopInset?: boolean;
   /** Extra bottom padding inside the header. */
   paddingBottom?: number;
   style?: ViewStyle;
@@ -61,11 +63,13 @@ export function ScreenHeader({
   gradient,
   rounded = true,
   paddingBottom = 20,
+  skipTopInset = false,
   style,
 }: ScreenHeaderProps) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
-  const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20) + 8;
+  const topPadding = skipTopInset ? 8 : Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20) + 8;
+
   const isGradient = variant === 'gradient';
 
   const gradientColors: readonly [string, string, ...string[]] =
