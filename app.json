@@ -64,7 +64,15 @@
           "locationAlwaysAndWhenInUsePermission": "Oasis HRMS needs location to verify attendance."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
