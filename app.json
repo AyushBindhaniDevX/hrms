@@ -3,15 +3,10 @@
     "name": "Oasis",
     "slug": "oasis-hrms",
     "version": "1.0.2",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "oasis",
     "userInterfaceStyle": "automatic",
-    "androidStatusBar": {
-      "barStyle": "dark-content",
-      "backgroundColor": "#FFFFFF",
-      "translucent": false
-    },
     "ios": {
       "icon": "./assets/expo.icon",
       "infoPlist": {
@@ -23,6 +18,7 @@
     "android": {
       "package": "com.oasis.hrms",
       "versionCode": 3,
+      "resizeableActivity": true,
       "config": {
         "googleMaps": {
           "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
