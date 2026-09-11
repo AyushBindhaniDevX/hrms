@@ -1,4 +1,4 @@
-import { db, auth } from '@/lib/firebase';
+import { db, auth, secondaryAuth } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -12,7 +12,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, updateProfile as fbUpdateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile as fbUpdateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import type { Organization, Profile, Department, Workplace, Employee } from '@/types';
 
 function generateUuid(): string {
@@ -196,12 +196,23 @@ export async function createSystemUser(params: {
   // Try creating in Firebase Auth
   try {
     const defaultPassword = params.password || (params.phone ? `Pass@${params.phone.slice(-4)}` : 'Welcome@123');
-    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, defaultPassword);
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, defaultPassword);
     if (cred.user?.uid) {
       uid = cred.user.uid;
       await fbUpdateProfile(cred.user, { displayName: params.full_name });
+      try {
+        await sendPasswordResetEmail(secondaryAuth, cleanEmail);
+      } catch (e) {
+        console.warn('Could not send password reset email', e);
+      }
+      await secondaryAuth.signOut();
     }
   } catch (authErr: any) {
+    try {
+      await sendPasswordResetEmail(secondaryAuth, cleanEmail);
+    } catch (e) {
+      console.warn('Could not send password reset email', e);
+    }
     // If account exists in Firebase Auth or admin context
     console.warn('Firebase Auth user creation notice:', authErr?.message || authErr);
   }

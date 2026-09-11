@@ -1,4 +1,4 @@
-import { db, auth } from '@/lib/firebase';
+import { db, auth, secondaryAuth } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -12,7 +12,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, updateProfile as fbUpdateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile as fbUpdateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import type { Employee, Profile, Department, Workplace } from '@/types';
 
 function generateUuid(): string {
@@ -233,6 +233,7 @@ export async function createEmployee(params: {
 }): Promise<void> {
   const cleanEmail = params.email.trim().toLowerCase();
   let uid = generateUuid();
+  const resolvedOrgId = params.organization_id || '00000000-0000-0000-0000-000000000001';
 
   // Check if profile exists by email
   const profQuery = query(collection(db, 'profiles'), where('email', '==', cleanEmail), limit(1));
@@ -243,10 +244,16 @@ export async function createEmployee(params: {
   } else {
     try {
       const defaultPassword = params.password?.trim() || 'Welcome@123';
-      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, defaultPassword);
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, defaultPassword);
       if (cred.user?.uid) {
         uid = cred.user.uid;
         await fbUpdateProfile(cred.user, { displayName: params.full_name });
+        try {
+          await sendPasswordResetEmail(secondaryAuth, cleanEmail);
+        } catch (e) {
+          console.warn('Could not send password reset email', e);
+        }
+        await secondaryAuth.signOut(); // Prevent accumulating state
       }
     } catch (authErr: any) {
       console.warn('Firebase Auth employee pre-registration notice:', authErr?.message || authErr);
@@ -261,7 +268,7 @@ export async function createEmployee(params: {
     full_name: params.full_name,
     email: cleanEmail,
     role: (params.role as any) || 'employee',
-    organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
+    organization_id: resolvedOrgId,
     phone: params.phone || null,
     avatar_url: null,
     is_active: true,
@@ -278,7 +285,7 @@ export async function createEmployee(params: {
   const empPayload: Employee = {
     id: empId,
     profile_id: uid,
-    organization_id: params.organization_id || '00000000-0000-0000-0000-000000000001',
+    organization_id: resolvedOrgId,
     employee_code: params.employee_code,
     department_id: params.department_id || null,
     manager_id: params.manager_id || null,
@@ -305,7 +312,7 @@ export async function createEmployee(params: {
       employee_id: empId,
       date: today,
       shift_id: params.default_shift_id,
-      organization_id: params.organization_id,
+      organization_id: resolvedOrgId,
       created_at: now,
     });
   }
@@ -334,11 +341,11 @@ export async function createEmployee(params: {
       params.employee_code,
       params.designation || 'Staff',
       {
-        organizationId: params.organization_id,
+        organizationId: resolvedOrgId,
         department: deptName,
         workplace: wpName,
         designation: params.designation || 'Staff',
-        temporaryPassword: params.password,
+        temporaryPassword: params.password?.trim() || 'Welcome@123',
       }
     );
   } catch (mailErr) {

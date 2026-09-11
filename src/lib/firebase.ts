@@ -51,3 +51,7 @@ export const db: Firestore = getFirestore(app);
 
 // 4. Cloud Storage instance
 export const storage: FirebaseStorage = getStorage(app);
+
+// 5. Secondary App for admin user creation without logging out current user
+export const secondaryApp: FirebaseApp = getApps().find(a => a.name === 'SecondaryApp') || initializeApp(firebaseConfig, 'SecondaryApp');
+export const secondaryAuth: Auth = getAuth(secondaryApp);
